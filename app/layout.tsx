@@ -4,13 +4,12 @@ import { Geist, Geist_Mono } from "next/font/google"
 import { Analytics } from "@vercel/analytics/next"
 import "./globals.css"
 
-const _geist = Geist({ subsets: ["latin"] })
-const _geistMono = Geist_Mono({ subsets: ["latin"] })
+const geistSans = Geist({ subsets: ["latin"], variable: "--font-geist-sans" })
+const geistMono = Geist_Mono({ subsets: ["latin"], variable: "--font-geist-mono" })
 
 export const metadata: Metadata = {
-  title: "Composition Notebook - Handwriting Animation",
-  description: "A realistic composition notebook with animated handwriting effect",
-  generator: "v0.app",
+  title: "Vasimip | Modern React + Next.js Starter",
+  description: "A modern, production-ready Next.js foundation with reusable UI building blocks.",
 }
 
 export default function RootLayout({
@@ -20,10 +19,7 @@ export default function RootLayout({
 }>) {
   return (
     <html lang="en">
-      <head>
-        <link href="https://fonts.googleapis.com/css2?family=Caveat:wght@600&display=swap" rel="stylesheet" />
-      </head>
-      <body className={`font-sans antialiased`}>
+      <body className={`${geistSans.variable} ${geistMono.variable} font-sans antialiased bg-background text-foreground`}>
         {children}
         <Analytics />
       </body>
