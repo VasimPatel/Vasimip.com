@@ -5,20 +5,24 @@ import { useGameStore } from "@/lib/stores/game-store"
 import { SpeedLines } from "@/components/comic/speed-lines"
 import { TypingText } from "@/components/interactive/typing-text"
 import { NarratorBox } from "@/components/comic/narrator-box"
+import { SecretMarker } from "@/components/discovery/secret-marker"
+import { StoryFragment } from "@/components/discovery/story-fragment"
 import { useReducedMotion } from "@/hooks/use-reduced-motion"
 
 export function TitleScreen() {
-  const { hasStartedQuest, startQuest, setZone } = useGameStore()
+  const { hasStartedQuest, startQuest } = useGameStore()
   const reducedMotion = useReducedMotion()
 
   const handleBeginQuest = () => {
     startQuest()
-    setZone(1)
+    const origin = document.getElementById("origin")
+    if (origin) {
+      origin.scrollIntoView({ behavior: "smooth", block: "start" })
+    }
   }
 
   return (
     <div className="flex min-h-screen flex-col items-center justify-center gap-8 px-4">
-      {/* Speed lines background */}
       <SpeedLines variant="radial" lineCount={24} />
 
       {/* Title */}
@@ -69,6 +73,23 @@ export function TitleScreen() {
         </NarratorBox>
       )}
 
+      {/* Hidden signature secret — bottom right corner */}
+      <SecretMarker
+        secretId="hidden-signature"
+        trigger="click"
+        className="absolute bottom-8 right-8 z-10"
+        revealContent={
+          <StoryFragment
+            title="Creator's Mark"
+            text="Scratched into the corner of the title card, barely visible: a tiny signature. Every great work begins with someone deciding to leave their mark on the world."
+          />
+        }
+      >
+        <div className="font-pixel text-[6px] text-[var(--comic-ink)] opacity-10 hover:opacity-30 transition-opacity cursor-pointer select-none">
+          VP
+        </div>
+      </SecretMarker>
+
       {/* Keyboard hint */}
       <motion.p
         className="relative z-10 font-pixel text-[7px] text-[var(--comic-ink)] opacity-30"
@@ -76,7 +97,7 @@ export function TitleScreen() {
         animate={{ opacity: 0.3 }}
         transition={{ delay: 2.5 }}
       >
-        USE ARROW KEYS OR SWIPE TO NAVIGATE
+        SCROLL DOWN TO EXPLORE
       </motion.p>
     </div>
   )

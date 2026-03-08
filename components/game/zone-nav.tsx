@@ -8,14 +8,20 @@ import { useGameStore } from "@/lib/stores/game-store"
 import { ZONES } from "@/lib/data/zones"
 import { useReducedMotion } from "@/hooks/use-reduced-motion"
 
+function scrollToZone(zoneId: string) {
+  const el = document.getElementById(zoneId)
+  if (el) {
+    el.scrollIntoView({ behavior: "smooth", block: "start" })
+  }
+}
+
 export function ZoneNav() {
-  const { currentZone, setZone, hasStartedQuest, visitedZones } = useGameStore()
+  const { currentZone, hasStartedQuest, visitedZones } = useGameStore()
   const [mapOpen, setMapOpen] = useState(false)
   const reducedMotion = useReducedMotion()
 
   if (!hasStartedQuest) return null
 
-  // Skip title screen in nav
   const navZones = ZONES.slice(1)
 
   return (
@@ -24,19 +30,16 @@ export function ZoneNav() {
       <div className="fixed bottom-0 left-0 right-0 z-50">
         <div className="mx-auto max-w-3xl px-3 pb-3">
           <div className="flex items-center gap-1 px-3 py-2 rounded-xl bg-[var(--hud-bg)] backdrop-blur-sm border-2 border-[var(--hud-border)] shadow-lg">
-            {/* Zone buttons */}
             {navZones.map((zone) => {
               const isActive = currentZone === zone.index
               const isVisited = visitedZones.includes(zone.index)
               return (
                 <button
                   key={zone.id}
-                  onClick={() => setZone(zone.index)}
+                  onClick={() => scrollToZone(zone.id)}
                   className={cn(
                     "relative flex-1 flex flex-col items-center gap-0.5 py-1.5 px-1 rounded-lg transition-colors",
-                    isActive
-                      ? "bg-[var(--comic-panel)]"
-                      : "hover:bg-[var(--comic-halftone)]"
+                    isActive ? "bg-[var(--comic-panel)]" : "hover:bg-[var(--comic-halftone)]"
                   )}
                   aria-label={`Go to ${zone.title}`}
                   aria-current={isActive ? "page" : undefined}
@@ -48,7 +51,6 @@ export function ZoneNav() {
                   )}>
                     {zone.subtitle}
                   </span>
-                  {/* Active indicator */}
                   {isActive && (
                     <motion.div
                       className="absolute -bottom-0.5 left-1/2 -translate-x-1/2 w-4 h-0.5 rounded-full"
@@ -57,7 +59,6 @@ export function ZoneNav() {
                       transition={{ type: "spring", stiffness: 300, damping: 30 }}
                     />
                   )}
-                  {/* Unvisited dot */}
                   {!isVisited && !isActive && (
                     <div className="absolute top-0.5 right-1 w-1.5 h-1.5 rounded-full bg-[var(--comic-red)]" />
                   )}
@@ -65,7 +66,6 @@ export function ZoneNav() {
               )
             })}
 
-            {/* Map toggle */}
             <button
               onClick={() => setMapOpen(!mapOpen)}
               className="flex items-center justify-center w-9 h-9 rounded-lg border border-[var(--comic-panel-border)] bg-[var(--comic-panel)] hover:scale-105 transition-transform"
@@ -103,7 +103,7 @@ export function ZoneNav() {
                     <button
                       key={zone.id}
                       onClick={() => {
-                        setZone(zone.index)
+                        scrollToZone(zone.id)
                         setMapOpen(false)
                       }}
                       className={cn(

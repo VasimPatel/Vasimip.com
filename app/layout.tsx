@@ -1,20 +1,21 @@
 import type React from "react"
 import type { Metadata } from "next"
-import { Geist, Geist_Mono, Caveat, Bangers, Press_Start_2P } from "next/font/google"
+import { Geist, Geist_Mono, Caveat, Instrument_Serif } from "next/font/google"
 import { Analytics } from "@vercel/analytics/next"
-import { ThemeProvider } from "@/components/theme-provider"
 import "./globals.css"
 
 const geistSans = Geist({ subsets: ["latin"], variable: "--font-geist-sans" })
 const geistMono = Geist_Mono({ subsets: ["latin"], variable: "--font-geist-mono" })
 const caveat = Caveat({ subsets: ["latin"], variable: "--font-caveat" })
-const bangers = Bangers({ weight: "400", subsets: ["latin"], variable: "--font-bangers" })
-const pressStart = Press_Start_2P({ weight: "400", subsets: ["latin"], variable: "--font-press-start" })
+const instrumentSerif = Instrument_Serif({
+  weight: "400",
+  subsets: ["latin"],
+  variable: "--font-instrument-serif",
+})
 
 export const metadata: Metadata = {
-  title: "Vasim Patel | Comic Book RPG Portfolio",
-  description:
-    "A comic book x RPG adventure portfolio — explore zones, earn XP, collect items, and discover the story of a software engineer.",
+  title: "Ink & Ember",
+  description: "A dark, atmospheric interactive experience. Move. Discover. Go deeper.",
 }
 
 export default function RootLayout({
@@ -23,18 +24,11 @@ export default function RootLayout({
   children: React.ReactNode
 }>) {
   return (
-    <html lang="en" suppressHydrationWarning>
+    <html lang="en" className="dark">
       <body
-        className={`${geistSans.variable} ${geistMono.variable} ${caveat.variable} ${bangers.variable} ${pressStart.variable} font-sans antialiased bg-background text-foreground`}
+        className={`${geistSans.variable} ${geistMono.variable} ${caveat.variable} ${instrumentSerif.variable} font-sans antialiased`}
       >
-        <ThemeProvider
-          attribute="class"
-          defaultTheme="light"
-          enableSystem
-          disableTransitionOnChange
-        >
-          {children}
-        </ThemeProvider>
+        {children}
         <Analytics />
       </body>
     </html>

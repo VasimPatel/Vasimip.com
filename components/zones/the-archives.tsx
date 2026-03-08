@@ -2,22 +2,27 @@
 
 import { useState, useEffect, useRef } from "react"
 import { ComicPanelPage } from "@/components/game/comic-panel-page"
-import { ComicPanel } from "@/components/comic/comic-panel"
 import { NarratorBox } from "@/components/comic/narrator-box"
 import { DialogueBox } from "@/components/rpg/dialogue-box"
 import { LoreEntry } from "@/components/interactive/lore-entry"
 import { SecretLore } from "@/components/interactive/secret-lore"
 import { ComicEmphasis } from "@/components/interactive/comic-emphasis"
+import { PhysicsPanel } from "@/components/panels/physics-panel"
+import { BreakablePanel } from "@/components/panels/breakable-panel"
+import { InkReveal } from "@/components/ink/ink-reveal"
+import { SecretMarker } from "@/components/discovery/secret-marker"
+import { StoryFragment } from "@/components/discovery/story-fragment"
+import { ParticleField } from "@/components/world/particle-field"
 import { useDialogue } from "@/hooks/use-dialogue"
 import { useXP } from "@/hooks/use-xp"
-import { useAchievements } from "@/hooks/use-achievements"
+import { useDiscovery } from "@/hooks/use-discovery"
 import { useGameStore } from "@/lib/stores/game-store"
 import { BLOG_POSTS, TOME_ICONS } from "@/lib/data/blog-posts"
 
 export function TheArchives() {
   const { currentLine, isComplete, advance } = useDialogue("archives-intro")
   const { awardXP } = useXP()
-  const { discoverAchievement } = useAchievements()
+  const { discoverSecret } = useDiscovery()
   const { addToInventory } = useGameStore()
   const [readPosts, setReadPosts] = useState<Set<string>>(new Set())
   const bookwormChecked = useRef(false)
@@ -33,26 +38,29 @@ export function TheArchives() {
   useEffect(() => {
     if (readPosts.size === BLOG_POSTS.length && !bookwormChecked.current) {
       bookwormChecked.current = true
-      discoverAchievement("bookworm")
       addToInventory("scroll-archives")
     }
-  }, [readPosts, discoverAchievement, addToInventory])
+  }, [readPosts, addToInventory])
 
   const handleSecretDecode = () => {
-    discoverAchievement("codebreaker")
+    discoverSecret("archives-cipher")
   }
 
   return (
     <ComicPanelPage zoneColor="#2A9D8F">
-      <div className="flex flex-col gap-6 pt-4 pb-12">
-        {/* Zone title */}
+      <div className="relative flex flex-col gap-6 pt-4 pb-12">
+        {/* Floating dust particles */}
+        <ParticleField count={12} color="var(--comic-ink)" />
+
         <NarratorBox position="top-left">
           Chapter 3: The Archives
         </NarratorBox>
 
-        <h2 className="font-comic text-4xl sm:text-5xl text-[var(--comic-ink)]">
-          THE ARCHIVES
-        </h2>
+        <InkReveal direction="left">
+          <h2 className="font-comic text-4xl sm:text-5xl text-[var(--comic-ink)]">
+            THE ARCHIVES
+          </h2>
+        </InkReveal>
 
         {/* Intro dialogue */}
         {!isComplete && currentLine && (
@@ -61,75 +69,97 @@ export function TheArchives() {
           </div>
         )}
 
-        {/* Floating dust particles */}
-        <div className="pointer-events-none fixed inset-0 overflow-hidden z-[5]" aria-hidden="true">
-          {Array.from({ length: 15 }).map((_, i) => (
-            <div
-              key={i}
-              className="absolute w-1 h-1 rounded-full bg-[var(--comic-ink)]"
-              style={{
-                left: `${Math.random() * 100}%`,
-                top: `${Math.random() * 100}%`,
-                opacity: 0.15,
-                animation: `float ${4 + Math.random() * 4}s ease-in-out infinite`,
-                animationDelay: `${Math.random() * 4}s`,
-              }}
-            />
-          ))}
-        </div>
-
-        {/* Blog posts as tomes */}
+        {/* Blog posts as tomes — each in a physics panel */}
         <div className="flex flex-col gap-4 mt-4">
           {BLOG_POSTS.map((post, i) => (
-            <ComicPanel key={post.id} delay={i * 0.1} className="overflow-visible">
-              <LoreEntry
-                title={post.title}
-                icon={TOME_ICONS[post.tomeType]}
-                onExpand={() => handleReadPost(post.id)}
-              >
-                <div className="space-y-3">
-                  <div className="flex items-center gap-3 text-xs opacity-60">
-                    <span className="font-pixel text-[8px]">{post.date}</span>
-                    <span className="font-pixel text-[8px] uppercase" style={{
-                      color: post.rarity === "rare" ? "var(--comic-blue)" :
-                             post.rarity === "legendary" ? "var(--comic-yellow)" :
-                             post.rarity === "uncommon" ? "var(--comic-green)" :
-                             "var(--comic-ink)"
-                    }}>
-                      {post.rarity}
-                    </span>
-                    {post.isLatest && (
-                      <span className="px-2 py-0.5 bg-[var(--comic-red)] text-white font-pixel text-[7px]">
-                        NEW
+            <InkReveal key={post.id} direction={i % 2 === 0 ? "left" : "right"} delay={i * 0.06}>
+              <PhysicsPanel delay={i * 0.08} tiltStrength={0.3} className="overflow-visible">
+                <LoreEntry
+                  title={post.title}
+                  icon={TOME_ICONS[post.tomeType]}
+                  onExpand={() => handleReadPost(post.id)}
+                >
+                  <div className="space-y-3">
+                    <div className="flex items-center gap-3 text-xs opacity-60">
+                      <span className="font-pixel text-[8px]">{post.date}</span>
+                      <span className="font-pixel text-[8px] uppercase" style={{
+                        color: post.rarity === "rare" ? "var(--comic-blue)" :
+                               post.rarity === "legendary" ? "var(--comic-yellow)" :
+                               post.rarity === "uncommon" ? "var(--comic-green)" :
+                               "var(--comic-ink)"
+                      }}>
+                        {post.rarity}
                       </span>
-                    )}
+                      {post.isLatest && (
+                        <span className="px-2 py-0.5 bg-[var(--comic-red)] text-white font-pixel text-[7px]">
+                          NEW
+                        </span>
+                      )}
+                    </div>
+                    <p className="text-[var(--comic-ink)] leading-relaxed">{post.content}</p>
+                    <p className="font-pixel text-[8px] text-[var(--comic-green)]">
+                      +{post.xpReward} XP
+                    </p>
                   </div>
-                  <p className="text-[var(--comic-ink)] leading-relaxed">{post.content}</p>
-                  <p className="font-pixel text-[8px] text-[var(--comic-green)]">
-                    +{post.xpReward} XP
-                  </p>
-                </div>
-              </LoreEntry>
-            </ComicPanel>
+                </LoreEntry>
+              </PhysicsPanel>
+            </InkReveal>
           ))}
         </div>
 
-        {/* Secret lore */}
-        <ComicPanel className="p-6 mt-4" delay={0.5}>
-          <h3 className="font-comic text-xl text-[var(--comic-ink)] mb-3">
-            ENCRYPTED MANUSCRIPT
-          </h3>
-          <p className="text-sm text-[var(--comic-ink)] leading-relaxed">
-            Deep in the archives, you find a strange manuscript written in{" "}
-            <ComicEmphasis color="var(--comic-purple)">ancient runes</ComicEmphasis>.
-            Perhaps if you click on it, the text will decode...
-          </p>
-          <div className="mt-4 p-4 bg-[var(--comic-bg)] border border-[var(--comic-panel-border)]">
-            <SecretLore onDecode={handleSecretDecode}>
-              The secret to great code is empathy for the next developer who reads it
-            </SecretLore>
+        {/* Margin Note — proximity secret */}
+        <SecretMarker
+          secretId="archives-margin-note"
+          trigger="proximity"
+          proximityRadius={90}
+          revealContent={
+            <StoryFragment
+              title="Margin Note"
+              text="Scrawled in the margin: 'Read this three times. Then read it again.' The best insights always need rereading."
+            />
+          }
+        >
+          <div className="font-caveat text-xs text-[var(--comic-ink)] opacity-15 -rotate-3 ml-2">
+            read this three times...
           </div>
-        </ComicPanel>
+        </SecretMarker>
+
+        {/* Secret lore — encrypted manuscript (sequence trigger) */}
+        <InkReveal direction="center" delay={0.1}>
+          <PhysicsPanel className="p-6" tiltStrength={0.5}>
+            <h3 className="font-comic text-xl text-[var(--comic-ink)] mb-3">
+              ENCRYPTED MANUSCRIPT
+            </h3>
+            <p className="text-sm text-[var(--comic-ink)] leading-relaxed">
+              Deep in the archives, you find a strange manuscript written in{" "}
+              <ComicEmphasis color="var(--comic-purple)">ancient runes</ComicEmphasis>.
+              Perhaps if you click on it, the text will decode...
+            </p>
+            <div className="mt-4 p-4 bg-[var(--comic-bg)] border border-[var(--comic-panel-border)]">
+              <SecretLore onDecode={handleSecretDecode}>
+                The secret to great code is empathy for the next developer who reads it
+              </SecretLore>
+            </div>
+          </PhysicsPanel>
+        </InkReveal>
+
+        {/* Invisible Ink secret — ink trigger hint */}
+        <SecretMarker
+          secretId="archives-invisible-ink"
+          trigger="click"
+          revealContent={
+            <StoryFragment
+              title="Invisible Ink"
+              text="Your ink trail reveals hidden text glowing beneath the page: 'The cursor is mightier than the sword.'"
+            />
+          }
+        >
+          <div className="p-3 border border-dashed border-[var(--comic-ink)] opacity-10 hover:opacity-30 transition-opacity text-center cursor-pointer">
+            <span className="font-pixel text-[7px] text-[var(--comic-ink)]">
+              something is hidden here...
+            </span>
+          </div>
+        </SecretMarker>
 
         {/* Progress indicator */}
         <div className="font-pixel text-[8px] text-[var(--comic-ink)] opacity-40 text-center">

@@ -1,12 +1,15 @@
 "use client"
 
-import { useCallback, useEffect, useRef } from "react"
+import { useEffect, useRef } from "react"
 import { ComicViewport } from "@/components/game/comic-viewport"
 import { SvgComicFilters } from "@/components/game/svg-comic-filters"
-import { SceneTransition } from "@/components/game/scene-transition"
 import { GameHUD } from "@/components/game/hud/game-hud"
 import { ZoneNav } from "@/components/game/zone-nav"
-import { useZoneNavigation } from "@/hooks/use-zone-navigation"
+import { InkLayer } from "@/components/ink/ink-layer"
+import { DiscoveryJournal } from "@/components/discovery/discovery-journal"
+import { WorldScroll } from "@/components/world/world-scroll"
+import { ZoneSection } from "@/components/world/zone-section"
+import { ZoneGate } from "@/components/world/zone-gate"
 import { useGameStore } from "@/lib/stores/game-store"
 import { useXP } from "@/hooks/use-xp"
 import { useAchievements } from "@/hooks/use-achievements"
@@ -29,8 +32,7 @@ const ZONE_COMPONENTS = [
 ]
 
 export function GameShell() {
-  useZoneNavigation()
-  const { currentZone, nextZone, prevZone, visitedZones } = useGameStore()
+  const { currentZone, visitedZones } = useGameStore()
   const { awardXP } = useXP()
   const { discoverAchievement, isDiscovered } = useAchievements()
   const prevZoneRef = useRef(currentZone)
@@ -38,12 +40,10 @@ export function GameShell() {
   // Award XP when visiting a new zone (not the title screen)
   useEffect(() => {
     if (currentZone !== prevZoneRef.current && currentZone > 0) {
-      const isNewVisit = !visitedZones.includes(currentZone) || visitedZones.length <= 2
-      if (isNewVisit) {
+      if (!visitedZones.includes(currentZone)) {
         awardXP("visitZone")
       }
 
-      // Check world-explorer achievement
       const allZonesVisited = ZONES.every((z) => visitedZones.includes(z.index))
       if (allZonesVisited && !isDiscovered("world-explorer")) {
         discoverAchievement("world-explorer")
@@ -52,52 +52,61 @@ export function GameShell() {
     prevZoneRef.current = currentZone
   }, [currentZone, visitedZones, awardXP, discoverAchievement, isDiscovered])
 
-  const handleSwipe = useCallback(
-    (direction: "left" | "right") => {
-      if (direction === "left") nextZone()
-      else prevZone()
-    },
-    [nextZone, prevZone]
-  )
-
-  const handleTouchStart = useCallback((e: React.TouchEvent) => {
-    const touch = e.touches[0]
-    ;(e.currentTarget as HTMLElement).dataset.touchStartX = String(touch.clientX)
-  }, [])
-
-  const handleTouchEnd = useCallback(
-    (e: React.TouchEvent) => {
-      const startX = Number((e.currentTarget as HTMLElement).dataset.touchStartX)
-      const endX = e.changedTouches[0].clientX
-      const diff = endX - startX
-      if (Math.abs(diff) > 50) {
-        handleSwipe(diff < 0 ? "left" : "right")
-      }
-    },
-    [handleSwipe]
-  )
-
-  const CurrentZoneComponent = ZONE_COMPONENTS[currentZone]
+  // Sync URL hash to current zone
+  useEffect(() => {
+    const hash = ZONES[currentZone]?.hash
+    if (hash && window.location.hash !== hash) {
+      window.history.replaceState(null, "", hash)
+    }
+  }, [currentZone])
 
   return (
     <ComicViewport>
       <SvgComicFilters />
+      <InkLayer />
       <GameHUD />
 
-      <div
-        className="relative min-h-screen w-full pb-20"
-        onTouchStart={handleTouchStart}
-        onTouchEnd={handleTouchEnd}
-        role="region"
-        aria-label="Comic Book RPG Portfolio"
-        aria-roledescription="game"
-      >
-        <SceneTransition zoneKey={currentZone}>
-          <CurrentZoneComponent />
-        </SceneTransition>
-      </div>
+      <WorldScroll>
+        <div
+          className="cursor-none-desktop"
+          role="region"
+          aria-label="Comic Book RPG Portfolio"
+          aria-roledescription="game"
+        >
+          {ZONE_COMPONENTS.map((ZoneComponent, i) => {
+            const zone = ZONES[i]
+            const nextZone = ZONES[i + 1]
+
+            return (
+              <div key={zone.id}>
+                <ZoneSection
+                  passageIndex={zone.index}
+                  passageId={zone.id}
+                  minHeight={i === 0 ? "100vh" : "auto"}
+                >
+                  <ZoneComponent />
+                </ZoneSection>
+
+                {/* Zone gate between zones */}
+                {nextZone && (
+                  <ZoneGate
+                    title={nextZone.title}
+                    subtitle={nextZone.subtitle}
+                    color={nextZone.color}
+                    icon={nextZone.icon}
+                  />
+                )}
+              </div>
+            )
+          })}
+
+          {/* Bottom spacer */}
+          <div className="h-32" />
+        </div>
+      </WorldScroll>
 
       <ZoneNav />
+      <DiscoveryJournal />
     </ComicViewport>
   )
 }

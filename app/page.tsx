@@ -1,7 +1,7 @@
 "use client"
 
-import { GameShell } from "@/components/game/game-shell"
+import { WorldShell } from "@/components/atmosphere/world-shell"
 
 export default function Home() {
-  return <GameShell />
+  return <WorldShell />
 }
