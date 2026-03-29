@@ -3,6 +3,10 @@
 import { useState, useEffect, useCallback } from "react"
 import { motion, AnimatePresence } from "framer-motion"
 import { useWorldStore } from "@/lib/stores/world-store"
+<<<<<<< Updated upstream
+=======
+import { useTorchStore } from "@/lib/stores/torch-store"
+>>>>>>> Stashed changes
 import { useReducedMotion } from "@/hooks/use-reduced-motion"
 
 export function OpeningSequence() {
@@ -41,6 +45,7 @@ export function OpeningSequence() {
     }
   }, [phase])
 
+<<<<<<< Updated upstream
   // Dismiss on click or touch (matches the lamp ignition)
   useEffect(() => {
     if (phase === "done" || phase === "fading") return
@@ -53,6 +58,20 @@ export function OpeningSequence() {
       window.removeEventListener("click", handler)
       window.removeEventListener("touchstart", handler)
     }
+=======
+  // Dismiss when torch ignites (synchronized with torch-cursor)
+  useEffect(() => {
+    if (phase === "done" || phase === "fading") return
+
+    const unsub = useTorchStore.subscribe((state) => {
+      if (state.isLit) dismiss()
+    })
+
+    // Check if already lit (e.g. rapid click before this effect runs)
+    if (useTorchStore.getState().isLit) dismiss()
+
+    return unsub
+>>>>>>> Stashed changes
   }, [phase, dismiss])
 
   if (phase === "done") return null
