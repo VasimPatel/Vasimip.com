@@ -3,42 +3,60 @@ export interface BlogPost {
   title: string
   date: string
   content: string
-  inkColor?: string
   isLatest?: boolean
+  // RPG metadata
+  tomeType: "scroll" | "book" | "tome" | "grimoire"
+  rarity: "common" | "uncommon" | "rare" | "legendary"
+  xpReward: number
 }
 
 export const BLOG_POSTS: BlogPost[] = [
   {
     id: "why-notebooks",
-    title: "Why I Built My Portfolio as a Notebook",
+    title: "Why I Built My Portfolio as a Comic Book",
     date: "Feb 2026",
     content:
-      "There's something deeply satisfying about the tactile feel of a composition notebook. The ruled lines, the marble cover, the red margin — they all carry a sense of potential. Every blank page is an invitation. I wanted my portfolio to feel the same way: not a sterile showcase, but a living document that invites exploration.",
-    inkColor: "#2c3e50",
+      "There's something deeply satisfying about interactive storytelling. The comic panels, the RPG progression, the hidden secrets — they all carry a sense of adventure. Every zone is an invitation to explore. I wanted my portfolio to feel the same way: not a sterile showcase, but a living quest that rewards curiosity.",
     isLatest: true,
+    tomeType: "grimoire",
+    rarity: "rare",
+    xpReward: 25,
   },
   {
     id: "animation-philosophy",
     title: "Animation as Communication",
     date: "Jan 2026",
     content:
-      "Good animation isn't decoration — it's communication. When a page flips in 3D, it tells you 'this is a book.' When a sticky note peels back, it says 'there's something underneath.' Every motion should answer a question the user didn't know they were asking.",
-    inkColor: "#34495e",
+      "Good animation isn't decoration — it's communication. When a zone transitions with a diagonal wipe, it tells you 'you're moving through the world.' When a loot drop peels back, it says 'there's a reward here.' Every motion should answer a question the user didn't know they were asking.",
+    tomeType: "tome",
+    rarity: "uncommon",
+    xpReward: 25,
   },
   {
     id: "learning-in-public",
     title: "On Learning in Public",
     date: "Dec 2025",
     content:
-      "The best way to learn is to teach. Writing about what I'm learning forces me to understand it deeply enough to explain it simply. This blog is my lab notebook — messy, honest, and full of crossed-out mistakes that led somewhere interesting.",
-    inkColor: "#2c3e50",
+      "The best way to learn is to teach. Writing about what I'm learning forces me to understand it deeply enough to explain it simply. This blog is my quest log — messy, honest, and full of crossed-out failures that led somewhere interesting.",
+    tomeType: "book",
+    rarity: "common",
+    xpReward: 25,
   },
   {
     id: "craft-of-code",
     title: "The Craft of Clean Code",
     date: "Nov 2025",
     content:
-      "Code is read far more often than it's written. I treat every function like a sentence: it should be clear, concise, and do one thing well. The best code reads like well-written prose — you understand the intent before you understand the implementation.",
-    inkColor: "#4a4a4a",
+      "Code is read far more often than it's written. I treat every function like a spell incantation: it should be clear, precise, and do one thing well. The best code reads like well-written lore — you understand the intent before you understand the implementation.",
+    tomeType: "scroll",
+    rarity: "common",
+    xpReward: 25,
   },
 ]
+
+export const TOME_ICONS: Record<string, string> = {
+  scroll: "📜",
+  book: "📕",
+  tome: "📗",
+  grimoire: "📔",
+}

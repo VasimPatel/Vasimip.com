@@ -2,21 +2,23 @@ export interface Skill {
   name: string
   level: number // 0-100
   category: "frontend" | "backend" | "tools"
+  // RPG stat mapping
+  stat: "STR" | "DEX" | "INT" | "CHA" | "VIT" | "LCK"
 }
 
 export const SKILLS: Skill[] = [
-  { name: "React / Next.js", level: 95, category: "frontend" },
-  { name: "TypeScript", level: 90, category: "frontend" },
-  { name: "CSS / Tailwind", level: 92, category: "frontend" },
-  { name: "Animation / Motion", level: 85, category: "frontend" },
-  { name: "Node.js", level: 82, category: "backend" },
-  { name: "Python", level: 78, category: "backend" },
-  { name: "SQL / Databases", level: 75, category: "backend" },
-  { name: "REST / GraphQL", level: 88, category: "backend" },
-  { name: "Git / GitHub", level: 90, category: "tools" },
-  { name: "Figma", level: 72, category: "tools" },
-  { name: "Testing", level: 80, category: "tools" },
-  { name: "CI/CD", level: 70, category: "tools" },
+  { name: "React / Next.js", level: 95, category: "frontend", stat: "STR" },
+  { name: "TypeScript", level: 90, category: "frontend", stat: "INT" },
+  { name: "CSS / Tailwind", level: 92, category: "frontend", stat: "DEX" },
+  { name: "Animation / Motion", level: 85, category: "frontend", stat: "DEX" },
+  { name: "Node.js", level: 82, category: "backend", stat: "STR" },
+  { name: "Python", level: 78, category: "backend", stat: "INT" },
+  { name: "SQL / Databases", level: 75, category: "backend", stat: "VIT" },
+  { name: "REST / GraphQL", level: 88, category: "backend", stat: "CHA" },
+  { name: "Git / GitHub", level: 90, category: "tools", stat: "VIT" },
+  { name: "Figma", level: 72, category: "tools", stat: "CHA" },
+  { name: "Testing", level: 80, category: "tools", stat: "LCK" },
+  { name: "CI/CD", level: 70, category: "tools", stat: "LCK" },
 ]
 
 export interface Experience {

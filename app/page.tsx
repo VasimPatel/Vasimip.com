@@ -1,7 +1,7 @@
 "use client"
 
-import { NotebookShell } from "@/components/notebook/notebook-shell"
+import { WorldShell } from "@/components/atmosphere/world-shell"
 
 export default function Home() {
-  return <NotebookShell />
+  return <WorldShell />
 }
