@@ -1,0 +1,507 @@
+/* ============================================================================
+   THE CODEX — base layer
+   ============================================================================ */
+
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+}
+
+html,
+body {
+  margin: 0;
+  padding: 0;
+}
+
+html {
+  background: var(--ink);
+  color: var(--vellum);
+  font-family: var(--font-body);
+  font-size: clamp(16px, 1rem + 0.2vw, 19px);
+  line-height: var(--leading-body);
+  -webkit-font-smoothing: antialiased;
+  text-rendering: optimizeLegibility;
+  /* the descent is discrete — the body never scrolls; depths are moved between */
+  overflow: hidden;
+  height: 100%;
+  overscroll-behavior: none;
+}
+
+body {
+  height: 100%;
+  background: var(--ink);
+}
+
+#root {
+  height: 100%;
+}
+
+/* The WebGL torch/scene sits fixed behind everything; the codex text scrolls
+   over it. Content stays in normal flow so it is fully in the DOM and reachable
+   by keyboard with the lights up. */
+.codex-canvas {
+  position: fixed;
+  inset: 0;
+  width: 100vw;
+  height: 100dvh;
+  z-index: var(--z-canvas);
+  display: block;
+  /* let scroll/keyboard reach the content above; the torch reads pointer move
+     via window listeners, not by capturing events here */
+  pointer-events: none;
+  touch-action: none;
+}
+
+/* The fixed stage that holds the five depth panels (no scroll). */
+.codex-stage {
+  position: fixed;
+  inset: 0;
+  z-index: var(--z-content);
+  pointer-events: none; /* panels opt back in when current; torch stays unobstructed */
+}
+
+/* Type roles ----------------------------------------------------------------*/
+.display {
+  font-family: var(--font-display);
+  font-weight: 500;
+  line-height: 1.04;
+  letter-spacing: 0.01em;
+  color: var(--gilt);
+}
+
+.marginalia {
+  font-family: var(--font-margin);
+  font-variant: small-caps;
+  letter-spacing: var(--tracking-margin);
+  font-size: 0.82em;
+  color: var(--gilt);
+  opacity: 0.85;
+}
+
+.data {
+  font-family: var(--font-data);
+  font-size: 0.78em;
+  letter-spacing: 0.02em;
+}
+
+/* Links: gilt, underlined on focus/hover, never neon */
+a {
+  color: var(--gilt);
+  text-decoration-color: rgb(var(--gilt-rgb) / 0.4);
+  text-underline-offset: 0.18em;
+  transition: color var(--dur-ambient) var(--ease-weight);
+}
+a:hover {
+  color: var(--amber);
+}
+
+/* Visible keyboard focus everywhere (brief §7) */
+:focus-visible {
+  outline: 2px solid var(--amber);
+  outline-offset: 3px;
+  border-radius: 2px;
+}
+
+/* Honor reduced motion globally as a backstop for anything CSS-animated */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.001ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.001ms !important;
+    scroll-behavior: auto !important;
+  }
+}
+
+/* The codex column ----------------------------------------------------------*/
+/* Each depth is an absolutely-positioned, viewport-centered panel. Its opacity
+   and plunge transform are written every frame by useDescentDom from the descent
+   position; only the current depth flips to pointer-events:auto. */
+.depth {
+  position: absolute;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  padding: 9vh 7vw;
+  opacity: 0;
+  will-change: transform, opacity;
+  pointer-events: none;
+}
+/* the current depth's content settles gently into place on arrival (no bounce) */
+.depth.is-active .depth-inner {
+  animation: depth-settle 820ms var(--ease-weight) both;
+}
+@keyframes depth-settle {
+  from {
+    transform: translateY(22px);
+  }
+  to {
+    transform: translateY(0);
+  }
+}
+
+.depth-inner {
+  width: 100%;
+  max-width: var(--measure);
+  margin: 0 auto;
+}
+
+.depth-roman {
+  margin: 0 0 0.6rem;
+}
+
+.depth-title {
+  font-size: clamp(2.4rem, 7vw, 5rem);
+  margin: 0 0 0.4rem;
+}
+
+.depth .epigraph {
+  font-family: var(--font-margin);
+  font-style: italic;
+  letter-spacing: 0.01em;
+  opacity: 0.82;
+  margin: 0 0 2rem;
+}
+
+.depth p {
+  margin: 0 0 1.15rem;
+}
+
+.depth .lead {
+  font-size: 1.22em;
+  line-height: 1.5;
+  color: var(--vellum);
+}
+
+.codex-margin {
+  margin-top: 2rem;
+}
+
+/* a hidden illumination — hangs into the margin, gilt, found by the curious */
+.illumination {
+  font-family: var(--font-margin);
+  font-style: italic;
+  color: var(--gilt);
+  border-left: 1px solid rgb(var(--gilt-rgb) / 0.35);
+  padding-left: 1rem;
+  margin: 2rem 0 0;
+}
+
+.codex-link {
+  display: inline-block;
+  margin: 0 1.6rem 0.6rem 0;
+  font-family: var(--font-margin);
+  font-variant: small-caps;
+  letter-spacing: var(--tracking-margin);
+}
+
+.codex-link-label {
+  display: block;
+  font-size: 0.7em;
+  opacity: 0.7;
+  letter-spacing: 0.12em;
+}
+
+/* Reveal-on-light: opacity over content that ALWAYS exists. Never display:none
+   / visibility:hidden / aria-hidden — the text stays in the a11y tree, only its
+   paint changes. Reading mode (--reading=1) or the reduced-motion floor lift it
+   to full without aiming. */
+.reveal {
+  opacity: max(var(--reveal-floor), calc(var(--reading) + (1 - var(--reading)) * var(--lit)));
+  transition: opacity 140ms linear;
+  will-change: opacity;
+}
+@media (prefers-reduced-motion: reduce) {
+  .reveal {
+    transition: none;
+  }
+}
+/* keyboard focus always reveals its section — tabbing through never lands on
+   invisible text (a11y backstop, brief §7) */
+.depth:focus-within .reveal,
+.reveal:focus-visible,
+.reveal:focus-within {
+  opacity: 1;
+}
+
+/* The prose is INK — warm and dark, the way ink sits on vellum. It is legible
+   only where the torch (or reading mode) brightens the parchment beneath it,
+   which is the reveal itself; a faint vellum halo keeps it readable at the
+   dimmer rim of the pool. */
+.depth .lead,
+.depth p {
+  color: #271c0e;
+  text-shadow: 0 0 2px rgb(var(--vellum-rgb) / 0.3), 0 1px 1px rgb(var(--vellum-rgb) / 0.18);
+}
+.depth .lead {
+  color: #1f1609;
+}
+
+/* Legibility backstops for when prose is revealed but the parchment beneath is
+   NOT lit (the dark-ink-on-dark trap). When reading mode is off, a keyboard
+   user tabbing into a section — and any reader under reduced motion — gets the
+   ink recoloured to pale vellum with an ink halo, so the revealed words are
+   readable on the dark ground without aiming the torch. Under reading mode the
+   parchment is lit, so the ink stays dark and these don't apply. */
+:root:not(.reading-mode) .depth:focus-within .lead,
+:root:not(.reading-mode) .depth:focus-within p {
+  color: var(--vellum);
+  text-shadow: 0 1px 4px rgb(var(--ink-rgb) / 0.95), 0 0 2px rgb(var(--ink-rgb) / 0.9);
+}
+@media (prefers-reduced-motion: reduce) {
+  :root:not(.reading-mode) .depth .lead,
+  :root:not(.reading-mode) .depth p {
+    color: var(--vellum);
+    text-shadow: 0 1px 4px rgb(var(--ink-rgb) / 0.95), 0 0 2px rgb(var(--ink-rgb) / 0.9);
+  }
+}
+
+/* RAISE THE LIGHTS toggle ----------------------------------------------------*/
+.reading-toggle {
+  position: fixed;
+  top: max(1rem, env(safe-area-inset-top, 0));
+  right: max(1rem, env(safe-area-inset-right, 0));
+  z-index: var(--z-hud);
+  display: inline-flex;
+  align-items: center;
+  gap: 0.55rem;
+  padding: 0.5rem 0.95rem;
+  background: rgb(var(--abyss-rgb) / 0.55);
+  -webkit-backdrop-filter: blur(7px);
+  backdrop-filter: blur(7px);
+  border: 1px solid rgb(var(--gilt-rgb) / 0.3);
+  border-radius: 999px;
+  color: var(--gilt);
+  font-family: var(--font-margin);
+  font-variant: small-caps;
+  letter-spacing: var(--tracking-margin);
+  font-size: 0.82rem;
+  cursor: pointer;
+  pointer-events: auto;
+  transition: border-color var(--dur-ambient) var(--ease-weight), color var(--dur-ambient) var(--ease-weight);
+}
+.reading-toggle:hover {
+  border-color: rgb(var(--amber-rgb) / 0.6);
+  color: var(--amber);
+}
+.reading-toggle-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: radial-gradient(circle at 40% 35%, var(--amber), var(--ember));
+  box-shadow: 0 0 8px rgb(var(--amber-rgb) / 0.7);
+}
+:root.reading-mode .reading-toggle-dot {
+  background: var(--vellum);
+  box-shadow: 0 0 10px rgb(var(--vellum-rgb) / 0.8);
+}
+
+/* Descent HUD ---------------------------------------------------------------*/
+.hud {
+  position: fixed;
+  inset: 0;
+  z-index: var(--z-hud);
+  pointer-events: none;
+}
+.hud-depths {
+  position: absolute;
+  left: max(1.1rem, env(safe-area-inset-left, 0));
+  top: 50%;
+  transform: translateY(-50%);
+  display: flex;
+  flex-direction: column;
+  gap: 0.85rem;
+  pointer-events: auto;
+}
+.hud-dot {
+  width: 1.7rem;
+  height: 1.7rem;
+  display: grid;
+  place-items: center;
+  background: none;
+  border: 1px solid rgb(var(--vellum-rgb) / 0.18);
+  border-radius: 50%;
+  color: rgb(var(--vellum-rgb) / 0.3);
+  font-family: var(--font-margin);
+  font-size: 0.7rem;
+  cursor: pointer;
+  transition: color var(--dur-ambient) var(--ease-weight),
+    border-color var(--dur-ambient) var(--ease-weight),
+    box-shadow var(--dur-ambient) var(--ease-weight);
+}
+.hud-dot:hover {
+  color: var(--vellum);
+  border-color: rgb(var(--gilt-rgb) / 0.5);
+}
+.hud-dot.is-passed {
+  color: rgb(var(--gilt-rgb) / 0.55);
+  border-color: rgb(var(--gilt-rgb) / 0.3);
+}
+.hud-dot.is-current {
+  color: var(--ink);
+  background: radial-gradient(circle at 40% 35%, var(--amber), var(--ember));
+  border-color: transparent;
+  box-shadow: 0 0 14px rgb(var(--amber-rgb) / 0.5);
+}
+.hud-descend {
+  position: absolute;
+  left: 50%;
+  bottom: max(1.4rem, env(safe-area-inset-bottom, 0));
+  transform: translateX(-50%);
+  display: inline-flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.35rem;
+  padding: 0.4rem 1rem;
+  background: none;
+  border: none;
+  color: rgb(var(--vellum-rgb) / 0.55);
+  font-family: var(--font-margin);
+  font-variant: small-caps;
+  letter-spacing: var(--tracking-margin);
+  font-size: 0.8rem;
+  cursor: pointer;
+  pointer-events: auto;
+  transition: color var(--dur-ambient) var(--ease-weight);
+}
+.hud-descend:hover:not(:disabled) {
+  color: var(--amber);
+}
+.hud-descend:disabled {
+  color: rgb(var(--vellum-rgb) / 0.25);
+  cursor: default;
+}
+.hud-descend-chevron {
+  width: 11px;
+  height: 11px;
+  border-right: 1.5px solid currentColor;
+  border-bottom: 1.5px solid currentColor;
+  transform: rotate(45deg);
+  animation: descend-beckon 2.6s ease-in-out infinite;
+}
+.hud-descend:disabled .hud-descend-chevron {
+  display: none;
+}
+@keyframes descend-beckon {
+  0%,
+  100% {
+    transform: rotate(45deg) translateY(0);
+    opacity: 0.55;
+  }
+  50% {
+    transform: rotate(45deg) translateY(3px);
+    opacity: 1;
+  }
+}
+
+/* skip link -----------------------------------------------------------------*/
+.skip-link {
+  position: fixed;
+  top: 0.6rem;
+  left: 0.6rem;
+  z-index: var(--z-overlay);
+  padding: 0.55rem 0.85rem;
+  background: var(--abyss);
+  color: var(--vellum);
+  border: 1px solid rgb(var(--gilt-rgb) / 0.4);
+  border-radius: 6px;
+  font-family: var(--font-margin);
+  transform: translateY(-180%);
+  transition: transform 160ms var(--ease-weight);
+}
+.skip-link:focus {
+  transform: none;
+}
+
+/* The Works — named stars of the living map -------------------------------- */
+.works-links {
+  margin-top: 2.2rem;
+}
+.works-links ul {
+  list-style: none;
+  padding: 0;
+  margin: 0.7rem 0 0;
+}
+.works-links li {
+  margin: 0 0 0.55rem;
+}
+.works-links a {
+  font-family: var(--font-margin);
+  font-variant: small-caps;
+  letter-spacing: var(--tracking-margin);
+  color: var(--gilt);
+}
+.works-links a:hover {
+  color: var(--amber);
+}
+.works-desc {
+  color: rgb(var(--vellum-rgb) / 0.6);
+  font-size: 0.9em;
+}
+
+/* The Arrival's reflection ---------------------------------------------------*/
+.reflection {
+  margin-top: 3rem;
+  padding-top: 1.6rem;
+  border-top: 1px solid rgb(var(--gilt-rgb) / 0.35);
+  font-family: var(--font-margin);
+}
+.reflection p {
+  margin: 0 0 0.7rem;
+}
+.reflection strong {
+  color: var(--amber);
+  font-weight: 600;
+}
+.reflection-return {
+  color: var(--gilt);
+  font-style: italic;
+}
+.reflection-reset {
+  margin-top: 0.8rem;
+  background: none;
+  border: none;
+  padding: 0;
+  color: rgb(var(--vellum-rgb) / 0.5);
+  font-family: var(--font-margin);
+  font-variant: small-caps;
+  letter-spacing: var(--tracking-margin);
+  font-size: 0.8rem;
+  cursor: pointer;
+  text-decoration: underline;
+  text-decoration-color: rgb(var(--vellum-rgb) / 0.25);
+  text-underline-offset: 0.2em;
+}
+.reflection-reset:hover {
+  color: var(--ember);
+}
+
+/* No-WebGL fallback: the codex becomes a plain, fully readable dark page — pale
+   ink on the blue-black ground, everything revealed, no torch. All content is
+   already in the DOM, so nothing is lost. */
+:root.no-webgl .reveal {
+  opacity: 1 !important;
+}
+:root.no-webgl .depth .lead,
+:root.no-webgl .depth p {
+  color: var(--vellum);
+  text-shadow: none;
+}
+:root.no-webgl .reading-toggle {
+  display: none;
+}
+
+/* Screen-reader-only utility for accessible labels on diegetic controls */
+.sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
+}
