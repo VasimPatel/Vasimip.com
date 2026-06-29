@@ -43,14 +43,27 @@ is enhancement, never the only path to the content.
 
 ---
 
-## Editing the words
+## Editing the pages
 
-The copy in [`src/content/depths.ts`](src/content/depths.ts) is fiction and yours
-to change. Each depth has a `lead`, `p` paragraphs, `margin` marginalia, hidden
-`aside` illuminations (revealed only by a lingering torch, and remembered on
-return), and optional `link`s. The depth titles/moods live in
-[`src/lib/depths.ts`](src/lib/depths.ts). The structure is what the reveal and the
-page geometry expect; the words are free.
+There is **one file to edit**: [`src/content/pages.ts`](src/content/pages.ts). Each
+of the five pages is one entry that bundles three things together:
+
+1. **the heading** — roman numeral, title, the short kicker beside it;
+2. **the words** — an `epigraph` plus `blocks` (`lead`, `p` paragraphs, `margin`
+   marginalia, hidden `aside` illuminations revealed only by a lingering torch, and
+   optional `link`s) — it's fiction, change it freely;
+3. **the look** — a `theme` mapping **colour + ink style** to that page: the ink
+   accent, the lit `substrate`, how the ink moves (`flow` / `energy` / `scale` /
+   `density`), and the scene mood (`ambient` / `fog` / `rampCold` / `tilt`).
+
+**Colours are mappable.** Any colour field takes either a **named palette token**
+(e.g. `'verdigris'`, `'amber'`, `'parchment'`) or a **raw hex** (e.g. `'#C6CCB6'`).
+The named tokens live in [`src/lib/palette.ts`](src/lib/palette.ts) — add your own
+there and reference them by name. `pages.ts` is the single source of truth: the
+prose (`CONTENT`), the titles + scene mood (`DEPTH_DEFS`), and the living-ink shader
+config (`INK_CONFIG`) are all **derived** from it, so one edit updates everything in
+step. To add, remove, or reorder pages, edit the id list `DEPTHS` in
+[`src/lib/depths.ts`](src/lib/depths.ts) (one id per page entry).
 
 The constellation in The Drowned Archive ([`src/scene/map/LivingMap.tsx`](src/scene/map/LivingMap.tsx))
 is procedurally generated and entirely fictional — no external data, no keys.
@@ -77,8 +90,8 @@ runs through three's tonemapping + colour-space chunks, so it sits in the same A
 the rest of the scene. The ink **dances only on the page you're reading** (neighbours and
 reduced motion freeze); **reading mode (L)** lifts the whole page fully legible; and on the
 **minimal perf tier** the page falls back to the static parchment ([`VellumPlane`](src/scene/VellumPlane.tsx)).
-To retheme a depth, edit its entry in `INK_CONFIG` (mood colour, substrate, flow, energy, scale,
-density) in [`src/scene/ink/inkMaterial.ts`](src/scene/ink/inkMaterial.ts).
+To retheme a depth, edit its `theme` (ink colour, substrate, flow, energy, scale, density) in
+[`src/content/pages.ts`](src/content/pages.ts) — `INK_CONFIG` is derived from it.
 
 ---
 

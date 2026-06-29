@@ -15,6 +15,12 @@ export const PALETTE = {
   gilt: '#C9A227', // illuminated-manuscript gold
   amber: '#FFB347', // torch core / warm reveals
   ember: '#C2551F', // hottest-low embers, deepest falloff
+
+  // ── page substrates (the lit base each page's ink sits on; cool→warm arc) ──
+  parchment: '#C6CCB6', // cool verdigris parchment (the drowned archive)
+  parchmentCold: '#BCC6B6', // coldest grey-green (the menagerie)
+  vellumWarm: '#ECD2A0', // warm vellum (the ember court)
+  vellumPale: '#E4DCC0', // pale neutral (the last leaf)
 } as const
 
 export type ColorName = keyof typeof PALETTE

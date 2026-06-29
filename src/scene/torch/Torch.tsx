@@ -19,7 +19,6 @@ import { useUiStore } from '@/state/uiStore'
 import { useDescentStore } from '@/state/descentStore'
 import { TORCH } from './torch.constants'
 import { createFlicker } from './flicker'
-import { Embers } from './Embers'
 import { PALETTE, hexToLinear } from '@/lib/palette'
 import { damp } from '@/lib/damp'
 
@@ -139,7 +138,6 @@ export function Torch({ pageZ = 0 }: TorchProps) {
             toneMapped={false}
           />
         </mesh>
-        <Embers />
       </group>
       <object3D ref={target} />
     </>

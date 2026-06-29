@@ -10,12 +10,13 @@ import type { ColorName } from '@/lib/palette'
 
 export const TORCH = {
   /**
-   * Held-torch offset from the aim point, in world units: up and to the side,
-   * the way you actually hold a torch. This is what makes the light GRAZE the
-   * page at the look-point (relief shows at pool CENTER, not just the rim) —
-   * the corrected fix for the "head-on light washes the relief flat" trap.
+   * Flame offset from the aim point, in world units. Centered on the cursor
+   * (x/y ≈ 0) so the flame and its glow sit ON the look-point — the torch light
+   * tracks the cursor. Only +z, so the flame floats just in front of the page.
+   * (The old up-and-to-the-side graze only mattered for the static-parchment
+   * fallback; the living-ink page is an unlit shader, so head-on is fine.)
    */
-  offset: { x: 0.55, y: 0.66, z: 1.35 },
+  offset: { x: 0.0, y: 0.0, z: 0.45 },
 
   // ---- hero spotlight (single 2D shadow map on HIGH; cheaper than a point
   //      light's 6-face cube, and it rakes better) ------------------------
@@ -40,8 +41,9 @@ export const TORCH = {
   normalScale: 0.9,
 
   // ---- DOM reveal (screen-space, tuned to coincide with the world pool) ----
-  /** reveal radius as a fraction of min(viewport w,h) */
-  revealScreenFraction: 0.46,
+  /** reveal radius as a fraction of min(viewport w,h) — a small, intimate torch
+   *  pool so most of the page stays in atmospheric shadow */
+  revealScreenFraction: 0.17,
   /** inner edge of the reveal smoothstep, as a fraction of the radius */
   revealSoftness: 0.5,
 

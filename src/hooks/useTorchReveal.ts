@@ -58,9 +58,12 @@ export function useTorchReveal(): void {
           lits[i] = prev.get(el) ?? 0
           continue
         }
-        const cx = r.left + r.width / 2
-        const cy = r.top + r.height / 2
-        const dist = Math.hypot(tx - cx, ty - cy)
+        // distance to the NEAREST point of the element's box (0 when the torch
+        // is over it) — so any line the torch is by reveals, not only when it's
+        // near the element's center
+        const nx = tx < r.left ? r.left : tx > r.right ? r.right : tx
+        const ny = ty < r.top ? r.top : ty > r.bottom ? r.bottom : ty
+        const dist = Math.hypot(tx - nx, ty - ny)
         const tight = el.dataset.tight !== undefined
         const radius = tight ? baseR * 0.52 : baseR
         const inner = radius * TORCH.revealSoftness

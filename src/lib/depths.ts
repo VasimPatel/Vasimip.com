@@ -9,7 +9,12 @@
  * ramp is biased).
  */
 import type { ColorName } from './palette'
+import { PAGES } from '@/content/pages'
 
+/**
+ * The depth order + ids. This is the ONE list to edit to add, remove, or
+ * reorder pages (each id must have a matching entry in `src/content/pages.ts`).
+ */
 export const DEPTHS = ['threshold', 'works', 'frontier', 'hearth', 'arrival'] as const
 export type DepthId = (typeof DEPTHS)[number]
 
@@ -45,84 +50,35 @@ export interface DepthDef {
   mood: DepthMood
 }
 
-export const DEPTH_DEFS: Record<DepthId, DepthDef> = {
-  threshold: {
-    id: 'threshold',
-    index: 0,
-    roman: 'I',
-    title: 'The Threshold',
-    facet: 'the door',
-    gapScale: 1,
-    mood: {
-      ambient: 0.02,
-      ambientColor: 'ink',
-      fogDensity: 0.085,
-      fogColor: 'ink',
-      rampCold: 'ink',
-    },
-  },
-  works: {
-    id: 'works',
-    index: 1,
-    roman: 'II',
-    title: 'The Drowned Archive',
-    facet: 'what the water kept',
-    gapScale: 1.5, // the flooded stacks read tall
-    mood: {
-      ambient: 0.08,
-      ambientColor: 'abyss',
-      fogDensity: 0.055,
-      fogColor: 'abyss',
-      rampCold: 'verdigris',
-    },
-  },
-  frontier: {
-    id: 'frontier',
-    index: 2,
-    roman: 'III',
-    title: 'The Verdigris Menagerie',
-    facet: 'specimens',
-    gapScale: 1.15,
-    mood: {
-      ambient: 0.06,
-      ambientColor: 'abyss',
-      fogDensity: 0.06,
-      fogColor: 'ink',
-      rampCold: 'verdigris', // the coldest, strangest point of the descent
-      tiltZ: 0.012,
-    },
-  },
-  hearth: {
-    id: 'hearth',
-    index: 3,
-    roman: 'IV',
-    title: 'The Ember Court',
-    facet: 'the fire',
-    gapScale: 1.1,
-    mood: {
-      ambient: 0.2, // the decisive warm turn
-      ambientColor: 'ember',
-      fogDensity: 0.045,
-      fogColor: 'ember',
-      rampCold: 'ink',
-    },
-  },
-  arrival: {
-    id: 'arrival',
-    index: 4,
-    roman: 'V',
-    title: 'The Last Leaf',
-    facet: 'the close',
-    gapScale: 1.1,
-    mood: {
-      ambient: 0.5, // the page finally fully lit; the torch's job is done
-      ambientColor: 'vellum',
-      fogDensity: 0.02,
-      fogColor: 'abyss',
-      rampCold: 'ink',
-    },
-  },
-}
+/**
+ * Per-depth title + scene mood, DERIVED from the single authoring file
+ * `src/content/pages.ts`. Edit titles/colours/mood THERE. This just reshapes a
+ * page's `theme` into the `mood` the SceneDirector + torch ramp expect.
+ */
+export const DEPTH_DEFS: Record<DepthId, DepthDef> = Object.fromEntries(
+  DEPTHS.map((id, i) => {
+    const p = PAGES[id]
+    return [
+      id,
+      {
+        id,
+        index: i as DepthDef['index'],
+        roman: p.roman,
+        title: p.title,
+        facet: p.facet,
+        gapScale: p.gapScale ?? 1,
+        mood: {
+          ambient: p.theme.ambient,
+          ambientColor: p.theme.ambientColor,
+          fogDensity: p.theme.fog,
+          fogColor: p.theme.fogColor,
+          rampCold: p.theme.rampCold,
+          tiltZ: p.theme.tilt,
+        },
+      },
+    ]
+  }),
+) as Record<DepthId, DepthDef>
 
 export const DEPTH_LIST: DepthDef[] = DEPTHS.map((id) => DEPTH_DEFS[id])
 

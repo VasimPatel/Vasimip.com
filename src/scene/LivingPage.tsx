@@ -41,11 +41,13 @@ export function LivingPage({ depthId, index, width = 7, height = 9, position = [
     const reduced = useMotionStore.getState().reduced
     const onPage = Math.abs(index - useDescentStore.getState().position) <= 0.6
 
-    // torch in this page's UV space (accounts for the page-turn hinge)
+    // torch in this page's UV space (accounts for the page-turn hinge). NB the
+    // geometry's vUv.y is bottom-up (0 bottom, 1 top), so v rises with local.y —
+    // NOT the top-down convention a CanvasTexture would use.
     local.copy(s.poolWorld)
     mesh.current.worldToLocal(local)
     const u = (local.x + width / 2) / width
-    const v = (height / 2 - local.y) / height
+    const v = (local.y + height / 2) / height
     const onP = Math.abs(local.z) < 0.6 && u > -0.2 && u < 1.2 && v > -0.2 && v < 1.2 ? 1 : 0
     active.current = damp(active.current, onP, 6, dt)
     reading.current = damp(reading.current, useUiStore.getState().readingMode ? 1 : 0, 3.2, dt)

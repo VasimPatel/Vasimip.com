@@ -9,7 +9,8 @@
  * colour-space chunks so it sits in the same pipeline as the rest of the scene.
  */
 import * as THREE from 'three'
-import type { DepthId } from '@/lib/depths'
+import { DEPTHS, type DepthId } from '@/lib/depths'
+import { PAGES, resolveColor } from '@/content/pages'
 
 const INK = '#241a0e'
 const GROUND = '#0B0E14'
@@ -29,18 +30,23 @@ export interface InkConfig {
   inkAmt: number
 }
 
-export const INK_CONFIG: Record<DepthId, InkConfig> = {
-  // sparse, calm, rising warm ink at the threshold — warm vellum
-  threshold: { mood: '#FFB347', base: '#EAD9AE', flow: [0.0, -0.45], energy: 0.5, scale: 2.5, inkAmt: 0.72 },
-  // a cold horizontal current through the drowned archive — cool verdigris parchment
-  works: { mood: '#2E6E6A', base: '#C6CCB6', flow: [0.5, -0.08], energy: 0.7, scale: 3.0, inkAmt: 0.86 },
-  // the coldest, most restless dance — the menagerie
-  frontier: { mood: '#2E6E6A', base: '#BCC6B6', flow: [-0.26, 0.12], energy: 0.98, scale: 3.6, inkAmt: 0.9 },
-  // warm ink rising like flame and smoke — the court warms again
-  hearth: { mood: '#C2551F', base: '#ECD2A0', flow: [0.0, -0.85], energy: 1.2, scale: 2.4, inkAmt: 0.85 },
-  // gilt ink drifting gently down — the last leaf, pale and neutral
-  arrival: { mood: '#C9A227', base: '#E4DCC0', flow: [0.12, 0.5], energy: 0.42, scale: 3.0, inkAmt: 0.7 },
-}
+/** Derived from each page's `theme` in `src/content/pages.ts` — edit colours/style there. */
+export const INK_CONFIG: Record<DepthId, InkConfig> = Object.fromEntries(
+  DEPTHS.map((id) => {
+    const t = PAGES[id].theme
+    return [
+      id,
+      {
+        mood: resolveColor(t.ink),
+        base: resolveColor(t.substrate),
+        flow: t.flow,
+        energy: t.energy,
+        scale: t.scale,
+        inkAmt: t.density,
+      },
+    ]
+  }),
+) as Record<DepthId, InkConfig>
 
 const VERT = /* glsl */ `
   varying vec2 vUv;
@@ -75,9 +81,9 @@ const FRAG = /* glsl */ `
     float td = distance(ac, tor);
 
     // swirl the field near the flame — the ink curls around the torch (a gentle
-    // dance, not a whirlpool)
+    // dance, not a whirlpool); radius scales with the pool so it stays proportional
     vec2 rel = vUv - uTorch;
-    float sw = smoothstep(0.36, 0.0, td) * uTorchActive;
+    float sw = smoothstep(uReveal * 0.72, 0.0, td) * uTorchActive;
     float ang = sw * 1.25;
     float cs = cos(ang), sn = sin(ang);
     vec2 swuv = uTorch + mat2(cs, -sn, sn, cs) * rel;
@@ -91,7 +97,7 @@ const FRAG = /* glsl */ `
     ink = smoothstep(0.42, 0.92, ink) * uInkAmt;
 
     // ink gathers + intensifies toward the torch (dances into the light)
-    ink *= 0.55 + 0.7 * smoothstep(0.5, 0.0, td) * (0.4 + uTorchActive);
+    ink *= 0.55 + 0.7 * smoothstep(uReveal, 0.0, td) * (0.4 + uTorchActive);
 
     // keep the central reading column lighter so the prose stays legible
     float colSafe = smoothstep(0.0, 0.34, abs(vUv.x - 0.5));
@@ -142,7 +148,7 @@ export function createInkMaterial(cfg: InkConfig, aspect = 9 / 7): InkMaterial {
     uTime: { value: 0 },
     uTorch: { value: new THREE.Vector2(0.5, 0.5) },
     uTorchActive: { value: 0 },
-    uReveal: { value: 0.66 },
+    uReveal: { value: 0.24 },
     uReading: { value: 0 },
     uFlicker: { value: 1 },
     uInk: { value: new THREE.Color(INK) },
