@@ -102,10 +102,10 @@ export interface PageConfig {
 export const PAGES: Record<DepthId, PageConfig> = {
   threshold: {
     roman: 'I',
-    title: 'The Threshold',
-    facet: 'the door',
+    title: 'Hi',
+    facet: 'I Am Vasim',
     gapScale: 1,
-    epigraph: 'Here there is almost no light.',
+    epigraph: 'Are you ready to hear a tale?',
     blocks: [
       { kind: 'lead', text: 'You have found a book that is read by its own light.' },
       {
