@@ -1,0 +1,45 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+    <link rel="icon" type="image/svg+xml" href="/ember.svg" />
+
+    <title>The Codex</title>
+    <meta
+      name="description"
+      content="An illuminated codex, read by torchlight in the dark — a single descent through a drowned, buried world. Take up the torch."
+    />
+    <meta name="theme-color" content="#0B0E14" />
+
+    <!-- Open Graph -->
+    <meta property="og:type" content="website" />
+    <meta property="og:title" content="The Codex" />
+    <meta
+      property="og:description"
+      content="An illuminated codex, read by torchlight in the dark. Take up the torch and descend."
+    />
+
+    <!-- Fonts: Grenze Gotisch (display blackletter), IM Fell English (body),
+         Cardo (body fallback for long reading), EB Garamond (marginalia small-caps). -->
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=Grenze+Gotisch:wght@400;500;600;700&family=IM+Fell+English:ital@0;1&family=Cardo:ital,wght@0,400;0,700;1,400&family=EB+Garamond:ital,wght@0,400;0,500;1,400&display=swap"
+      rel="stylesheet"
+    />
+  </head>
+  <body>
+    <!-- The app renders all content into the DOM and it remains reachable with
+         the lights up; the torch is enhancement, never the only path to it.
+         (Client-rendered SPA; see the <noscript> fallback below.) -->
+    <div id="root"></div>
+    <noscript>
+      <div style="max-width: 40rem; margin: 4rem auto; padding: 0 1.5rem; color: #EAD9AE; font-family: Cardo, Georgia, serif; line-height: 1.7;">
+        <h1 style="font-family: 'Grenze Gotisch', serif; color: #C9A227;">The Codex</h1>
+        <p>This codex is illuminated with a torch that needs JavaScript to burn. The words, however, do not. Enable JavaScript to descend with light — or read on; the full text lives here in the dark.</p>
+      </div>
+    </noscript>
+    <script type="module" src="/src/main.tsx"></script>
+  </body>
+</html>
