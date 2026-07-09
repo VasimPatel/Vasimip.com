@@ -116,6 +116,11 @@ export interface CoverProps extends PageProps {
   onOpen: () => void
 }
 
+/** The Skills page's swipe reveal only plays once Dash has sprayed the panel. */
+export interface SkillsProps extends PageProps {
+  skillsOn: boolean
+}
+
 // ── Editable, user-facing copy. Everything personal lives here (see content.ts).
 // Purely-decorative UI text (how-to-read hints, tab names, control labels) stays
 // inline in the artwork — it is not part of the portfolio's content.
