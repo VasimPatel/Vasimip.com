@@ -6,19 +6,14 @@
 // React style OBJECTS (see `styleFromCss`). DO NOT "improve" the timings.
 // ─────────────────────────────────────────────────────────────────────────────
 import React, { type CSSProperties } from 'react'
-import type { Pose, HudTab } from './types'
-import { PAGES, POKE, CHATTER, DROPS, SNARK, POKEARC, FIDGETARC, type ArcKey } from './constants'
+import type { Pose, HudTab, PageGeom } from './types'
+import { POKE, CHATTER, DROPS, POKEARC, FIDGETARC, type ArcKey } from './constants'
 import { AudioEngine, type SfxKind } from './audio'
 
-import Cover from './pages/Cover'
-import Intro from './pages/Intro'
-import About from './pages/About'
-import Work from './pages/Work'
-import Skills from './pages/Skills'
-import Contact from './pages/Contact'
 import CoverRenderer from './CoverRenderer'
 import PageRenderer from './PageRenderer'
 import { DEFAULT_DOC } from './doc/defaultDoc'
+import type { NotebookDoc } from './doc/docTypes'
 import Dash from './Dash'
 import Hud from './Hud'
 import Smoke from './effects/Smoke'
@@ -30,8 +25,6 @@ import FocusRing from './effects/FocusRing'
 import ReactBubble from './effects/ReactBubble'
 import PipSnark from './effects/PipSnark'
 
-const DOC_RENDER = typeof location !== 'undefined' && new URLSearchParams(location.search).has('docRender')
-
 // ── Camera override emitted by the travel choreography ───────────────────────
 interface Camo { cx: number; cy: number; mult: number; fast: boolean }
 
@@ -39,6 +32,7 @@ export interface NotebookProps {
   autoplaySeconds?: number
   pipSnark?: boolean
   soundOn?: boolean
+  doc?: NotebookDoc
 }
 
 export interface State {
@@ -73,7 +67,7 @@ export interface State {
   flipRange: [number, number] | null
   auto: boolean
   sound: boolean
-  sprayed: boolean
+  flags: Record<string, boolean>
   poking: boolean
   react: string | null
   mx: number
@@ -120,7 +114,9 @@ export default class Notebook extends React.Component<NotebookProps, State> {
   private _downY = 0
   private _maybeDrag = false
   private _dragged = false
-  private _cheered = false
+  private _runId = 0
+  private _geomDoc: NotebookDoc | null = null
+  private _geomCache: PageGeom[] = []
   private _lastMode: string | null = null
   private _lastFl: string | null = null
   private _onR!: () => void
@@ -136,11 +132,27 @@ export default class Notebook extends React.Component<NotebookProps, State> {
     smokeOn: false, smokeX: 0, smokeY: 0, bombFlyOn: false, bombX: 0, bombY: 0,
     boomOn: false, holeOn: false, holeX: 0, holeY: 0,
     busy: false, busyFlip: false, flipRange: null,
-    auto: false, sound: true, sprayed: false,
+    auto: false, sound: true, flags: {},
     poking: false, react: null, mx: 640, my: 400,
     camo: null, shakeOn: false, crackOn: false, crackX: 0, crackY: 0,
     pageShove: 0, pageJit: false, vaulting: false, squish: false,
     vw: 1280, vh: 800
+  }
+
+  private get doc(): NotebookDoc { return this.props.doc ?? DEFAULT_DOC }
+
+  /** Geometry adapter: cover stub + per-page panel geometry, rebuilt only when
+   *  the doc reference changes. Every locomotion routine reads `this.geom()`. */
+  geom(): PageGeom[] {
+    const doc = this.doc
+    if (this._geomDoc !== doc) {
+      this._geomDoc = doc
+      this._geomCache = [
+        { name: 'COVER', panels: [] },
+        ...doc.pages.map(p => ({ name: p.name, panels: p.panels.map(({ x, y, w, h, ax, ay }) => ({ x, y, w, h, ax, ay })) })),
+      ]
+    }
+    return this._geomCache
   }
 
   componentDidMount() {
@@ -187,7 +199,7 @@ export default class Notebook extends React.Component<NotebookProps, State> {
     this.setState({ sound: this.props.soundOn ?? true })
     // dev hook for headless verification; clamp to a valid page so it can't crash
     ;(window as unknown as { __notebookGoTo?: (p: number) => void }).__notebookGoTo = (p: number) =>
-      this.flipTo(Math.max(0, Math.min(PAGES.length - 1, Math.round(p))))
+      this.flipTo(Math.max(0, Math.min(this.geom().length - 1, Math.round(p))))
   }
 
   componentWillUnmount() {
@@ -203,34 +215,65 @@ export default class Notebook extends React.Component<NotebookProps, State> {
     delete (window as unknown as { __notebookGoTo?: (p: number) => void }).__notebookGoTo
   }
 
+  /** Live doc-swap (admin preview): kill any in-flight choreography, invalidate the
+   *  geometry cache, clamp page/panel into the new doc's range, and settle Dash into a
+   *  safe idle at the clamped anchor so no timer resolves against stale geometry. */
+  componentDidUpdate(prevProps: NotebookProps) {
+    if (prevProps.doc === this.props.doc) return
+    this._runId++
+    this._tt.forEach(clearTimeout)
+    this._tt = []
+    const g = this.geom() // rebuilt against the new doc reference
+    const page = Math.max(0, Math.min(g.length - 1, this.state.page))
+    const panel = page === 0 ? 0 : Math.max(0, Math.min(g[page].panels.length - 1, this.state.panel))
+    const safe: Partial<State> = {
+      page, panel,
+      busy: false, busyFlip: false, dragging: false, poking: false, camo: null,
+      smokeOn: false, bombFlyOn: false, boomOn: false, holeOn: false, crackOn: false,
+      shakeOn: false, pageJit: false, pageShove: 0, dtrans: 'none', react: null,
+    }
+    if (page === 0) {
+      this.setState({ ...safe, pose: 'hidden', dop: 0 } as State)
+    } else {
+      const a = this.anch(page, panel)
+      this.setState({ ...safe, pose: 'idle', dx: a.x, dy: a.y, dop: 1 } as State)
+    }
+  }
+
   to(ms: number, fn: () => void) { this._tt.push(setTimeout(fn, ms)) }
 
   ensureAC() { this.audio.ensureAC() }
   sfx(kind: SfxKind) { this.audio.sfx(kind, this.state.sound) }
 
-  anch(p: number, j: number) { const pn = PAGES[p].panels[j]; return { x: pn.ax - 52, y: pn.ay - 113, pn } }
+  anch(p: number, j: number) { const pn = this.geom()[p].panels[j]; return { x: pn.ax - 52, y: pn.ay - 113, pn } }
 
   panelPose(skipF?: boolean) {
     const s = this.state
-    const pn = PAGES[s.page].panels[s.panel]
+    const pn = this.geom()[s.page]?.panels[s.panel]
     if (!pn) return
-    const extra: Partial<State> = pn.face ? { face: pn.face } : {}
-    if (s.page === 5 && s.panel === 0 && !this._cheered) {
-      this._cheered = true
-      this.sfx('hop')
-      const line = 'made it! ta-da!'
-      this.setState({ pose: 'cheer', react: line, ...extra } as State)
-      this.to(1750, () => { if (this.state.pose === 'cheer') this.setState({ pose: 'idle' }) })
-      this.to(1950, () => this.setState(st => (st.react === line ? { react: null } : null)))
-      return
+    const arrival = s.page > 0 ? this.doc.pages[s.page - 1].panels[s.panel].arrival : undefined
+    const face = arrival?.face
+    const faceExtra: Partial<State> = face ? { face } : {}
+    // No pose, or a one-shot arrival that already played → plain idle.
+    if (!arrival || !arrival.pose || (arrival.once && arrival.setFlag && s.flags[arrival.setFlag])) {
+      this.setState({ pose: 'idle', ...faceExtra } as State)
+    } else {
+      if (arrival.sfx) this.sfx(arrival.sfx)
+      const strike: Partial<State> = { pose: arrival.pose, ...faceExtra }
+      if (arrival.setFlag) strike.flags = { ...s.flags, [arrival.setFlag]: true }
+      if (arrival.say) strike.react = arrival.say
+      this.setState(strike as State)
+      if (arrival.say) {
+        const line = arrival.say
+        this.to((arrival.revertMs ?? 0) + 200, () => this.setState(st => (st.react === line ? { react: null } : null)))
+      }
+      if (arrival.revertMs) {
+        const pose = arrival.pose
+        this.to(arrival.revertMs, () => { if (this.state.pose === pose) this.setState({ pose: 'idle' }) })
+      }
     }
-    if (pn.pose === 'fight') this.setState({ pose: 'fight', ...extra } as State)
-    else if (pn.pose === 'think') this.setState({ pose: 'think', ...extra } as State)
-    else if (pn.pose === 'spray' && !s.sprayed) {
-      this.setState({ pose: 'spray', sprayed: true, ...extra } as State)
-      this.to(2100, () => { if (this.state.pose === 'spray') this.setState({ pose: 'idle' }) })
-    } else this.setState({ pose: 'idle', ...extra } as State)
-    if (!skipF && !pn.pose && s.page !== 5 && Math.random() < .24) {
+    const flourish = arrival?.flourish ?? s.page !== this.geom().length - 1
+    if (!skipF && !(arrival?.pose) && flourish && Math.random() < .24) {
       this.to(650, () => {
         const st = this.state
         if (st.pose === 'idle' && !st.busy && !st.dragging && !st.poking) this.flourish(pn)
@@ -311,7 +354,7 @@ export default class Notebook extends React.Component<NotebookProps, State> {
 
   vaultTo(j: number, a: { x: number; y: number }, dir: number) {
     const s = this.state
-    const A = PAGES[s.page].panels[s.panel]
+    const A = this.geom()[s.page].panels[s.panel]
     const edgeDx = (dir === 1 ? A.x + A.w - 6 : A.x + 6) - 52
     const runD = Math.max(.28, Math.abs(edgeDx - s.dx) / 270)
     const tPk = Math.random() < .3 ? 760 : 0
@@ -334,7 +377,7 @@ export default class Notebook extends React.Component<NotebookProps, State> {
 
   ropeTo(j: number, a: { x: number; y: number }, dir: number) {
     const s = this.state
-    const A = PAGES[s.page].panels[s.panel]
+    const A = this.geom()[s.page].panels[s.panel]
     const edgeDx = (dir === 1 ? A.x + A.w - 8 : A.x + 8) - 52
     const runD = Math.max(.28, Math.abs(edgeDx - s.dx) / 270)
     const walkD = Math.max(.9, Math.abs(a.x - edgeDx) / 115)
@@ -353,7 +396,7 @@ export default class Notebook extends React.Component<NotebookProps, State> {
 
   swingTo(j: number, a: { x: number; y: number }, dir: number) {
     const s = this.state
-    const B = PAGES[s.page].panels[j]
+    const B = this.geom()[s.page].panels[j]
     const barDx = (dir === 1 ? B.x + 34 : B.x + B.w - 34) - 52
     const barDy = B.y - 12
     this.setState({ busy: true, windup: true, panel: j, face: dir, fidget: null })
@@ -375,7 +418,7 @@ export default class Notebook extends React.Component<NotebookProps, State> {
 
   wallrunTo(j: number, a: { x: number; y: number }, _dir: number) {
     const s = this.state
-    const B = PAGES[s.page].panels[j]
+    const B = this.geom()[s.page].panels[j]
     const fx = s.dx + 52
     const sideX = fx < B.x + B.w / 2 ? B.x : B.x + B.w
     const wdir = fx <= sideX ? 1 : -1
@@ -400,7 +443,7 @@ export default class Notebook extends React.Component<NotebookProps, State> {
 
   slideTo(j: number, a: { x: number; y: number }, dir: number) {
     const s = this.state
-    const A = PAGES[s.page].panels[s.panel]
+    const A = this.geom()[s.page].panels[s.panel]
     const sideX = dir === 1 ? A.x + A.w : A.x
     const slDx = sideX - 52
     const runD = Math.max(.25, Math.abs(slDx - s.dx) / 290)
@@ -423,7 +466,7 @@ export default class Notebook extends React.Component<NotebookProps, State> {
 
   smashTo(j: number, a: { x: number; y: number }, dir: number) {
     const s = this.state
-    const A = PAGES[s.page].panels[s.panel]
+    const A = this.geom()[s.page].panels[s.panel]
     const edgeFx = dir === 1 ? A.x + A.w : A.x
     const edgeDx = edgeFx - dir * 30 - 52
     const runD = Math.max(.25, Math.abs(edgeDx - s.dx) / 260)
@@ -444,7 +487,7 @@ export default class Notebook extends React.Component<NotebookProps, State> {
 
   comboTo(j: number, a: { x: number; y: number }, dir: number) {
     const s = this.state
-    const A = PAGES[s.page].panels[s.panel]
+    const A = this.geom()[s.page].panels[s.panel]
     const farX = dir === 1 ? A.x : A.x + A.w
     const nearX = dir === 1 ? A.x + A.w : A.x
     const wallDx = farX - 52
@@ -584,9 +627,9 @@ export default class Notebook extends React.Component<NotebookProps, State> {
     const s = this.state
     if (s.busy || s.dragging) return
     if (s.page === 0) { this.flipTo(1); return }
-    const n = PAGES[s.page].panels.length
+    const n = this.geom()[s.page].panels.length
     if (s.panel < n - 1) this.travel(s.panel + 1)
-    else if (s.page < 5) this.flipTo(s.page + 1)
+    else if (s.page < this.geom().length - 1) this.flipTo(s.page + 1)
     else if (s.auto) this.toggleAuto()
   }
 
@@ -620,7 +663,7 @@ export default class Notebook extends React.Component<NotebookProps, State> {
     this.to(1850, () => this.setState({ hopping: false, hopDur: .92, pose: 'dive', diving: true }))
     this.to(2430, () => {
       const p = fromPage - 1
-      const j = PAGES[p].panels.length - 1
+      const j = this.geom()[p].panels.length - 1
       const a = this.anch(p, j)
       this.sfx('flip')
       this.setState({
@@ -649,7 +692,7 @@ export default class Notebook extends React.Component<NotebookProps, State> {
     this.to(140, () => this.setState({ pose: 'hidden', dop: 0 }))
     this.to(650, () => {
       const p = fromPage - 1
-      const j = PAGES[p].panels.length - 1
+      const j = this.geom()[p].panels.length - 1
       this.sfx('flip')
       this.setState({ smokeOn: false, busyFlip: true, flipRange: [p, p], page: p, panel: j })
     })
@@ -714,7 +757,7 @@ export default class Notebook extends React.Component<NotebookProps, State> {
     const s = this.state
     const cx = s.dx + 52, cy = s.dy + 113
     let best = 0, bd = 1e9
-    PAGES[s.page].panels.forEach((pn, i) => { const d = Math.hypot(pn.ax - cx, pn.ay - cy); if (d < bd) { bd = d; best = i } })
+    this.geom()[s.page].panels.forEach((pn, i) => { const d = Math.hypot(pn.ax - cx, pn.ay - cy); if (d < bd) { bd = d; best = i } })
     const a = this.anch(s.page, best)
     this.sfx('hop')
     this.setState({
@@ -765,7 +808,7 @@ export default class Notebook extends React.Component<NotebookProps, State> {
     const vw = s.vw, vh = s.vh
     const fit = Math.max(0.15, Math.min(vw / 1060, (vh - 60) / 780, 1.1))
     let cx = 460, cy = 330, sc = fit
-    const pn = PAGES[s.page].panels[s.panel]
+    const pn = this.geom()[s.page].panels[s.panel]
     if (s.page > 0 && !s.busyFlip && pn) {
       sc = Math.min(vw * 0.62 / (pn.w + 60), (vh - 150) * 0.82 / (pn.h + 100), 1.55)
       sc = Math.max(sc, fit * 0.9, 0.15)
@@ -825,7 +868,7 @@ export default class Notebook extends React.Component<NotebookProps, State> {
       : s.poking ? POKEARC[s.pokeAnim]
       : s.fidget ? FIDGETARC[s.fidget] : ''
 
-    const tabs: HudTab[] = PAGES.slice(1).map((p, i) => ({
+    const tabs: HudTab[] = this.geom().slice(1).map((p, i) => ({
       name: p.name,
       active: s.page === i + 1,
       go: () => { this.ensureAC(); this.flipTo(i + 1) }
@@ -835,7 +878,7 @@ export default class Notebook extends React.Component<NotebookProps, State> {
       cameraTf,
       camTrans: 'transform ' + (s.camo && s.camo.fast ? '.45s' : '.9s') + ' cubic-bezier(.55,.05,.3,1)',
       shakeStyle: styleFromCss(s.shakeOn ? 'animation:camshake .34s linear' : ''),
-      pg0Style: pg(0), pg1Style: pg(1), pg2Style: pg(2), pg3Style: pg(3), pg4Style: pg(4), pg5Style: pg(5),
+      pgStyles: this.geom().map((_, i) => pg(i)) as CSSProperties[],
       focusStyle: styleFromCss(focusStyle),
       dashStyle: styleFromCss('left:' + s.dx + 'px; top:' + s.dy + 'px; opacity:' + s.dop + '; transition:' + s.dtrans),
       dashArcStyle: styleFromCss(arc),
@@ -856,8 +899,7 @@ export default class Notebook extends React.Component<NotebookProps, State> {
       bombFlyStyle: styleFromCss('left:' + (s.bombX - 15) + 'px; top:' + (s.bombY - 18) + 'px'),
       holeStyle: styleFromCss('left:' + (s.holeX - 70) + 'px; top:' + (s.holeY - 26) + 'px'),
       boomStyle: styleFromCss('left:' + (s.holeX - 90) + 'px; top:' + (s.holeY - 150) + 'px'),
-      skillsOn: s.sprayed,
-      snark: SNARK[s.page], snarkOn: (this.props.pipSnark ?? true),
+      snark: s.page === 0 ? this.doc.cover.snark : this.doc.pages[s.page - 1].snark, snarkOn: (this.props.pipSnark ?? true),
       tabs,
       onNext: () => { this.ensureAC(); this.next() },
       onPrev: () => { this.ensureAC(); this.prev() },
@@ -866,7 +908,7 @@ export default class Notebook extends React.Component<NotebookProps, State> {
       onSound: () => this.toggleSound(),
       autoLabel: 'auto: ' + (s.auto ? 'ON' : 'off'),
       soundLabel: 'sound: ' + (s.sound ? 'ON' : 'off'),
-      pageLabel: s.page === 0 ? 'cover' : 'pg ' + s.page + '/5'
+      pageLabel: s.page === 0 ? 'cover' : 'pg ' + s.page + '/' + (this.geom().length - 1)
     }
   }
 
@@ -883,23 +925,10 @@ export default class Notebook extends React.Component<NotebookProps, State> {
             <div style={{ position: 'absolute', left: -14, top: 4, bottom: 4, width: 34, background: 'repeating-linear-gradient(#1c1b19 0px, #1c1b19 14px, #26241f 14px, #26241f 18px)', borderRadius: 10, boxShadow: '4px 6px 14px rgba(0,0,0,.3)' }} />
 
             <div style={{ position: 'absolute', inset: 0, perspective: '2400px' }}>
-              {DOC_RENDER ? (
-                <>
-                  {DEFAULT_DOC.pages.map((pd, i) => (
-                    <PageRenderer key={i} page={pd} style={[v.pg1Style, v.pg2Style, v.pg3Style, v.pg4Style, v.pg5Style][i]} flags={{ skillsRevealed: this.state.sprayed }} />
-                  ))}
-                  <CoverRenderer cover={DEFAULT_DOC.cover} style={v.pg0Style} onOpen={v.onOpen} />
-                </>
-              ) : (
-                <>
-                  <Intro style={v.pg1Style} />
-                  <About style={v.pg2Style} />
-                  <Work style={v.pg3Style} />
-                  <Skills style={v.pg4Style} skillsOn={v.skillsOn} />
-                  <Contact style={v.pg5Style} />
-                  <Cover style={v.pg0Style} onOpen={v.onOpen} />
-                </>
-              )}
+              {this.doc.pages.map((pd, i) => (
+                <PageRenderer key={i} page={pd} style={v.pgStyles[i + 1]} flags={this.state.flags} />
+              ))}
+              <CoverRenderer cover={this.doc.cover} style={v.pgStyles[0]} onOpen={v.onOpen} />
             </div>
 
             <FocusRing style={v.focusStyle} />

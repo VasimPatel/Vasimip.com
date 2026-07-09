@@ -41,10 +41,6 @@ export interface PanelGeom {
   /** Dash's anchor point when standing at this panel. */
   ax: number
   ay: number
-  /** A pose Dash strikes on arrival at this panel, if any. */
-  pose?: Extract<Pose, 'fight' | 'think' | 'spray'>
-  /** Facing direction to force on arrival (+1 right, -1 left). */
-  face?: 1 | -1
 }
 
 export interface PageGeom {
@@ -112,33 +108,3 @@ export interface PageProps {
   style: CSSProperties
 }
 
-export interface CoverProps extends PageProps {
-  onOpen: () => void
-}
-
-/** The Skills page's swipe reveal only plays once Dash has sprayed the panel. */
-export interface SkillsProps extends PageProps {
-  skillsOn: boolean
-}
-
-// ── Editable, user-facing copy. Everything personal lives here (see content.ts).
-// Purely-decorative UI text (how-to-read hints, tab names, control labels) stays
-// inline in the artwork — it is not part of the portfolio's content.
-export interface Content {
-  cover: { name: string; subject: string }
-  intro: {
-    titlePre: string
-    name: string
-    subtitle: string
-    issue: string
-    starringDash: string
-    starringPip: string
-  }
-  about: { bio: string; city: string; funFacts: string[] }
-  work: {
-    projects: { title: string; blurb: string }[]
-    vaultNote: string
-  }
-  skills: { skills: string[]; toolbelt: string[] }
-  contact: { email: string; responseLine: string; theEndNote: string }
-}
