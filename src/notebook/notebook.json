@@ -225,7 +225,9 @@
           "ax": 670,
           "ay": 120,
           "travel": {
-            "actions": ["tightrope"]
+            "actions": [
+              "tightrope"
+            ]
           },
           "rotate": 0.6,
           "sketch": "b",
@@ -448,12 +450,44 @@
         "minHoriz": 200
       },
       "steps": [
-        { "do": "sfx", "kind": "scrib" },
-        { "do": "move", "to": { "at": "panelEdge", "panel": "to", "side": "top" }, "pose": "walk", "speed": 300 },
-        { "do": "cam", "on": "target", "mult": 1.15, "fast": false },
-        { "do": "say", "text": "don't look down.", "holdMs": 1400 },
-        { "do": "move", "to": { "at": "anchor" }, "pose": "rope", "ease": "linear", "speed": 200, "sfx": "whoosh" },
-        { "do": "camClear" }
+        {
+          "do": "sfx",
+          "kind": "scrib"
+        },
+        {
+          "do": "move",
+          "to": {
+            "at": "panelEdge",
+            "panel": "to",
+            "side": "top"
+          },
+          "pose": "walk",
+          "speed": 300
+        },
+        {
+          "do": "cam",
+          "on": "target",
+          "mult": 1.15,
+          "fast": false
+        },
+        {
+          "do": "say",
+          "text": "don't look down.",
+          "holdMs": 1400
+        },
+        {
+          "do": "move",
+          "to": {
+            "at": "anchor"
+          },
+          "pose": "rope",
+          "ease": "linear",
+          "speed": 200,
+          "sfx": "whoosh"
+        },
+        {
+          "do": "camClear"
+        }
       ]
     }
   }
