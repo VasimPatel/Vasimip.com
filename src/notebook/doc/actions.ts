@@ -20,7 +20,7 @@ import type { Pose } from '../types'
 import type { PanelGeom } from '../types'
 import type { SfxKind } from '../audio'
 import {
-  type ActionDoc, type MoveTarget, type EaseName, type TravelConfig,
+  type ActionDoc, type ActionWhen, type MoveTarget, type EaseName, type TravelConfig,
   POSES, SFX_KINDS, EASE_NAMES, FX_KINDS,
 } from './docTypes'
 
@@ -265,6 +265,25 @@ export function compileAction(def: ActionDoc, ctx: ActionCtx): CompileResult {
   emit(finishT, { finish: true })
 
   return { total: finishT, cues }
+}
+
+/** Pure per-transition gate for a custom action's `when` clause (plan Part 3).
+ *  Undefined `when` always passes; every present constraint must hold. Kept here
+ *  (not in Notebook.tsx) so travel() and the admin can share it and it stays
+ *  unit-testable. Distances are pre-computed against the destination anchor. */
+export function whenPasses(
+  when: ActionWhen | undefined,
+  ctx: { dist: number; horiz: number; vert: number; dyv: number; fromPanel: number },
+): boolean {
+  if (!when) return true
+  if (when.minDist != null && ctx.dist < when.minDist) return false
+  if (when.maxDist != null && ctx.dist > when.maxDist) return false
+  if (when.minHoriz != null && ctx.horiz < when.minHoriz) return false
+  if (when.minVert != null && ctx.vert < when.minVert) return false
+  if (when.vert === 'up' && !(ctx.dyv < 0)) return false
+  if (when.vert === 'down' && !(ctx.dyv > 0)) return false
+  if (when.fromPanel && !when.fromPanel.includes(ctx.fromPanel)) return false
+  return true
 }
 
 /** Field-wise travel merge (plan Part 3): later wins wholesale per present field

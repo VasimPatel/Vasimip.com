@@ -13,7 +13,9 @@ import { AudioEngine, type SfxKind } from './audio'
 import CoverRenderer from './CoverRenderer'
 import PageRenderer from './PageRenderer'
 import { DEFAULT_DOC } from './doc/defaultDoc'
-import type { NotebookDoc } from './doc/docTypes'
+import type { NotebookDoc, TravelConfig } from './doc/docTypes'
+import { compileAction, resolveTravelConfig, whenPasses } from './doc/actions'
+import type { Cue, ActionCtx } from './doc/actions'
 import Dash from './Dash'
 import Hud from './Hud'
 import Smoke from './effects/Smoke'
@@ -200,6 +202,11 @@ export default class Notebook extends React.Component<NotebookProps, State> {
     // dev hook for headless verification; clamp to a valid page so it can't crash
     ;(window as unknown as { __notebookGoTo?: (p: number) => void }).__notebookGoTo = (p: number) =>
       this.flipTo(Math.max(0, Math.min(this.geom().length - 1, Math.round(p))))
+    // dev hooks for the admin ▶ Test + headless action checks
+    ;(window as unknown as { __notebookRunAction?: (name: string) => void }).__notebookRunAction = (name: string) => {
+      if (!this.state.busy && this.state.page > 0) this.runCustomAction(name, this.state.panel, this.state.face as 1 | -1)
+    }
+    ;(window as unknown as { __notebookBusy?: () => boolean }).__notebookBusy = () => this.state.busy
   }
 
   componentWillUnmount() {
@@ -213,6 +220,8 @@ export default class Notebook extends React.Component<NotebookProps, State> {
     if (this._ro) this._ro.disconnect()
     if (this._ai) clearInterval(this._ai)
     delete (window as unknown as { __notebookGoTo?: (p: number) => void }).__notebookGoTo
+    delete (window as unknown as { __notebookRunAction?: (name: string) => void }).__notebookRunAction
+    delete (window as unknown as { __notebookBusy?: () => boolean }).__notebookBusy
   }
 
   /** Live doc-swap (admin preview): kill any in-flight choreography, invalidate the
@@ -314,8 +323,15 @@ export default class Notebook extends React.Component<NotebookProps, State> {
     const dxv = a.x - s.dx, dyv = a.y - s.dy
     const horiz = Math.abs(dxv), vert = Math.abs(dyv)
     const dist = Math.hypot(dxv, dyv)
-    const dir = dxv >= 0 ? 1 : -1
-    if (dist > 380 && horiz > 240 && vert > 60 && Math.random() < .18 && this._lastMode !== 'combo') {
+    const dir: 1 | -1 = dxv >= 0 ? 1 : -1
+    // Resolve the per-transition travel superset (destination panel wins wholesale).
+    // travel() only ever runs on real pages, so page-1 is always a valid page index.
+    const pageDoc = s.page > 0 ? this.doc.pages[s.page - 1] : undefined
+    const cfg: TravelConfig = pageDoc
+      ? resolveTravelConfig(this.doc, pageDoc, pageDoc.panels[j])
+      : {}
+    const comboExcluded = !!cfg.builtins && !cfg.builtins.includes('combo')
+    if (dist > 380 && horiz > 240 && vert > 60 && Math.random() < .18 && this._lastMode !== 'combo' && !comboExcluded) {
       this._lastMode = 'combo'
       this.comboTo(j, a, dir)
       return
@@ -325,10 +341,28 @@ export default class Notebook extends React.Component<NotebookProps, State> {
     else if (horiz > 430) pool = ['swing', 'rope', 'rope', 'vault', 'poof']
     else if (horiz > 250) pool = ['vault', 'vault', 'rope', 'swing', 'walk', 'smash']
     else pool = ['walk', 'vault', 'hop', 'roll', 'smash', 'walk']
+    // (a) Filter the built-in pool by the config allow-list, but never let an
+    // author error empty the pool — restore the unfiltered pool if it does.
+    if (cfg.builtins) {
+      const allowed = cfg.builtins as string[]
+      const filtered = pool.filter(m => allowed.includes(m))
+      if (filtered.length > 0) pool = filtered
+    }
+    // (b) Splice in gated-in custom actions, weighted.
+    if (cfg.actions) {
+      const weight = Math.max(0, Math.floor(cfg.actionWeight ?? 1))
+      for (const name of cfg.actions) {
+        const def = this.doc.actions?.[name]
+        if (!def || !whenPasses(def.when, { dist, horiz, vert, dyv, fromPanel: s.panel })) continue
+        for (let k = 0; k < weight; k++) pool.push('act:' + name)
+      }
+    }
     let m = pool[Math.floor(Math.random() * pool.length)]
     if (m === this._lastMode) m = pool[(pool.indexOf(m) + 1) % pool.length]
     this._lastMode = m
-    if (m === 'hop') this.hopTo(j)
+    // (c) Dispatch: custom actions go through the interpreter; built-ins unchanged.
+    if (m.startsWith('act:')) this.runCustomAction(m.slice(4), j, dir)
+    else if (m === 'hop') this.hopTo(j)
     else if (m === 'walk') this.walkTo(j, a, dir, dist)
     else if (m === 'roll') this.rollTo(j, a, dir, dist)
     else if (m === 'poof') this.poofTo(j, a, dir)
@@ -338,6 +372,49 @@ export default class Notebook extends React.Component<NotebookProps, State> {
     else if (m === 'wallrun') this.wallrunTo(j, a, dir)
     else if (m === 'slide') this.slideTo(j, a, dir)
     else this.smashTo(j, a, dir)
+  }
+
+  /** Run an authored custom action toward panel `j`. Compile-or-fallback (never
+   *  wedge): on any compile error / missing def it degrades to `hopTo(j)`. All cues
+   *  are pre-scheduled (not chained) and guarded by a `_runId` token so a doc swap /
+   *  interrupt invalidates them; a watchdog force-snaps Dash home if a run overruns. */
+  runCustomAction(name: string, j: number, dir: 1 | -1) {
+    const s = this.state
+    const A = this.anch(s.page, j)
+    const ctx: ActionCtx = {
+      from: { x: s.dx, y: s.dy },
+      fromPanel: this.geom()[s.page].panels[s.panel],
+      toPanel: this.geom()[s.page].panels[j],
+      anchor: { x: A.x, y: A.y },
+      dir,
+    }
+    const def = this.doc.actions?.[name]
+    const res = def ? compileAction(def, ctx) : { error: 'unknown action ' + name }
+    if ('error' in res) {
+      if (import.meta.env.DEV) console.warn('[notebook] action "' + name + '" fell back to hop:', res.error)
+      this.hopTo(j)
+      return
+    }
+    this.setState({ busy: true, panel: j, face: dir, fidget: null })
+    const runId = ++this._runId
+    for (const { t, cue } of res.cues) {
+      this.to(t, () => { if (this._runId !== runId) return; this.applyCue(cue, j) })
+    }
+    // Watchdog: if the run somehow never releases busy, snap Dash to the anchor.
+    this.to(res.total + 1500, () => {
+      if (this._runId !== runId || !this.state.busy) return
+      const a = this.anch(this.state.page, j)
+      this.setState({ busy: false, camo: null, hopping: false, vaulting: false, dx: a.x, dy: a.y, dtrans: 'opacity .25s', pose: 'idle' })
+      this.panelPose()
+    })
+  }
+
+  /** Apply a single compiled cue to component state (the executor half of the
+   *  pure compiler). `finish` runs the universal panelPose()+busy:false tail. */
+  applyCue(cue: Cue, _j: number) {
+    if ('sfx' in cue) this.sfx(cue.sfx)
+    else if ('patch' in cue) this.setState(cue.patch as State)
+    else if ('finish' in cue) { this.panelPose(); this.setState({ busy: false }) }
   }
 
   shakeCam() {
