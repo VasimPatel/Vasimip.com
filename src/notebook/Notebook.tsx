@@ -16,6 +16,9 @@ import About from './pages/About'
 import Work from './pages/Work'
 import Skills from './pages/Skills'
 import Contact from './pages/Contact'
+import CoverRenderer from './CoverRenderer'
+import PageRenderer from './PageRenderer'
+import { DEFAULT_DOC } from './doc/defaultDoc'
 import Dash from './Dash'
 import Hud from './Hud'
 import Smoke from './effects/Smoke'
@@ -26,6 +29,8 @@ import Hole from './effects/Hole'
 import FocusRing from './effects/FocusRing'
 import ReactBubble from './effects/ReactBubble'
 import PipSnark from './effects/PipSnark'
+
+const DOC_RENDER = typeof location !== 'undefined' && new URLSearchParams(location.search).has('docRender')
 
 // ── Camera override emitted by the travel choreography ───────────────────────
 interface Camo { cx: number; cy: number; mult: number; fast: boolean }
@@ -878,12 +883,23 @@ export default class Notebook extends React.Component<NotebookProps, State> {
             <div style={{ position: 'absolute', left: -14, top: 4, bottom: 4, width: 34, background: 'repeating-linear-gradient(#1c1b19 0px, #1c1b19 14px, #26241f 14px, #26241f 18px)', borderRadius: 10, boxShadow: '4px 6px 14px rgba(0,0,0,.3)' }} />
 
             <div style={{ position: 'absolute', inset: 0, perspective: '2400px' }}>
-              <Intro style={v.pg1Style} />
-              <About style={v.pg2Style} />
-              <Work style={v.pg3Style} />
-              <Skills style={v.pg4Style} skillsOn={v.skillsOn} />
-              <Contact style={v.pg5Style} />
-              <Cover style={v.pg0Style} onOpen={v.onOpen} />
+              {DOC_RENDER ? (
+                <>
+                  {DEFAULT_DOC.pages.map((pd, i) => (
+                    <PageRenderer key={i} page={pd} style={[v.pg1Style, v.pg2Style, v.pg3Style, v.pg4Style, v.pg5Style][i]} flags={{ skillsRevealed: this.state.sprayed }} />
+                  ))}
+                  <CoverRenderer cover={DEFAULT_DOC.cover} style={v.pg0Style} onOpen={v.onOpen} />
+                </>
+              ) : (
+                <>
+                  <Intro style={v.pg1Style} />
+                  <About style={v.pg2Style} />
+                  <Work style={v.pg3Style} />
+                  <Skills style={v.pg4Style} skillsOn={v.skillsOn} />
+                  <Contact style={v.pg5Style} />
+                  <Cover style={v.pg0Style} onOpen={v.onOpen} />
+                </>
+              )}
             </div>
 
             <FocusRing style={v.focusStyle} />
