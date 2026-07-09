@@ -1,0 +1,237 @@
+// ─────────────────────────────────────────────────────────────────────────────
+// The authoring document schema for the Dash notebook. A `NotebookDoc` fully
+// describes the cover + pages + panels + content + Dash's per-panel arrival
+// behaviour, plus (future) custom action choreographies and travel config.
+// This file is data-only (types + the value arrays the validator checks
+// against) — no runtime logic beyond a couple of `satisfies` sanity checks.
+// ─────────────────────────────────────────────────────────────────────────────
+import type { Pose } from '../types'
+import type { SfxKind } from '../audio'
+
+// ── JSON value (custom-component props) ───────────────────────────────────
+export type JsonValue = string | number | boolean | null | JsonValue[] | { [key: string]: JsonValue }
+
+// ── Shared value catalogues (also used by the validator) ──────────────────
+export const ARRIVAL_POSES = ['fight', 'think', 'spray', 'cheer'] as const
+export type ArrivalPose = (typeof ARRIVAL_POSES)[number]
+
+export const ELEMENT_TYPES = ['heading', 'text', 'caption', 'note', 'placeholder', 'checklist', 'custom'] as const
+export type ElementType = (typeof ELEMENT_TYPES)[number]
+
+export const BUILTIN_MODES = ['walk', 'hop', 'roll', 'poof', 'vault', 'rope', 'swing', 'wallrun', 'slide', 'smash', 'combo'] as const
+export type BuiltinMode = (typeof BUILTIN_MODES)[number]
+
+export const STEP_KINDS = ['pose', 'move', 'say', 'sfx', 'wait', 'fx', 'cam', 'camClear'] as const
+export type StepKind = (typeof STEP_KINDS)[number]
+
+export const FX_KINDS = ['shake', 'jitPage', 'pageShove', 'smoke', 'crack'] as const
+export type FxKind = (typeof FX_KINDS)[number]
+
+export const EASE_NAMES = ['linear', 'launch', 'hopfall', 'glide', 'snap'] as const
+export type EaseName = (typeof EASE_NAMES)[number]
+
+export const SFX_KINDS = ['flip', 'hop', 'boom', 'whoosh', 'scrape', 'crack', 'knock', 'scrib'] as const satisfies readonly SfxKind[]
+// Exhaustiveness check: fails to typecheck if SFX_KINDS ever drifts from audio.ts's SfxKind union.
+type _SfxKindsExhaustive = SfxKind extends (typeof SFX_KINDS)[number] ? true : false
+const _sfxKindsExhaustive: _SfxKindsExhaustive = true
+void _sfxKindsExhaustive
+
+/** Every named Dash pose, mirrored from types.ts's `Pose` union so the two can't drift. */
+export const POSES = [
+  'hidden', 'idle', 'walk', 'tuck', 'land', 'fight', 'spray', 'dangle', 'throw', 'wave',
+  'cheer', 'trip', 'think', 'sneeze', 'vault', 'wallrun', 'rope', 'swing', 'slide', 'surf',
+  'shove', 'punch', 'peek', 'hang', 'knock', 'dive',
+] as const satisfies readonly Pose[]
+// Exhaustiveness check: fails to typecheck if POSES ever drifts from types.ts's Pose union.
+type _PosesExhaustive = Pose extends (typeof POSES)[number] ? true : false
+const _posesExhaustive: _PosesExhaustive = true
+void _posesExhaustive
+
+/** The three recurring "wobbly" border-radius sketch variants used by hand-drawn panels. */
+export const SKETCH_RADII: Record<'a' | 'b' | 'c', string> = {
+  a: '255px 18px 225px 18px/18px 225px 18px 255px',
+  b: '18px 225px 18px 255px/255px 18px 225px 18px',
+  c: '225px 18px 255px 18px/18px 255px 18px 225px',
+}
+export type SketchVariant = keyof typeof SKETCH_RADII
+
+// ── Elements ────────────────────────────────────────────────────────────────
+/** Absolute placement of an element within its panel (overrides normal flow). */
+export interface PlaceDoc {
+  left?: number
+  right?: number
+  top?: number
+  bottom?: number
+  width?: number
+}
+
+interface ElementShared {
+  /** Absolute position within the panel; omit to let the element sit in normal flow. */
+  place?: PlaceDoc
+  /** flex:1 — let the element grow to fill remaining panel space (flow layout only). */
+  grow?: boolean
+  /** Only render this element once `state.flags[showIfFlag]` is true. */
+  showIfFlag?: string
+}
+
+export interface HeadingElement extends ElementShared {
+  type: 'heading'
+  text: string
+  /** Plain (non-highlighted) text rendered before `text`, e.g. "THE ADVENTURES OF". */
+  prefix?: string
+  size: number
+  highlight?: 'yellow' | 'pink'
+  /** Small Caveat aside after the heading, e.g. "(verified-ish)". */
+  suffix?: string
+  /** Degrees, applied to the heading text itself (independent of panel rotate). */
+  rotate?: number
+}
+
+export interface TextElement extends ElementShared {
+  type: 'text'
+  /** '\n' renders as a <br>. */
+  text: string
+  size: number
+  tone?: 'ink' | 'muted' | 'faint'
+  lineHeight?: number
+}
+
+export interface CaptionElement extends ElementShared {
+  type: 'caption'
+  text: string
+  size?: number
+}
+
+export interface NoteElement extends ElementShared {
+  type: 'note'
+  text: string
+  size?: number
+  lineHeight?: number
+}
+
+export interface PlaceholderElement extends ElementShared {
+  type: 'placeholder'
+  text: string
+}
+
+export interface ChecklistElement extends ElementShared {
+  type: 'checklist'
+  items: string[]
+  size?: number
+  lineHeight?: number
+  gap?: number
+}
+
+export interface CustomElement extends ElementShared {
+  type: 'custom'
+  /** Registry component name, e.g. 'fightScene'. Unknown names render a labeled dashed box. */
+  component: string
+  props?: Record<string, JsonValue>
+}
+
+export type ElementDoc =
+  | HeadingElement
+  | TextElement
+  | CaptionElement
+  | NoteElement
+  | PlaceholderElement
+  | ChecklistElement
+  | CustomElement
+
+// ── Arrival (Dash's behaviour on landing at a panel) ───────────────────────
+export interface ArrivalDoc {
+  pose?: ArrivalPose
+  face?: 1 | -1
+  /** Only strike the pose once per session (guards a one-shot reveal/flag). */
+  once?: boolean
+  /** Auto-revert to idle after this many ms. */
+  revertMs?: number
+  say?: string
+  sfx?: SfxKind
+  /** Set `state.flags[setFlag] = true` on arrival (drives `showIfFlag` elements). */
+  setFlag?: string
+  flourish?: boolean
+}
+
+// ── Custom-action interpreter (Part 2 / 3 of the plan) ─────────────────────
+export interface ActionWhen {
+  minDist?: number
+  maxDist?: number
+  minHoriz?: number
+  minVert?: number
+  vert?: 'up' | 'down'
+  fromPanel?: number[]
+}
+
+export type MoveTarget =
+  | { at: 'anchor'; dx?: number; dy?: number }
+  | { at: 'offset'; dx: number; dy: number }
+  | { at: 'panelEdge'; panel: 'from' | 'to'; side: 'near' | 'far' | 'left' | 'right' | 'top' | 'bottom'; inset?: number; dy?: number }
+
+export type Step =
+  | { do: 'pose'; pose: Pose; face?: 1 | -1 | 'dir' | '-dir'; ms?: number }
+  | { do: 'move'; to: MoveTarget; ms?: number; speed?: number; ease?: EaseName; easeY?: EaseName; pose?: Pose; arc?: 'hop' | 'vault'; sfx?: SfxKind }
+  | { do: 'say'; text: string; holdMs?: number }
+  | { do: 'sfx'; kind: SfxKind }
+  | { do: 'wait'; ms: number }
+  | { do: 'fx'; kind: FxKind; dir?: 1 | -1 }
+  | { do: 'cam'; on: 'dash' | 'target' | 'midpoint' | { cx: number; cy: number }; mult?: number; fast?: boolean }
+  | { do: 'camClear' }
+
+export interface ActionDoc {
+  when?: ActionWhen
+  /** ≤32 steps (validator-enforced). */
+  steps: Step[]
+}
+
+export interface TravelConfig {
+  builtins?: BuiltinMode[]
+  actions?: string[]
+  actionWeight?: number
+}
+
+// ── Panels / pages / cover / doc ────────────────────────────────────────────
+export interface PanelDoc {
+  x: number
+  y: number
+  w: number
+  h: number
+  /** Dash's anchor point when standing at this panel. */
+  ax: number
+  ay: number
+  arrival?: ArrivalDoc
+  /** Applies as the DESTINATION panel's travel config when Dash is heading here. */
+  travel?: TravelConfig
+  /** Degrees. */
+  rotate?: number
+  sketch?: SketchVariant
+  /** CSS padding shorthand, e.g. "16px 22px". */
+  padding?: string
+  /** 'flow' = flex column (see `gap`); omit for plain block stacking. */
+  layout?: 'flow' | 'none'
+  gap?: number
+  elements: ElementDoc[]
+}
+
+export interface PageDoc {
+  name: string
+  snark: string
+  travel?: TravelConfig
+  /** ≥1 panel (validator-enforced). */
+  panels: PanelDoc[]
+}
+
+export interface CoverDoc {
+  name: string
+  subject: string
+  snark: string
+}
+
+export interface NotebookDoc {
+  version: 1
+  cover: CoverDoc
+  /** 1..12 pages (validator-enforced). */
+  pages: PageDoc[]
+  actions?: Record<string, ActionDoc>
+  travel?: TravelConfig
+}

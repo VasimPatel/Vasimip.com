@@ -1,0 +1,442 @@
+{
+  "version": 1,
+  "cover": {
+    "name": "Vasim Patel (portfolio dept.)",
+    "subject": "the adventures of vasim patel",
+    "snark": "click it. I dare you."
+  },
+  "pages": [
+    {
+      "name": "INTRO",
+      "snark": "oh no. he made a website.",
+      "panels": [
+        {
+          "x": 60,
+          "y": 90,
+          "w": 480,
+          "h": 300,
+          "ax": 300,
+          "ay": 90,
+          "rotate": -0.5,
+          "sketch": "a",
+          "padding": "34px 30px",
+          "layout": "flow",
+          "gap": 16,
+          "elements": [
+            {
+              "type": "heading",
+              "prefix": "THE ADVENTURES OF",
+              "text": "VASIM PATEL",
+              "size": 46,
+              "highlight": "yellow",
+              "rotate": -1
+            },
+            {
+              "type": "text",
+              "text": "a portfolio told in ink, marker & questionable stunts",
+              "size": 24,
+              "tone": "muted"
+            },
+            {
+              "type": "text",
+              "text": "issue #01 · self-published · priceless",
+              "size": 16,
+              "tone": "faint"
+            }
+          ]
+        },
+        {
+          "x": 580,
+          "y": 120,
+          "w": 280,
+          "h": 240,
+          "ax": 720,
+          "ay": 120,
+          "rotate": 0.6,
+          "sketch": "b",
+          "padding": "18px 22px",
+          "elements": [
+            {
+              "type": "heading",
+              "text": "STARRING",
+              "size": 20,
+              "highlight": "pink"
+            },
+            {
+              "type": "custom",
+              "component": "pipFigure",
+              "props": {
+                "dashLine": "DASH — does the stunts.",
+                "pipLine": "PIP — does the judging."
+              }
+            }
+          ]
+        },
+        {
+          "x": 200,
+          "y": 430,
+          "w": 520,
+          "h": 170,
+          "ax": 460,
+          "ay": 430,
+          "rotate": 0.3,
+          "sketch": "c",
+          "padding": "16px 24px",
+          "elements": [
+            {
+              "type": "heading",
+              "text": "HOW TO READ THIS THING",
+              "size": 19
+            },
+            {
+              "type": "custom",
+              "component": "howToRead"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "ABOUT",
+      "snark": "the sword is foam. don't tell him.",
+      "panels": [
+        {
+          "x": 70,
+          "y": 80,
+          "w": 500,
+          "h": 340,
+          "ax": 205,
+          "ay": 409,
+          "arrival": {
+            "pose": "fight",
+            "face": -1
+          },
+          "rotate": -0.4,
+          "sketch": "a",
+          "padding": "16px 22px",
+          "elements": [
+            {
+              "type": "heading",
+              "text": "THE HERO'S FILE",
+              "size": 22,
+              "highlight": "yellow"
+            },
+            {
+              "type": "note",
+              "text": "Builds things for the web. Draws in the margins. Jumps off the occasional deadline (professionally). Currently accepting quests — freelance or full-time. Weakness: unclosed browser tabs. Based in the internet.",
+              "size": 16,
+              "lineHeight": 1.45,
+              "place": {
+                "right": 22,
+                "top": 62,
+                "width": 230
+              }
+            },
+            {
+              "type": "custom",
+              "component": "fightScene"
+            },
+            {
+              "type": "caption",
+              "text": "the bio is under constant attack. it survives.",
+              "size": 16,
+              "place": {
+                "right": 24,
+                "bottom": 12,
+                "width": 220
+              }
+            }
+          ]
+        },
+        {
+          "x": 610,
+          "y": 150,
+          "w": 250,
+          "h": 280,
+          "ax": 735,
+          "ay": 150,
+          "rotate": 0.7,
+          "sketch": "b",
+          "padding": "16px 20px",
+          "elements": [
+            {
+              "type": "heading",
+              "text": "FUN FACTS",
+              "size": 18,
+              "suffix": "(verified-ish)"
+            },
+            {
+              "type": "checklist",
+              "items": [
+                "ships fast, refactors faster",
+                "has strong opinions about spacing",
+                "the cape is one CSS gradient, load-bearing",
+                "narrates his own commit messages"
+              ],
+              "size": 16,
+              "lineHeight": 1.3,
+              "gap": 9
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "WORK",
+      "snark": "I \"helped\" with all of these.",
+      "panels": [
+        {
+          "x": 60,
+          "y": 80,
+          "w": 390,
+          "h": 280,
+          "ax": 255,
+          "ay": 80,
+          "rotate": -0.5,
+          "sketch": "a",
+          "padding": "14px 20px",
+          "layout": "flow",
+          "gap": 10,
+          "elements": [
+            {
+              "type": "heading",
+              "text": "PROJECT ONE: THE BIG THING",
+              "size": 19,
+              "highlight": "yellow"
+            },
+            {
+              "type": "placeholder",
+              "text": "project shot goes here",
+              "grow": true
+            },
+            {
+              "type": "text",
+              "text": "shipped. exploded (the good way). role: everything, allegedly.",
+              "size": 16,
+              "tone": "ink"
+            }
+          ]
+        },
+        {
+          "x": 480,
+          "y": 120,
+          "w": 380,
+          "h": 280,
+          "ax": 670,
+          "ay": 120,
+          "rotate": 0.6,
+          "sketch": "b",
+          "padding": "14px 20px",
+          "layout": "flow",
+          "gap": 10,
+          "elements": [
+            {
+              "type": "heading",
+              "text": "PROJECT TWO: THE OTHER THING",
+              "size": 19,
+              "highlight": "pink"
+            },
+            {
+              "type": "placeholder",
+              "text": "project shot goes here",
+              "grow": true
+            },
+            {
+              "type": "text",
+              "text": "award-adjacent. the judges said \"hm!\" — a review.",
+              "size": 16,
+              "tone": "ink"
+            }
+          ]
+        },
+        {
+          "x": 170,
+          "y": 440,
+          "w": 560,
+          "h": 160,
+          "ax": 450,
+          "ay": 440,
+          "arrival": {
+            "pose": "think"
+          },
+          "rotate": 0.2,
+          "sketch": "c",
+          "padding": "16px 24px",
+          "elements": [
+            {
+              "type": "heading",
+              "text": "THE VAULT",
+              "size": 19
+            },
+            {
+              "type": "text",
+              "text": "More work exists. It's in a drawer. Ask about the drawer. (Replace these with your real projects — Dash will guard them.)",
+              "size": 17,
+              "tone": "ink",
+              "lineHeight": 1.4
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "SKILLS",
+      "snark": "the paint is non-toxic. probably.",
+      "panels": [
+        {
+          "x": 70,
+          "y": 90,
+          "w": 520,
+          "h": 330,
+          "ax": 165,
+          "ay": 412,
+          "arrival": {
+            "pose": "spray",
+            "once": true,
+            "revertMs": 2100,
+            "setFlag": "skillsRevealed"
+          },
+          "rotate": -0.3,
+          "sketch": "a",
+          "padding": "16px 22px",
+          "elements": [
+            {
+              "type": "heading",
+              "text": "SKILLS",
+              "size": 22,
+              "suffix": "(certified-ish)"
+            },
+            {
+              "type": "custom",
+              "component": "skillsReveal",
+              "showIfFlag": "skillsRevealed",
+              "props": {
+                "lines": [
+                  "DESIGN & UX",
+                  "FRONT-END",
+                  "PROTOTYPING",
+                  "SNACK LOGISTICS"
+                ]
+              }
+            },
+            {
+              "type": "caption",
+              "text": "fresh paint — wet",
+              "size": 16,
+              "place": {
+                "right": 20,
+                "bottom": 10
+              }
+            }
+          ]
+        },
+        {
+          "x": 630,
+          "y": 140,
+          "w": 230,
+          "h": 260,
+          "ax": 745,
+          "ay": 140,
+          "rotate": 0.6,
+          "sketch": "b",
+          "padding": "16px 20px",
+          "elements": [
+            {
+              "type": "heading",
+              "text": "TOOLBELT",
+              "size": 18
+            },
+            {
+              "type": "custom",
+              "component": "toolbelt",
+              "props": {
+                "labels": [
+                  "the keyboard",
+                  "the back button",
+                  "content applicator"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "CONTACT",
+      "snark": "hire him so he stops rolling indoors.",
+      "panels": [
+        {
+          "x": 90,
+          "y": 90,
+          "w": 480,
+          "h": 300,
+          "ax": 330,
+          "ay": 90,
+          "rotate": -0.4,
+          "sketch": "a",
+          "padding": "30px 34px",
+          "layout": "flow",
+          "gap": 14,
+          "elements": [
+            {
+              "type": "heading",
+              "text": "SAY HI.",
+              "size": 60,
+              "highlight": "pink",
+              "rotate": -1
+            },
+            {
+              "type": "text",
+              "text": "vasimip@gmail.com",
+              "size": 22,
+              "tone": "ink"
+            },
+            {
+              "type": "text",
+              "text": "responds within 1–2 business rolls.",
+              "size": 17,
+              "tone": "muted"
+            }
+          ],
+          "arrival": {
+            "pose": "cheer",
+            "once": true,
+            "revertMs": 1750,
+            "say": "made it! ta-da!",
+            "sfx": "hop",
+            "setFlag": "contactCheered"
+          }
+        },
+        {
+          "x": 610,
+          "y": 130,
+          "w": 250,
+          "h": 240,
+          "ax": 735,
+          "ay": 130,
+          "rotate": 0.7,
+          "sketch": "b",
+          "padding": "18px 22px",
+          "elements": [
+            {
+              "type": "heading",
+              "text": "THE END?",
+              "size": 26
+            },
+            {
+              "type": "text",
+              "text": "sequel pending funding.",
+              "size": 16,
+              "tone": "ink",
+              "lineHeight": 1.4
+            },
+            {
+              "type": "custom",
+              "component": "birdFin"
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}
