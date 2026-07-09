@@ -3,41 +3,37 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
-    <link rel="icon" type="image/svg+xml" href="/ember.svg" />
+    <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Ctext y='.9em' font-size='90'%3E%F0%9F%92%A5%3C/text%3E%3C/svg%3E" />
 
-    <title>The Codex</title>
+    <title>Vasim Patel — a portfolio in ink & marker</title>
     <meta
       name="description"
-      content="An illuminated codex, read by torchlight in the dark — a single descent through a drowned, buried world. Take up the torch."
+      content="The adventures of Vasim Patel — a portfolio told as a comic book. Turn the pages; Dash does the stunts."
     />
-    <meta name="theme-color" content="#0B0E14" />
+    <meta name="theme-color" content="#8f7b5e" />
 
     <!-- Open Graph -->
     <meta property="og:type" content="website" />
-    <meta property="og:title" content="The Codex" />
+    <meta property="og:title" content="Vasim Patel — a portfolio in ink & marker" />
     <meta
       property="og:description"
-      content="An illuminated codex, read by torchlight in the dark. Take up the torch and descend."
+      content="A portfolio told as a comic book. Turn the pages; Dash does the stunts."
     />
 
-    <!-- Fonts: Grenze Gotisch (display blackletter), IM Fell English (body),
-         Cardo (body fallback for long reading), EB Garamond (marginalia small-caps). -->
+    <!-- Comic-hand fonts: Patrick Hand (body), Permanent Marker (headings), Caveat (captions). -->
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
     <link
-      href="https://fonts.googleapis.com/css2?family=Grenze+Gotisch:wght@400;500;600;700&family=IM+Fell+English:ital@0;1&family=Cardo:ital,wght@0,400;0,700;1,400&family=EB+Garamond:ital,wght@0,400;0,500;1,400&display=swap"
+      href="https://fonts.googleapis.com/css2?family=Patrick+Hand&family=Permanent+Marker&family=Caveat:wght@600&display=swap"
       rel="stylesheet"
     />
   </head>
   <body>
-    <!-- The app renders all content into the DOM and it remains reachable with
-         the lights up; the torch is enhancement, never the only path to it.
-         (Client-rendered SPA; see the <noscript> fallback below.) -->
     <div id="root"></div>
     <noscript>
-      <div style="max-width: 40rem; margin: 4rem auto; padding: 0 1.5rem; color: #EAD9AE; font-family: Cardo, Georgia, serif; line-height: 1.7;">
-        <h1 style="font-family: 'Grenze Gotisch', serif; color: #C9A227;">The Codex</h1>
-        <p>This codex is illuminated with a torch that needs JavaScript to burn. The words, however, do not. Enable JavaScript to descend with light — or read on; the full text lives here in the dark.</p>
+      <div style="max-width: 40rem; margin: 4rem auto; padding: 0 1.5rem; color: #1a1a1a; font-family: 'Patrick Hand', cursive; line-height: 1.7;">
+        <h1 style="font-family: 'Permanent Marker', cursive;">The Adventures of Vasim Patel</h1>
+        <p>This comic is drawn with JavaScript. Enable it to turn the pages — Dash is waiting.</p>
       </div>
     </noscript>
     <script type="module" src="/src/main.tsx"></script>

@@ -1,11 +1,8 @@
-import { StrictMode } from 'react'
 import { createRoot } from 'react-dom/client'
-import './styles/tokens.css'
-import './styles/global.css'
+import './notebook/styles.css'
 import App from './App'
 
-createRoot(document.getElementById('root')!).render(
-  <StrictMode>
-    <App />
-  </StrictMode>,
-)
+// No <StrictMode>: the notebook controller wires global listeners, timer chains,
+// and a WebAudio context in componentDidMount. StrictMode's dev double-mount would
+// churn those; the original .dc runtime mounts once, so we match it.
+createRoot(document.getElementById('root')!).render(<App />)
