@@ -180,7 +180,9 @@ export default class Notebook extends React.Component<NotebookProps, State> {
     window.addEventListener('mouseup', this._onU)
     this.scheduleFidget()
     this.setState({ sound: this.props.soundOn ?? true })
-    ;(window as unknown as { __notebookGoTo?: (p: number) => void }).__notebookGoTo = (p: number) => this.flipTo(p)
+    // dev hook for headless verification; clamp to a valid page so it can't crash
+    ;(window as unknown as { __notebookGoTo?: (p: number) => void }).__notebookGoTo = (p: number) =>
+      this.flipTo(Math.max(0, Math.min(PAGES.length - 1, Math.round(p))))
   }
 
   componentWillUnmount() {
