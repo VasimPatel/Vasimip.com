@@ -28,7 +28,10 @@ import {
 export const DASH_HALF_W = 52
 export const DASH_H = 113
 
-// Compiler caps (mirrors the plan / validator).
+// Compiler caps (mirrors the plan / validator). MAX_TOTAL_MS bounds AUTHORED
+// content only — it is checked before the compiler-appended epilogue (corrective
+// move + land + finish, ≤ ~1.6s), so real totals can slightly exceed it; the
+// executor's watchdog uses the true post-epilogue total, so no wedge risk.
 const MAX_STEPS = 32
 const MAX_TOTAL_MS = 8000
 // World box the simulated cursor must stay inside (dx/dy space).

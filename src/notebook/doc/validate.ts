@@ -92,7 +92,8 @@ function checkArrival(x: unknown, path: string, issues: Issues): void {
   if (x.pose !== undefined && !oneOf(x.pose, ARRIVAL_POSES)) issues.push(`${path}.pose: unknown arrival pose ${JSON.stringify(x.pose)}`)
   if (x.face !== undefined && x.face !== 1 && x.face !== -1) issues.push(`${path}.face: must be 1 or -1`)
   if (x.once !== undefined && typeof x.once !== 'boolean') issues.push(`${path}.once: must be a boolean`)
-  if (x.revertMs !== undefined && !isFiniteNumber(x.revertMs)) issues.push(`${path}.revertMs: must be a finite number`)
+  if (x.once === true && typeof x.setFlag !== 'string') issues.push(`${path}.once: requires setFlag (one-shot state is tracked via the flag)`)
+  if (x.revertMs !== undefined && (!isFiniteNumber(x.revertMs) || x.revertMs < 0)) issues.push(`${path}.revertMs: must be a non-negative finite number`)
   if (x.say !== undefined && typeof x.say !== 'string') issues.push(`${path}.say: must be a string`)
   if (x.sfx !== undefined && !oneOf(x.sfx, SFX_KINDS)) issues.push(`${path}.sfx: unknown sfx kind ${JSON.stringify(x.sfx)}`)
   if (x.setFlag !== undefined && typeof x.setFlag !== 'string') issues.push(`${path}.setFlag: must be a string`)
@@ -192,12 +193,12 @@ function checkStep(x: unknown, path: string, issues: Issues): void {
     case 'pose':
       if (!oneOf(x.pose, POSES)) issues.push(`${path}.pose: unknown pose ${JSON.stringify(x.pose)}`)
       if (x.face !== undefined && x.face !== 1 && x.face !== -1 && x.face !== 'dir' && x.face !== '-dir') issues.push(`${path}.face: invalid`)
-      if (x.ms !== undefined && !isFiniteNumber(x.ms)) issues.push(`${path}.ms: must be a finite number`)
+      if (x.ms !== undefined && (!isFiniteNumber(x.ms) || x.ms < 0)) issues.push(`${path}.ms: must be a non-negative finite number`)
       break
     case 'move':
       checkMoveTarget(x.to, `${path}.to`, issues)
-      if (x.ms !== undefined && !isFiniteNumber(x.ms)) issues.push(`${path}.ms: must be a finite number`)
-      if (x.speed !== undefined && !isFiniteNumber(x.speed)) issues.push(`${path}.speed: must be a finite number`)
+      if (x.ms !== undefined && (!isFiniteNumber(x.ms) || x.ms < 0)) issues.push(`${path}.ms: must be a non-negative finite number`)
+      if (x.speed !== undefined && (!isFiniteNumber(x.speed) || x.speed <= 0)) issues.push(`${path}.speed: must be a positive finite number`)
       if (x.ease !== undefined && !oneOf(x.ease, EASE_NAMES)) issues.push(`${path}.ease: unknown ease ${JSON.stringify(x.ease)}`)
       if (x.easeY !== undefined && !oneOf(x.easeY, EASE_NAMES)) issues.push(`${path}.easeY: unknown ease ${JSON.stringify(x.easeY)}`)
       if (x.pose !== undefined && !oneOf(x.pose, POSES)) issues.push(`${path}.pose: unknown pose ${JSON.stringify(x.pose)}`)
@@ -206,13 +207,13 @@ function checkStep(x: unknown, path: string, issues: Issues): void {
       break
     case 'say':
       if (typeof x.text !== 'string') issues.push(`${path}.text: required string`)
-      if (x.holdMs !== undefined && !isFiniteNumber(x.holdMs)) issues.push(`${path}.holdMs: must be a finite number`)
+      if (x.holdMs !== undefined && (!isFiniteNumber(x.holdMs) || x.holdMs < 0)) issues.push(`${path}.holdMs: must be a non-negative finite number`)
       break
     case 'sfx':
       if (!oneOf(x.kind, SFX_KINDS)) issues.push(`${path}.kind: unknown sfx kind ${JSON.stringify(x.kind)}`)
       break
     case 'wait':
-      if (!isFiniteNumber(x.ms)) issues.push(`${path}.ms: required finite number`)
+      if (!isFiniteNumber(x.ms) || x.ms < 0) issues.push(`${path}.ms: required non-negative finite number`)
       break
     case 'fx':
       if (!oneOf(x.kind, FX_KINDS)) issues.push(`${path}.kind: unknown fx kind ${JSON.stringify(x.kind)}`)

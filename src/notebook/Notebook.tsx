@@ -235,11 +235,16 @@ export default class Notebook extends React.Component<NotebookProps, State> {
     const g = this.geom() // rebuilt against the new doc reference
     const page = Math.max(0, Math.min(g.length - 1, this.state.page))
     const panel = page === 0 ? 0 : Math.max(0, Math.min(g[page].panels.length - 1, this.state.panel))
+    // NOTE: `flags` is deliberately PRESERVED across doc swaps — in the admin live
+    // preview the doc changes on every edit, and resetting one-shot/showIfFlag state
+    // (skillsRevealed etc.) per keystroke would make gated art flicker and replay.
     const safe: Partial<State> = {
       page, panel,
       busy: false, busyFlip: false, dragging: false, poking: false, camo: null,
       smokeOn: false, bombFlyOn: false, boomOn: false, holeOn: false, crackOn: false,
       shakeOn: false, pageJit: false, pageShove: 0, dtrans: 'none', react: null,
+      windup: false, hopping: false, diving: false, popping: false, vaulting: false,
+      squish: false, fidget: null, hopDur: .92,
     }
     if (page === 0) {
       this.setState({ ...safe, pose: 'hidden', dop: 0 } as State)
@@ -397,12 +402,17 @@ export default class Notebook extends React.Component<NotebookProps, State> {
     }
     this.setState({ busy: true, panel: j, face: dir, fidget: null })
     const runId = ++this._runId
+    let finished = false // set by the finish cue so the watchdog can't misfire on a LATER busy choreography
     for (const { t, cue } of res.cues) {
-      this.to(t, () => { if (this._runId !== runId) return; this.applyCue(cue, j) })
+      this.to(t, () => {
+        if (this._runId !== runId) return
+        if ('finish' in cue) finished = true
+        this.applyCue(cue, j)
+      })
     }
     // Watchdog: if the run somehow never releases busy, snap Dash to the anchor.
     this.to(res.total + 1500, () => {
-      if (this._runId !== runId || !this.state.busy) return
+      if (finished || this._runId !== runId || !this.state.busy) return
       const a = this.anch(this.state.page, j)
       this.setState({ busy: false, camo: null, hopping: false, vaulting: false, dx: a.x, dy: a.y, dtrans: 'opacity .25s', pose: 'idle' })
       this.panelPose()
