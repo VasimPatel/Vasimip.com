@@ -14,6 +14,7 @@ import CoverRenderer from './CoverRenderer'
 import PageRenderer from './PageRenderer'
 import { DEFAULT_DOC } from './doc/defaultDoc'
 import type { NotebookDoc, TravelConfig } from './doc/docTypes'
+import { BUILTIN_MODES } from './doc/docTypes'
 import { compileAction, resolveTravelConfig, whenPasses } from './doc/actions'
 import type { Cue, ActionCtx } from './doc/actions'
 import Dash from './Dash'
@@ -202,11 +203,56 @@ export default class Notebook extends React.Component<NotebookProps, State> {
     // dev hook for headless verification; clamp to a valid page so it can't crash
     ;(window as unknown as { __notebookGoTo?: (p: number) => void }).__notebookGoTo = (p: number) =>
       this.flipTo(Math.max(0, Math.min(this.geom().length - 1, Math.round(p))))
-    // dev hooks for the admin ▶ Test + headless action checks
+    // dev hooks for the admin ▶ Test + headless action checks. Both auto-target
+    // the FARTHEST panel on the current page (max |ax − dashCenterX|) so a Test is
+    // a real traversal, not an in-place degenerate.
     ;(window as unknown as { __notebookRunAction?: (name: string) => void }).__notebookRunAction = (name: string) => {
-      if (!this.state.busy && this.state.page > 0) this.runCustomAction(name, this.state.panel, this.state.face as 1 | -1)
+      if (this.state.busy || this.state.page <= 0) return
+      const t = this._testTarget()
+      if (t) this.runCustomAction(name, t.j, t.dir)
+    }
+    ;(window as unknown as { __notebookRunBuiltin?: (mode: string) => void }).__notebookRunBuiltin = (mode: string) => {
+      if (this.state.busy || this.state.page <= 0) return
+      if (!(BUILTIN_MODES as readonly string[]).includes(mode)) return
+      const t = this._testTarget()
+      if (!t) return
+      const { j, a, dir, dist } = t
+      const m = mode as (typeof BUILTIN_MODES)[number]
+      if (m === 'hop') this.hopTo(j)
+      else if (m === 'walk') this.walkTo(j, a, dir, dist)
+      else if (m === 'roll') this.rollTo(j, a, dir, dist)
+      else if (m === 'poof') this.poofTo(j, a, dir)
+      else if (m === 'vault') this.vaultTo(j, a, dir)
+      else if (m === 'rope') this.ropeTo(j, a, dir)
+      else if (m === 'swing') this.swingTo(j, a, dir)
+      else if (m === 'wallrun') this.wallrunTo(j, a, dir)
+      else if (m === 'slide') this.slideTo(j, a, dir)
+      else if (m === 'smash') this.smashTo(j, a, dir)
+      else this.comboTo(j, a, dir)
     }
     ;(window as unknown as { __notebookBusy?: () => boolean }).__notebookBusy = () => this.state.busy
+  }
+
+  /** Pick the farthest panel from Dash on the current page and pre-compute the
+   *  geometry the built-in / custom methods expect (mirrors travel()'s locals).
+   *  Fallback: the current panel when the page has only one. Used by the dev
+   *  __notebookRun* hooks so the admin ▶ Test fires a genuine traversal. */
+  private _testTarget(): { j: number; a: { x: number; y: number }; dir: 1 | -1; dist: number } | null {
+    const s = this.state
+    const panels = this.geom()[s.page]?.panels
+    if (!panels || panels.length === 0) return null
+    const cx = s.dx + 52
+    let j = s.panel
+    let best = -1
+    for (let i = 0; i < panels.length; i++) {
+      const d = Math.abs(panels[i].ax - cx)
+      if (d > best) { best = d; j = i }
+    }
+    const a = this.anch(s.page, j)
+    const dxv = a.x - s.dx
+    const dir: 1 | -1 = dxv >= 0 ? 1 : -1
+    const dist = Math.hypot(dxv, a.y - s.dy)
+    return { j, a: { x: a.x, y: a.y }, dir, dist }
   }
 
   componentWillUnmount() {
@@ -221,6 +267,7 @@ export default class Notebook extends React.Component<NotebookProps, State> {
     if (this._ai) clearInterval(this._ai)
     delete (window as unknown as { __notebookGoTo?: (p: number) => void }).__notebookGoTo
     delete (window as unknown as { __notebookRunAction?: (name: string) => void }).__notebookRunAction
+    delete (window as unknown as { __notebookRunBuiltin?: (mode: string) => void }).__notebookRunBuiltin
     delete (window as unknown as { __notebookBusy?: () => boolean }).__notebookBusy
   }
 

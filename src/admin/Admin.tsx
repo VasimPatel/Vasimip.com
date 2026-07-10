@@ -4,7 +4,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import './admin.css'
 import { tryValidateDoc, type NotebookDoc } from '../notebook/doc/validate'
-import type { CoverDoc, PageDoc, PanelDoc } from '../notebook/doc/docTypes'
+import type { BuiltinMode, CoverDoc, PageDoc, PanelDoc } from '../notebook/doc/docTypes'
 import { REGISTRY } from '../notebook/registry'
 import { allFlagsOn, toGeom } from './shared'
 import PageCanvas from './PageCanvas'
@@ -19,7 +19,15 @@ const NEW_PANEL: PanelDoc = { x: 60, y: 90, w: 240, h: 180, anchor: { dx: 120, d
 
 export default function Admin() {
   const [doc, setDoc] = useState<NotebookDoc | null>(null)
-  const [dirty, setDirty] = useState(false)
+  // Undo/redo history of IMMUTABLE doc snapshots. `savedDocRef` marks the
+  // last-persisted snapshot; because snapshots are shared by reference, dirty is
+  // just `doc !== savedDocRef.current` (undoing back to it clears the dot).
+  const undoRef = useRef<NotebookDoc[]>([])
+  const redoRef = useRef<NotebookDoc[]>([])
+  const savedDocRef = useRef<NotebookDoc | null>(null)
+  const docRef = useRef<NotebookDoc | null>(null)
+  const lastPushRef = useRef(0) // wall-clock of the last history push (drag coalescing)
+  const [histTick, setHistTick] = useState(0) // force re-render when stacks change
   const [loadErr, setLoadErr] = useState<string | null>(null)
   const [saveErrs, setSaveErrs] = useState<string[] | null>(null)
   const [showErrs, setShowErrs] = useState(true)
@@ -33,14 +41,55 @@ export default function Admin() {
   useEffect(() => {
     fetch('/__notebook')
       .then((r) => r.json())
-      .then((d) => setDoc(d as NotebookDoc))
+      .then((d) => {
+        savedDocRef.current = d as NotebookDoc
+        undoRef.current = []
+        redoRef.current = []
+        setDoc(d as NotebookDoc)
+      })
       .catch((e) => setLoadErr(String(e)))
   }, [])
 
   const update = useCallback((fn: (d: NotebookDoc) => NotebookDoc) => {
-    setDoc((d) => (d ? fn(d) : d))
-    setDirty(true)
+    setDoc((d) => {
+      if (!d) return d
+      // Coalesce a continuous gesture (drag / fast typing) into ONE history entry:
+      // only snapshot when >COALESCE_MS have passed since the last push, so a
+      // single ⌘Z reverts the whole drag rather than one sub-pixel increment.
+      const now = Date.now()
+      if (now - lastPushRef.current > 400) {
+        undoRef.current.push(d)
+        if (undoRef.current.length > 100) undoRef.current.shift()
+      }
+      lastPushRef.current = now
+      return fn(d)
+    })
+    redoRef.current = []
+    setHistTick((t) => t + 1)
   }, [])
+
+  const undo = useCallback(() => {
+    if (undoRef.current.length === 0) return
+    const cur = docRef.current
+    const prev = undoRef.current.pop()!
+    if (cur) redoRef.current.push(cur)
+    lastPushRef.current = 0 // the next edit starts a fresh history entry
+    setDoc(prev)
+    setHistTick((t) => t + 1)
+  }, [])
+  const redo = useCallback(() => {
+    if (redoRef.current.length === 0) return
+    const cur = docRef.current
+    const next = redoRef.current.pop()!
+    if (cur) undoRef.current.push(cur)
+    lastPushRef.current = 0
+    setDoc(next)
+    setHistTick((t) => t + 1)
+  }, [])
+
+  docRef.current = doc
+  const dirty = doc !== null && doc !== savedDocRef.current
+  void histTick // history mutations bump this to re-render undo/redo affordances
 
   // Warn before leaving with unsaved edits.
   useEffect(() => {
@@ -48,6 +97,38 @@ export default function Admin() {
     window.addEventListener('beforeunload', h)
     return () => window.removeEventListener('beforeunload', h)
   }, [dirty])
+
+  // ⌘Z / Ctrl+Z undo, ⇧⌘Z / Ctrl+Y redo — capture phase so it beats the preview
+  // controls, but skipped over form fields so native input undo still wins.
+  useEffect(() => {
+    const h = (e: KeyboardEvent) => {
+      const t = e.target as HTMLElement | null
+      if (t && (t.tagName === 'INPUT' || t.tagName === 'TEXTAREA' || t.tagName === 'SELECT' || t.isContentEditable)) return
+      const meta = e.metaKey || e.ctrlKey
+      if (!meta) return
+      const k = e.key.toLowerCase()
+      if (k === 'z' && !e.shiftKey) { e.preventDefault(); undo() }
+      else if ((k === 'z' && e.shiftKey) || k === 'y') { e.preventDefault(); redo() }
+    }
+    window.addEventListener('keydown', h, true)
+    return () => window.removeEventListener('keydown', h, true)
+  }, [undo, redo])
+
+  // After any doc swap (edit / undo / redo / import) clamp the selection so a
+  // removed page / panel / action can't strand the UI on a stale index.
+  useEffect(() => {
+    if (!doc) return
+    setSel((s) => (s.kind === 'page' && s.page > doc.pages.length - 1) ? { kind: 'page', page: doc.pages.length - 1 } : s)
+    setPanelSel((ps) => {
+      if (ps == null) return ps
+      const s = docRef.current!
+      const pg = s.pages[Math.min(ps < 0 ? 0 : ps, s.pages.length - 1)]
+      const cur = sel.kind === 'page' ? s.pages[Math.min(sel.page, s.pages.length - 1)] : pg
+      return cur && ps > cur.panels.length - 1 ? Math.max(0, cur.panels.length - 1) : ps
+    })
+    setActionSel((as) => (as && !(doc.actions ?? {})[as]) ? null : as)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [doc])
 
   // Notebook (mounted by Preview) registers global arrow/space/a/s keydown
   // handlers on window. Swallow keys that target form fields (capture phase) so
@@ -67,7 +148,7 @@ export default function Admin() {
   const save = async () => {
     if (!doc) return
     const res = await fetch('/__notebook', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(doc) })
-    if (res.status === 204) { setDirty(false); setSaveErrs(null); return }
+    if (res.status === 204) { savedDocRef.current = doc; setSaveErrs(null); setHistTick((t) => t + 1); return }
     const body = await res.json().catch(() => ({ errors: ['save failed (' + res.status + ')'] }))
     setSaveErrs(body.errors ?? ['save failed'])
     setShowErrs(true)
@@ -86,8 +167,10 @@ export default function Admin() {
     file.text().then((txt) => {
       try {
         const parsed = JSON.parse(txt)
+        undoRef.current = []
+        redoRef.current = []
         setDoc(parsed as NotebookDoc)
-        setDirty(true)
+        setHistTick((t) => t + 1)
         setSaveErrs(null)
       } catch (e) { setSaveErrs(['import: ' + (e as Error).message]); setShowErrs(true) }
     })
@@ -154,12 +237,34 @@ export default function Admin() {
     setTimeout(run, 400)
   }
 
+  const testBuiltin = (mode: BuiltinMode) => {
+    setPreviewOpen(true)
+    const target = (curPage ?? 0) + 1
+    type Hooks = { __notebookGoTo?: (p: number) => void; __notebookBusy?: () => boolean; __notebookRunBuiltin?: (m: string) => void }
+    const w = window as unknown as Hooks
+    const start = Date.now()
+    const run = () => {
+      if (Date.now() - start > 6000) return
+      if (!w.__notebookGoTo || !w.__notebookRunBuiltin) { setTimeout(run, 150); return }
+      w.__notebookGoTo(target)
+      const poll = () => {
+        if (Date.now() - start > 6000) return
+        if (w.__notebookBusy && w.__notebookBusy()) { setTimeout(poll, 120); return }
+        w.__notebookRunBuiltin!(mode)
+      }
+      setTimeout(poll, 500)
+    }
+    setTimeout(run, 400)
+  }
+
   return (
     <div className="admin">
       <header className="hdr">
         <h1>notebook admin</h1>
         <span className={`status ${valid ? 'ok' : 'bad'}`}>{valid ? '✓ valid' : `✕ ${errs.length} issue${errs.length === 1 ? '' : 's'}`}</span>
         <span className="grow" />
+        <button className="btn mini" onClick={undo} disabled={undoRef.current.length === 0} title="Undo (⌘Z)">↩</button>
+        <button className="btn mini" onClick={redo} disabled={redoRef.current.length === 0} title="Redo (⇧⌘Z)">↪</button>
         <button className="btn" onClick={exportDoc}>Export</button>
         <button className="btn" onClick={() => fileRef.current?.click()}>Import</button>
         <input ref={fileRef} type="file" accept="application/json" style={{ display: 'none' }} onChange={(e) => { const f = e.target.files?.[0]; if (f) importDoc(f); e.target.value = '' }} />
@@ -219,6 +324,7 @@ export default function Admin() {
               updateActions={(fn) => update((d) => ({ ...d, actions: fn(d.actions ?? {}) }))}
               contextPanel={contextPanel}
               onTest={testAction}
+              onTestBuiltin={testBuiltin}
             />
           )}
         </main>

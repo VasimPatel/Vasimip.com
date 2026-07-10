@@ -82,8 +82,19 @@ export type Cue =
   | { sfx: SfxKind }
   | { finish: true }
 
+/** One scheduled cue. `step` = index of the authored step that emitted it
+ *  (auto-generated epilogue cues omit it); `spanMs` = duration a move-emitted
+ *  patch animates over. Both are ADDITIVE metadata for the admin's cue timeline —
+ *  the Notebook executor ignores them. */
+export interface CompiledCue {
+  t: number
+  cue: Cue
+  step?: number
+  spanMs?: number
+}
+
 export type CompileResult =
-  | { total: number; cues: Array<{ t: number; cue: Cue }> }
+  | { total: number; cues: CompiledCue[] }
   | { error: string }
 
 // ── ease presets = the beziers already living in Notebook.tsx ─────────────────
@@ -135,9 +146,17 @@ export function compileAction(def: ActionDoc, ctx: ActionCtx): CompileResult {
   if (!inWorld(ctx.from.x, ctx.from.y)) return { error: 'start position out of world' }
   if (!inWorld(ctx.anchor.x, ctx.anchor.y)) return { error: 'anchor out of world' }
 
-  const cues: Array<{ t: number; cue: Cue }> = []
-  const emit = (t: number, cue: Cue) => cues.push({ t, cue })
-  const patch = (t: number, p: CuePatch) => emit(t, { patch: p })
+  const cues: CompiledCue[] = []
+  // `curStep` = index of the authored step currently emitting; undefined during
+  // the compiler-appended epilogue so those cues carry no `step`.
+  let curStep: number | undefined = undefined
+  const emit = (t: number, cue: Cue, spanMs?: number) => {
+    const e: CompiledCue = { t, cue }
+    if (curStep !== undefined) e.step = curStep
+    if (spanMs !== undefined) e.spanMs = spanMs
+    cues.push(e)
+  }
+  const patch = (t: number, p: CuePatch, spanMs?: number) => emit(t, { patch: p }, spanMs)
 
   const cur = { x: ctx.from.x, y: ctx.from.y }
   let t = 0
@@ -160,7 +179,7 @@ export function compileAction(def: ActionDoc, ctx: ActionCtx): CompileResult {
     if (arc === 'hop') { p.hopping = true; p.hopDur = durS }
     else if (arc === 'vault') p.vaulting = true
     if (sfx) emit(t, { sfx })
-    patch(t, p)
+    patch(t, p, durMs)
     if (arc === 'hop') patch(t + durMs, { hopping: false })
     else if (arc === 'vault') patch(t + durMs, { vaulting: false })
     cur.x = target.x
@@ -168,7 +187,9 @@ export function compileAction(def: ActionDoc, ctx: ActionCtx): CompileResult {
     t += durMs + 40
   }
 
-  for (const step of def.steps) {
+  for (let si = 0; si < def.steps.length; si++) {
+    curStep = si
+    const step = def.steps[si]
     switch (step.do) {
       case 'move': {
         const target = resolveTarget(step.to, cur, ctx)
@@ -258,7 +279,9 @@ export function compileAction(def: ActionDoc, ctx: ActionCtx): CompileResult {
 
   // ── Compiler-appended epilogue (never author-authored) ─────────────────────
   // Corrective hop back to the anchor if the cursor drifted, then the universal
-  // land → +540ms → finish tail every built-in shares.
+  // land → +540ms → finish tail every built-in shares. `curStep` is cleared so
+  // these cues carry no `step` (the timeline renders them as dimmed "auto" cues).
+  curStep = undefined
   if (Math.hypot(cur.x - ctx.anchor.x, cur.y - ctx.anchor.y) > 1) {
     emitMove({ x: ctx.anchor.x, y: ctx.anchor.y }, 500, 'launch', 'launch', 'tuck', 'hop', 'hop')
   }
