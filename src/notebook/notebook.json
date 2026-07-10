@@ -11,8 +11,8 @@
       "snark": "oh no. he made a website.",
       "panels": [
         {
-          "x": 48,
-          "y": 80,
+          "x": 60,
+          "y": 90,
           "w": 480,
           "h": 300,
           "rotate": -0.5,
@@ -37,19 +37,19 @@
             },
             {
               "type": "text",
-              "text": "issue #01 · self-published · priceless",
+              "text": "issue #01 \u00b7 self-published \u00b7 priceless",
               "size": 16,
               "tone": "faint"
             }
           ],
           "anchor": {
-            "dx": 252,
-            "dy": 10
+            "dx": 240,
+            "dy": 0
           }
         },
         {
-          "x": 592,
-          "y": 80,
+          "x": 580,
+          "y": 120,
           "w": 280,
           "h": 240,
           "rotate": 0.6,
@@ -66,19 +66,19 @@
               "type": "custom",
               "component": "pipFigure",
               "props": {
-                "dashLine": "DASH — does the stunts.",
-                "pipLine": "PIP — does the judging."
+                "dashLine": "DASH \u2014 does the stunts.",
+                "pipLine": "PIP \u2014 does the judging."
               }
             }
           ],
           "anchor": {
-            "dx": 128,
-            "dy": 40
+            "dx": 140,
+            "dy": 0
           }
         },
         {
-          "x": 264,
-          "y": 424,
+          "x": 200,
+          "y": 430,
           "w": 520,
           "h": 170,
           "rotate": 0.3,
@@ -96,8 +96,8 @@
             }
           ],
           "anchor": {
-            "dx": 196,
-            "dy": 6
+            "dx": 260,
+            "dy": 0
           }
         }
       ]
@@ -127,7 +127,7 @@
             },
             {
               "type": "note",
-              "text": "Builds things for the web. Draws in the margins. Jumps off the occasional deadline (professionally). Currently accepting quests — freelance or full-time. Weakness: unclosed browser tabs. Based in the internet.",
+              "text": "Builds things for the web. Draws in the margins. Jumps off the occasional deadline (professionally). Currently accepting quests \u2014 freelance or full-time. Weakness: unclosed browser tabs. Based in the internet.",
               "size": 16,
               "lineHeight": 1.45,
               "place": {
@@ -258,7 +258,7 @@
             },
             {
               "type": "text",
-              "text": "award-adjacent. the judges said \"hm!\" — a review.",
+              "text": "award-adjacent. the judges said \"hm!\" \u2014 a review.",
               "size": 16,
               "tone": "ink"
             }
@@ -287,7 +287,7 @@
             },
             {
               "type": "text",
-              "text": "More work exists. It's in a drawer. Ask about the drawer. (Replace these with your real projects — Dash will guard them.)",
+              "text": "More work exists. It's in a drawer. Ask about the drawer. (Replace these with your real projects \u2014 Dash will guard them.)",
               "size": 17,
               "tone": "ink",
               "lineHeight": 1.4
@@ -340,7 +340,7 @@
             },
             {
               "type": "caption",
-              "text": "fresh paint — wet",
+              "text": "fresh paint \u2014 wet",
               "size": 16,
               "place": {
                 "right": 20,
@@ -416,7 +416,7 @@
             },
             {
               "type": "text",
-              "text": "responds within 1–2 business rolls.",
+              "text": "responds within 1\u20132 business rolls.",
               "size": 17,
               "tone": "muted"
             }

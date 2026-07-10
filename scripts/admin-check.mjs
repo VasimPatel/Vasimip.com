@@ -43,6 +43,19 @@ page.on('pageerror', (e) => errors.push('pageerror: ' + e.message))
 // beforeunload confirm dialogs (HMR reload after save) — auto-accept.
 page.on('dialog', (d) => d.accept().catch(() => {}))
 
+// GUARD: refuse to run against an already-dirty notebook.json. A previous run
+// that was hard-killed mid-test (finally can't survive SIGKILL / a dev-server
+// restart) leaves mutated panel geometry on disk; if we baseline on that, the
+// corruption silently propagates into commits (this bit us once — three Intro
+// panels shipped shifted). Set ADMIN_CHECK_ALLOW_DIRTY=1 to override knowingly.
+import { execSync } from 'node:child_process'
+const dirty = execSync('git status --porcelain -- src/notebook/notebook.json', { encoding: 'utf8' }).trim()
+if (dirty && !process.env.ADMIN_CHECK_ALLOW_DIRTY) {
+  console.error('FAIL notebook.json differs from git HEAD — a previous run may have crashed mid-test.')
+  console.error('     Inspect/restore it first (git diff src/notebook/notebook.json), or set ADMIN_CHECK_ALLOW_DIRTY=1.')
+  process.exit(1)
+}
+
 // Snapshot the exact committed bytes. The middleware writes canonical
 // JSON.stringify(doc, null, 2), which reflows the hand-authored (compact)
 // notebook.json even for an unchanged doc — so after verifying behavior we
