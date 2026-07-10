@@ -17,8 +17,17 @@ const pass = (m) => { results.push(true); console.log('PASS ' + m) }
 const fail = (m) => { results.push(false); console.log('FAIL ' + m) }
 
 async function readPanel0() {
-  const doc = JSON.parse(await readFile(DOC, 'utf8'))
-  return doc.pages[0].panels[0]
+  // The middleware may be mid-write when we poll — a partial read throws
+  // "Unexpected end of JSON input". Retry briefly instead of dying.
+  for (let i = 0; i < 20; i++) {
+    try {
+      const doc = JSON.parse(await readFile(DOC, 'utf8'))
+      return doc.pages[0].panels[0]
+    } catch {
+      await sleep(100)
+    }
+  }
+  throw new Error('notebook.json unreadable after 2s of retries')
 }
 async function waitPanel0(pred, ms = 8000) {
   const t0 = Date.now()
