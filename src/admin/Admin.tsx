@@ -45,6 +45,7 @@ export default function Admin() {
         savedDocRef.current = d as NotebookDoc
         undoRef.current = []
         redoRef.current = []
+        lastPushRef.current = 0 // fresh history after load
         setDoc(d as NotebookDoc)
       })
       .catch((e) => setLoadErr(String(e)))
@@ -148,7 +149,7 @@ export default function Admin() {
   const save = async () => {
     if (!doc) return
     const res = await fetch('/__notebook', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(doc) })
-    if (res.status === 204) { savedDocRef.current = doc; setSaveErrs(null); setHistTick((t) => t + 1); return }
+    if (res.status === 204) { savedDocRef.current = doc; lastPushRef.current = 0; setSaveErrs(null); setHistTick((t) => t + 1); return }
     const body = await res.json().catch(() => ({ errors: ['save failed (' + res.status + ')'] }))
     setSaveErrs(body.errors ?? ['save failed'])
     setShowErrs(true)
@@ -169,6 +170,7 @@ export default function Admin() {
         const parsed = JSON.parse(txt)
         undoRef.current = []
         redoRef.current = []
+        lastPushRef.current = 0 // fresh history after import
         setDoc(parsed as NotebookDoc)
         setHistTick((t) => t + 1)
         setSaveErrs(null)
