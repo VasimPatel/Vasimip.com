@@ -27,5 +27,5 @@ export const snap = (n: number, grid = GRID): number => Math.round(n / grid) * g
 
 /** Extract just the geometry fields a `PanelGeom` needs from a `PanelDoc`. */
 export function toGeom(p: PanelDoc): PanelGeom {
-  return { x: p.x, y: p.y, w: p.w, h: p.h, ax: p.ax, ay: p.ay }
+  return { x: p.x, y: p.y, w: p.w, h: p.h, ax: p.x + p.anchor.dx, ay: p.y + p.anchor.dy }
 }

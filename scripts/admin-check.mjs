@@ -111,6 +111,13 @@ try {
   if (moved) pass(`panel moved on disk to x=${moved.x} y=${moved.y}`)
   else { const p = await readPanel0(); fail(`panel did not move as expected (disk x=${p.x} y=${p.y})`) }
 
+  // 1b) the anchor offset must have ridden along unchanged (that's the fix).
+  if (moved && moved.anchor.dx === orig.anchor.dx && moved.anchor.dy === orig.anchor.dy) {
+    pass(`anchor offset unchanged after move (dx=${moved.anchor.dx} dy=${moved.anchor.dy})`)
+  } else {
+    fail(`anchor offset drifted (orig dx=${orig.anchor.dx} dy=${orig.anchor.dy}, now dx=${moved?.anchor.dx} dy=${moved?.anchor.dy})`)
+  }
+
   // 2) restore: reload (HMR fired after save), drag back, save, expect original.
   await sleep(600)
   await ready()

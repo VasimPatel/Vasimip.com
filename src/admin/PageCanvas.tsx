@@ -29,7 +29,7 @@ function applyDrag(mode: DragMode, start: PanelDoc, dx: number, dy: number, snap
   const q = (n: number) => (snapOn ? snap(n) : round(n))
   switch (mode) {
     case 'move': return { x: q(start.x + dx), y: q(start.y + dy) }
-    case 'anchor': return { ax: q(start.ax + dx), ay: q(start.ay + dy) }
+    case 'anchor': return { anchor: { dx: q(start.anchor.dx + dx), dy: q(start.anchor.dy + dy) } }
     case 'e': return { w: Math.max(MIN_W, q(start.w + dx)) }
     case 's': return { h: Math.max(MIN_H, q(start.h + dy)) }
     case 'w': { const w = Math.max(MIN_W, q(start.w - dx)); return { x: q(start.x + (start.w - w)), w } }
@@ -126,7 +126,7 @@ export default function PageCanvas({ page, cover, flags, selected, onSelect, upd
     const y = round((e.clientY - rect.top) / scale)
     addPanel({
       x: Math.max(0, x), y: Math.max(0, y), w: 200, h: 160,
-      ax: Math.max(0, x) + 100, ay: Math.max(0, y),
+      anchor: { dx: 100, dy: 0 },
       elements: [{ type: 'heading', text: 'NEW PANEL', size: 20 }],
     })
   }
@@ -172,8 +172,8 @@ export default function PageCanvas({ page, cover, flags, selected, onSelect, upd
                   <div
                     key={`a${i}`}
                     className="anchor"
-                    style={{ left: p.ax, top: p.ay }}
-                    title={`Dash anchor (ax ${p.ax}, ay ${p.ay})`}
+                    style={{ left: p.x + p.anchor.dx, top: p.y + p.anchor.dy }}
+                    title={`Dash anchor (ax ${p.x + p.anchor.dx}, ay ${p.y + p.anchor.dy})`}
                     onMouseDown={(e) => beginDrag(e, 'anchor', i)}
                   >⌖</div>
                 )

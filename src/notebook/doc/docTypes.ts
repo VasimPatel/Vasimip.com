@@ -196,9 +196,10 @@ export interface PanelDoc {
   y: number
   w: number
   h: number
-  /** Dash's anchor point when standing at this panel. */
-  ax: number
-  ay: number
+  /** Dash's anchor point when standing at this panel, as an offset from the
+   *  panel's x/y origin. Dash's feet stand at (x + dx, y + dy) — relative so
+   *  the anchor can never drift when the panel itself moves. */
+  anchor: { dx: number; dy: number }
   arrival?: ArrivalDoc
   /** Applies as the DESTINATION panel's travel config when Dash is heading here. */
   travel?: TravelConfig

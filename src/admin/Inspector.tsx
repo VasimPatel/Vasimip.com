@@ -74,8 +74,11 @@ function PanelInspector({ panel, actionNames, registryKeys, updatePanel }: Props
           <NumField label="h" value={panel.h} onChange={(v) => updatePanel((p) => ({ ...p, h: v ?? 0 }))} />
         </div>
         <div className="row">
-          <NumField label="ax" value={panel.ax} onChange={(v) => updatePanel((p) => ({ ...p, ax: v ?? 0 }))} />
-          <NumField label="ay" value={panel.ay} onChange={(v) => updatePanel((p) => ({ ...p, ay: v ?? 0 }))} />
+          <NumField label="anchor Δx" value={panel.anchor.dx} onChange={(v) => updatePanel((p) => ({ ...p, anchor: { ...p.anchor, dx: v ?? 0 } }))} />
+          <NumField label="anchor Δy" value={panel.anchor.dy} onChange={(v) => updatePanel((p) => ({ ...p, anchor: { ...p.anchor, dy: v ?? 0 } }))} />
+        </div>
+        <div className="muted" style={{ fontSize: 11, marginTop: -4, marginBottom: 4 }}>
+          (→ {panel.x + panel.anchor.dx}, {panel.y + panel.anchor.dy})
         </div>
         <NumField label="rotate°" value={panel.rotate} onChange={(v) => updatePanel((p) => ({ ...p, rotate: v }))} step={0.1} />
       </Section>

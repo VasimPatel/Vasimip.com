@@ -151,7 +151,7 @@ export default class Notebook extends React.Component<NotebookProps, State> {
       this._geomDoc = doc
       this._geomCache = [
         { name: 'COVER', panels: [] },
-        ...doc.pages.map(p => ({ name: p.name, panels: p.panels.map(({ x, y, w, h, ax, ay }) => ({ x, y, w, h, ax, ay })) })),
+        ...doc.pages.map(p => ({ name: p.name, panels: p.panels.map(({ x, y, w, h, anchor }) => ({ x, y, w, h, ax: x + anchor.dx, ay: y + anchor.dy })) })),
       ]
     }
     return this._geomCache

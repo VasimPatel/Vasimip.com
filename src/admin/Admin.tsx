@@ -15,7 +15,7 @@ import Preview from './Preview'
 type Sel = { kind: 'cover' } | { kind: 'page'; page: number }
 type Tab = 'pages' | 'actions'
 
-const NEW_PANEL: PanelDoc = { x: 60, y: 90, w: 240, h: 180, ax: 180, ay: 90, elements: [{ type: 'heading', text: 'PANEL', size: 20 }] }
+const NEW_PANEL: PanelDoc = { x: 60, y: 90, w: 240, h: 180, anchor: { dx: 120, dy: 0 }, elements: [{ type: 'heading', text: 'PANEL', size: 20 }] }
 
 export default function Admin() {
   const [doc, setDoc] = useState<NotebookDoc | null>(null)

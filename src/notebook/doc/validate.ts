@@ -120,8 +120,16 @@ function checkTravelConfig(x: unknown, path: string, issues: Issues, actionNames
 
 function checkPanel(x: unknown, path: string, issues: Issues, actionNames: Set<string> | null): void {
   if (!isPlainObject(x)) { issues.push(`${path}: panel must be an object`); return }
-  for (const k of ['x', 'y', 'w', 'h', 'ax', 'ay'] as const) {
+  for (const k of ['x', 'y', 'w', 'h'] as const) {
     if (!isFiniteNumber(x[k])) issues.push(`${path}.${k}: required finite number`)
+  }
+  if (!isPlainObject(x.anchor) || !isFiniteNumber(x.anchor.dx) || !isFiniteNumber(x.anchor.dy)) {
+    issues.push(`${path}.anchor: required { dx, dy } with finite numbers`)
+  } else if (isFiniteNumber(x.w) && isFiniteNumber(x.h)) {
+    const { dx, dy } = x.anchor
+    if (dx < -200 || dx > x.w + 200 || dy < -200 || dy > x.h + 200) {
+      issues.push(`${path}.anchor: strayed too far from its panel (dx ${dx}, dy ${dy})`)
+    }
   }
   checkArrival(x.arrival, `${path}.arrival`, issues)
   checkTravelConfig(x.travel, `${path}.travel`, issues, actionNames)
