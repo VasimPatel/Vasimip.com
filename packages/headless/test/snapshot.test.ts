@@ -7,9 +7,9 @@ const world: WorldDocV2 = {
   schemaVersion: 2,
   seed: 4242,
   entities: [
-    { id: 'a', x: 0, y: 0 },
-    { id: 'b', x: 3, y: -2 },
-    { id: 'c', x: -5, y: 1 },
+    { id: 'a', components: { transform: { x: 0, y: 0 } } },
+    { id: 'b', components: { transform: { x: 3, y: -2 } } },
+    { id: 'c', components: { transform: { x: -5, y: 1 } } },
   ],
 }
 

@@ -9,8 +9,28 @@ export type { Check, Issues, ValidateResult, ValidateOk, ValidateErr } from './v
 export { registerMigration, migrateToCurrent } from './migrations'
 export type { MigrationFn, VersionedDoc } from './migrations'
 
-export { tryValidateWorldV2 } from './world'
-export type { WorldDocV2, WorldEntityV2 } from './world'
+export { tryValidateWorldV2, COMPONENT_NAMES } from './world'
+export type {
+  WorldDocV2,
+  EntityDoc,
+  ComponentDoc,
+  ComponentName,
+  Vec2,
+  Vec2Delta,
+  Box,
+  Segment,
+  TransformComponent,
+  SurfaceComponent,
+  CollidableComponent,
+  RigInstanceComponent,
+  LocomotionComponent,
+  DisturbableStub,
+  DamageableStub,
+  EmitterStub,
+  ProjectileStub,
+  AttachmentStub,
+  SpeechStub,
+} from './world'
 
 // ── Phase 2: rig / pose / character (L0–L1a) ─────────────────────────────────
 export { tryValidateRig } from './rig'

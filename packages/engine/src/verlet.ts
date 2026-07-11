@@ -117,6 +117,27 @@ export interface Point {
   y: number
 }
 
+/** Read/write view over the particle pool handed to a collision pass. Exposes
+ * current position, start-of-tick position (prev, for swept checks), pinned/active
+ * flags, and setters. Active = the particle's body is awake (not sleeping). */
+export interface ParticleView {
+  count: number
+  active(i: number): boolean
+  isPinned(i: number): boolean
+  x(i: number): number
+  y(i: number): number
+  prevX(i: number): number
+  prevY(i: number): number
+  setPos(i: number, x: number, y: number): void
+  setPrev(i: number, x: number, y: number): void
+}
+
+/** A post-relaxation projection pass (P6 collision hook). Runs inside step() AFTER
+ * the constraint relaxation and BEFORE sleep evaluation, so a projected particle's
+ * corrected displacement feeds the sleep check (a prop pushed onto a surface and
+ * held there reads as quiet and sleeps). Default: none (no-op). */
+export type CollisionPass = (view: ParticleView) => void
+
 /** Fully serializable solver state (plain JSON — hashState-able, §3 rule 1). */
 export interface VerletState {
   px: number[]
@@ -151,6 +172,8 @@ export interface VerletWorld {
   unpin(particleId: number): void
   /** Move a spring constraint's anchor (secondary target follow; prop rest move in P6). */
   setSpringAnchor(constraintId: number, x: number, y: number): void
+  /** Install (or clear, with null) the post-relaxation collision projection pass. */
+  setCollisionPass(fn: CollisionPass | null): void
   particle(id: number): Point
   /** Allocation-free reads of one particle coordinate (hot render paths). */
   particleX(id: number): number
@@ -248,6 +271,43 @@ export function createVerletWorld(opts?: VerletWorldOptions): VerletWorld {
   const ropeBuf = new Map<string, Point[]>()
 
   const dirty: string[] = [] // reused each tick (zero-alloc dirtyBodies)
+
+  // ── collision projection pass (P6 hook) ────────────────────────────────────────
+  let collisionPass: CollisionPass | null = null
+  // A single reusable view object (zero per-tick allocation). `active` reports the
+  // particle's body as awake — sleeping bodies are skipped by the solver, so their
+  // particles are inert and the pass leaves them alone.
+  const particleView: ParticleView = {
+    get count(): number {
+      return nP
+    },
+    active(i) {
+      return !bodies[pBody[i]].sleeping
+    },
+    isPinned(i) {
+      return pinned[i] === 1
+    },
+    x(i) {
+      return px[i]
+    },
+    y(i) {
+      return py[i]
+    },
+    prevX(i) {
+      return ox[i]
+    },
+    prevY(i) {
+      return oy[i]
+    },
+    setPos(i, x, y) {
+      px[i] = x
+      py[i] = y
+    },
+    setPrev(i, x, y) {
+      ox[i] = x
+      oy[i] = y
+    },
+  }
 
   function ensureParticles(add: number): void {
     const need = nP + add
@@ -497,6 +557,10 @@ export function createVerletWorld(opts?: VerletWorldOptions): VerletWorld {
     wake(cBody[constraintId])
   }
 
+  function setCollisionPass(fn: CollisionPass | null): void {
+    collisionPass = fn
+  }
+
   function integrateBody(b: BodyRec): void {
     const damp = b.damping
     const gy = gravity * b.gravityScale * DT2
@@ -575,6 +639,9 @@ export function createVerletWorld(opts?: VerletWorldOptions): VerletWorld {
         }
       }
     }
+    // 2b. collision projection (P6) — project awake particles out of panel
+    //     segments/interiors, BEFORE sleep eval so a rested prop reads as quiet.
+    if (collisionPass) collisionPass(particleView)
     // 3. sleep evaluation + dirty set. Displacement = |final − start-of-tick|.
     for (let bi = 0; bi < bodies.length; bi++) {
       const b = bodies[bi]
@@ -700,6 +767,7 @@ export function createVerletWorld(opts?: VerletWorldOptions): VerletWorld {
     setPinTarget,
     unpin,
     setSpringAnchor,
+    setCollisionPass,
     particle,
     particleX,
     particleY,
