@@ -110,9 +110,26 @@ export interface LocomotionComponent {
 export interface DisturbableStub {
   mass?: number
 }
-/** 6b mutable boundaries (holes/heal). `hp` reserved. */
+
+/** Which panel edge a boundary cut ("hole") is taken out of. `floorIn` is the
+ * interior anchor line; the other four are the physical box edges (§ surfaces). */
+export type HoleEdge = 'roof' | 'wallL' | 'wallR' | 'bottom' | 'floorIn'
+
+/** Persistence policy for a cut. `none` heals after `healAfterMs`; `session` stays
+ * until the world is rebuilt; `saved` is a SCHEMA KNOB ONLY — it validates here but
+ * the 6b runtime REJECTS it (persisting cuts to authored content lands post-P9). */
+export type HolePersistScope = 'none' | 'session' | 'saved'
+
+/** 6b mutable boundaries (holes/heal). Panels carrying this component can be CUT at
+ * runtime; the fields below are the panel's DEFAULT heal policy (a per-cut `opts`
+ * overrides them). `hp` reserved for a future damage model. */
 export interface DamageableStub {
   hp?: number
+  /** 6b SCHEMA FIELD: default ms after a cut before the boundary knits back ("the
+   * notebook redraws itself"). Omitted → engine DEFAULT_HEAL_MS. */
+  healAfterMs?: number
+  /** 6b SCHEMA FIELD: default persist scope for cuts on this panel (see HolePersistScope). */
+  persistScope?: HolePersistScope
 }
 /** P7 `emit` intent. `kind` reserved. */
 export interface EmitterStub {
@@ -243,6 +260,15 @@ function stubCheck(reserved: readonly string[], numeric: readonly string[] = [],
   }
 }
 
+const HOLE_PERSIST = new Set(['none', 'session', 'saved'])
+function checkDamageable(o: Record<string, unknown>, path: string, issues: Issues): void {
+  rejectUnknownKeys(o, ['hp', 'healAfterMs', 'persistScope'], path, issues)
+  if (o.hp !== undefined && !isNum(o.hp)) issues.push(`${path}.hp: must be a finite number when present`)
+  if (o.healAfterMs !== undefined && (!isNum(o.healAfterMs) || o.healAfterMs < 0)) issues.push(`${path}.healAfterMs: must be a finite number >= 0 when present`)
+  if (o.persistScope !== undefined && (!isStr(o.persistScope) || !HOLE_PERSIST.has(o.persistScope)))
+    issues.push(`${path}.persistScope: must be 'none' | 'session' | 'saved'`)
+}
+
 type ComponentChecker = (o: Record<string, unknown>, path: string, issues: Issues) => void
 const CHECKERS: Record<ComponentName, ComponentChecker> = {
   transform: checkTransform,
@@ -251,7 +277,7 @@ const CHECKERS: Record<ComponentName, ComponentChecker> = {
   collidable: checkCollidable,
   surface: checkSurface,
   disturbable: stubCheck(['mass'], ['mass']),
-  damageable: stubCheck(['hp'], ['hp']),
+  damageable: checkDamageable,
   emitter: stubCheck(['kind'], [], ['kind']),
   projectile: stubCheck(['speed'], ['speed']),
   attachment: stubCheck(['to', 'point'], [], ['to', 'point']),
