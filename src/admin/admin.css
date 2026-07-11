@@ -530,3 +530,76 @@
 .preview-bar:hover { background: #2c2a24; }
 .preview-body { position: relative; height: 340px; overflow: hidden; }
 .preview-frame { position: absolute; top: 0; left: 0; transform-origin: top left; }
+
+/* ── friends' panels: rail card + inbox overlay ──────────────────────────── */
+.inboxcard {
+  position: relative; background: #fdfbf6; border: 2.5px solid #23211c; border-radius: 12px;
+  padding: 10px 14px; cursor: pointer; box-shadow: 3px 4px 0 rgba(35, 33, 28, .15); flex: none; margin-top: 8px;
+}
+.inboxcard:hover { background: #fffdf6; }
+.ic-title { font-family: 'Permanent Marker', cursive; font-size: 15px; }
+.ic-sub { font-family: 'Caveat', cursive; font-size: 15px; color: #6f6a5c; line-height: 1.15; }
+.ic-badge {
+  position: absolute; top: -8px; right: -8px; min-width: 22px; height: 22px; padding: 0 6px;
+  display: flex; align-items: center; justify-content: center; border-radius: 11px;
+  background: #c0392b; color: #fff; font-family: 'Permanent Marker', cursive; font-size: 13px;
+  box-shadow: 1px 2px 0 rgba(35, 33, 28, .3);
+}
+
+.inbox-body { flex: 1; display: flex; gap: 16px; min-height: 0; margin-top: 14px; }
+.inbox-list {
+  width: 260px; flex: none; overflow-y: auto; background: #f6f0dd;
+  border: 2px solid #cdc4a8; border-radius: 12px; padding: 8px;
+}
+.inbox-lhead { font-family: 'Permanent Marker', cursive; font-size: 14px; color: #4a463c; margin: 2px 4px 8px; }
+.inbox-dim { color: #9a937f; font-family: 'Caveat', cursive; }
+.inbox-empty { font-family: 'Caveat', cursive; font-size: 18px; color: #9a937f; text-align: center; padding: 30px 16px; }
+.inbox-row {
+  position: relative; background: #fffdf6; border: 1.5px solid #d6cdb2; border-radius: 9px;
+  padding: 7px 10px; margin-bottom: 7px; cursor: pointer;
+}
+.inbox-row:hover { border-color: #b0a88e; }
+.inbox-row.active { outline: 2.5px solid #4a90d9; }
+.inbox-row-name { font-size: 14px; }
+.inbox-row-sub { font-family: 'Caveat', cursive; font-size: 13px; color: #9a937f; line-height: 1.1; }
+
+.inbox-detail { flex: 1; min-width: 0; overflow-y: auto; padding-right: 4px; }
+.inbox-detail-head { display: flex; align-items: center; gap: 10px; margin-bottom: 12px; }
+.inbox-preview-wrap {
+  display: flex; align-items: center; justify-content: center; padding: 20px;
+  background: #efe9d6; border: 2px dashed #c9c1a8; border-radius: 12px;
+}
+.inbox-mini { position: relative; background: #fffdf6; border: 3px solid #1a1a1a; overflow: hidden; }
+.inbox-actions { display: flex; gap: 8px; margin: 14px 0 4px; flex-wrap: wrap; }
+
+.chip {
+  font-family: 'Caveat', cursive; font-size: 13px; padding: 0 9px; border-radius: 9px; white-space: nowrap;
+  border: 1.5px solid; line-height: 1.5;
+}
+.chip.pending { color: #b3541e; border-color: #e0b48a; background: #fbeedd; }
+.chip.approved, .chip.active { color: #2e8b57; border-color: #9fc9ac; background: #e7f3ea; }
+.chip.rejected, .chip.revoked { color: #c0392b; border-color: #d9a49c; background: #f7e4e1; }
+.chip.expired, .chip.exhausted { color: #6f6a5c; border-color: #cdc4a8; background: #eee8d6; }
+
+.ibtn {
+  font: inherit; font-size: 13px; padding: 3px 12px; cursor: pointer; color: #23211c;
+  background: #fffdf6; border: 2px solid #23211c; border-radius: 8px; box-shadow: 2px 2px 0 rgba(35, 33, 28, .18);
+}
+.ibtn:hover { background: #efe9d6; }
+.ibtn:disabled { opacity: .45; cursor: not-allowed; box-shadow: none; }
+.ibtn.ok { color: #2e8b57; }
+.ibtn.no { color: #c0392b; }
+.ibtn.add { color: #2a4b8d; }
+.ibtn.tiny { font-size: 12px; padding: 2px 9px; box-shadow: none; }
+
+.inbox-invites { margin-top: 22px; border-top: 2px dashed #cdc4a8; padding-top: 14px; }
+.invite-create { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; margin-bottom: 12px; }
+.invite-num { font-family: 'Caveat', cursive; font-size: 14px; color: #6f6a5c; }
+.invite-num input { width: 48px; margin: 0 4px; }
+.invite-row {
+  display: flex; align-items: center; gap: 8px; background: #fffdf6;
+  border: 1.5px solid #d6cdb2; border-radius: 9px; padding: 6px 10px; margin-bottom: 7px;
+}
+.invite-meta { flex: 1; min-width: 0; }
+.invite-label { font-size: 14px; display: flex; align-items: center; gap: 8px; }
+.invite-sub { font-family: 'Caveat', cursive; font-size: 13px; color: #9a937f; line-height: 1.1; }

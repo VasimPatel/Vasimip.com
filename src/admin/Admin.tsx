@@ -14,6 +14,7 @@ import Inspector from './Inspector'
 import ActionEditor from './ActionEditor'
 import Preview from './Preview'
 import History from './History'
+import Inbox from './Inbox'
 import { loadDoc, saveDoc } from './docStore'
 import { signOut, passkey } from './auth-client'
 
@@ -434,6 +435,7 @@ export default function Admin({ devBypass = false }: { devBypass?: boolean }) {
             <div className="dd-title">DASH DOJO →</div>
             <div className="dd-sub">teach Dash brand-new stunts (the advanced stuff)</div>
           </div>
+          <Inbox onAddToPage={addPanel} pageName={page?.name ?? null} />
         </aside>
 
         <main className="stagewrap">
