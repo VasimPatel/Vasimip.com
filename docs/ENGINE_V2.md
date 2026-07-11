@@ -102,6 +102,8 @@ Two disposable prototypes. Code is deleted afterward; the deliverable is a findi
 
 **Exit criteria:** findings recorded (`docs/engine-v2/spike-findings.md`); go/no-go on direct-SVG rendering (if style writes > 2 ms, note that renderer interface must allow a future canvas impl — do not build it now); blend composition order fixed and written into this plan's Phase 3/5 specs.
 
+**Status: COMPLETE (2026-07-11).** Direct-SVG rendering is a **GO** — all three write modes measured ~25–30× under budget at 4× CPU throttle; no repeatable winner, so the renderer writes bone/rope geometry attributes directly from world-space joints and uses CSS transforms for grouped/prop elements (clarity over a nonexistent perf difference). The proven composition order is now normative in Phases 3/5 below; full numbers, tuning values, and gotchas (linecap × non-uniform scale trap, SVG attr unit rules, CDP throttle caveats) in the findings doc.
+
 ### Phase 1 — Foundations: sim loop, schema package, CI — size M
 
 Build: `packages/schema` skeleton (doc envelope with `schemaVersion`, validator harness, error format matching current validator ergonomics); `packages/engine` core: fixed-timestep loop with accumulator + interpolation alpha, engine context (seeded RNG, event bus, clock), state serialization + hash; `packages/headless` skeleton: `createSim(worldDoc) → step(n) → snapshot()/hash()/trace()`. CI: typecheck, unit tests, determinism lint rules, headless-runs-in-node check.
@@ -116,7 +118,13 @@ Build: `RigTemplate` schema (joint tree, bone lengths, angle limits, bend direct
 
 ### Phase 3 — Clips & blend tree (L1b) — size M
 
-Build: `Clip` schema (tracks of pose keyframes, per-key easing from a preset curve set, loop flags, events-on-time markers); clip player; blend tree with exactly two mechanisms — **crossfade** (time-scheduled, velocity-continuous) and **additive layers** (weighted joint deltas applied post-blend, composition order from Spike B). Author 3 clips: idle-shuffle, walk-cycle, jump (anticipation → launch → tuck → land-squash → settle).
+Build: `Clip` schema (tracks of pose keyframes, per-key easing from a preset curve set, loop flags, events-on-time markers); clip player; blend tree with exactly two mechanisms — **crossfade** and **additive layers** — using the composition order proven in Spike 0-B (normative):
+
+1. Base blend: per-joint **angle-aware critically-damped SmoothDamp** carrying a persistent per-joint velocity that is never reset — a crossfade is nothing but a change of target, so interrupts continue from current position *and velocity* (Spike B: interrupt pop 1.04× a normal transition vs 13.85× for fixed-duration eased lerp). Shortest-arc via `wrapPi(a) = atan2(sin a, cos a)`; `smoothTime ≈ durationSec × 0.6`; linear variant for root offsets.
+2. Additive layers: weighted joint deltas added into a **throwaway per-tick buffer, never written back into blend state** (feedback drifts the integrator). Angular additives pre-FK; positional additives after the base root offset.
+3. FK solves the post-additive pose; secondary (P5) targets the post-additive result; render interpolation (two most recent sim snapshots, accumulator alpha) is the last step and never touches sim state.
+
+Author 3 clips: idle-shuffle, walk-cycle, jump (anticipation → launch → tuck → land-squash → settle).
 
 **Gate:** unit tests on interpolation math; numeric no-pop test (max joint angular velocity discontinuity across any transition < threshold); headless clip playback trace snapshot; independent review of the blend math.
 
@@ -128,7 +136,7 @@ Build: always-on controllers as additive contributors — breathing oscillator (
 
 ### Phase 5 — Shared verlet solver (L3) — size M/L
 
-Build: one solver instance per world — point particles, distance + pin constraints, relaxation iterations (fixed count, from Spike A), gravity, damping; **character secondary**: light chains (forearms, head, accessory points) whose constraint targets follow the post-L2 pose, producing lag/overshoot/settle; **props**: `disturbable` bodies spring-anchored to authored rest transforms (always come home; anchor stiffness per prop); **ropes**: particle chains between anchors, characters can load them (tightrope sag); **impulse API**: the only ways energy enters are behavior `impulse` steps and user input (poke/drag) — nothing else may inject forces; **sleeping**: bodies below energy threshold stop simulating and drop from the render-dirty set. Drag interaction rebuilt on this layer (drag Dash → limbs trail; release → settle to pose).
+Build: one solver instance per world — point particles, distance + pin constraints, relaxation iterations (fixed count: **4**, held 37 simultaneous constraints without stretch in Spike A), gravity (~1600 px/s² read right), damping (start ~0.96–0.97 per substep; Spike A's 0.985 settled too slowly after a hard yank); **character secondary**: light chains (forearms, head, accessory points) whose constraint targets follow the post-L2 (post-additive) pose — targeting the pre-additive pose strips the breathing from the follow-through and reads dead — with a hard length constraint to the FK anchor so positional lag becomes *angular* follow-through, not stretch (Spike B starting point: stiffness 0.28, damping 0.86, 2 iterations/tick); **props**: `disturbable` bodies spring-anchored to authored rest transforms (always come home; anchor stiffness per prop); **ropes**: particle chains between anchors, characters can load them (tightrope sag); **impulse API**: the only ways energy enters are behavior `impulse` steps and user input (poke/drag) — nothing else may inject forces; **sleeping**: bodies below energy threshold stop simulating and drop from the render-dirty set. Drag interaction rebuilt on this layer (drag Dash → limbs trail; release → settle to pose).
 
 **Gate:** headless replay of a scripted drag produces identical trace twice; settle-time bounds (prop disturbed by standard impulse returns to < 0.5 px of rest within N s, N per stiffness class); sleep coverage ≥ 90 % at idle; perf re-measured against budget. Independent review.
 
