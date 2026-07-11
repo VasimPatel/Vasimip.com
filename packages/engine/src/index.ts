@@ -21,3 +21,13 @@ export { serializeState, hashState } from './hash'
 
 export { solveFk } from './fk'
 export type { SolvedBone, SolvedSkeleton, SolveFkOptions } from './fk'
+
+// ── Phase 3: clips + blend layer (L1b) ───────────────────────────────────────
+export { wrapPi, lerp, smoothDamp, smoothDampAngle } from './math'
+export type { SmoothDampResult } from './math'
+
+export { sampleClip, markersCrossed, createClipPlayer, easeValue, clipDuration } from './clip'
+export type { ClipSample, ClipPlayer, ClipPlayerState } from './clip'
+
+export { createBlender } from './blender'
+export type { Blender, BlenderState, BlenderTick, BlenderOptions, AdditiveFn } from './blender'
