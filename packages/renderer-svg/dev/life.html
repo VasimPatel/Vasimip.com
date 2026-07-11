@@ -1,0 +1,35 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Dash Engine v2 — Phase 4 life review</title>
+    <style>
+      body { margin: 0; font: 14px/1.4 system-ui, sans-serif; background: #f4f1e8; color: #1a1a1a; }
+      h1 { font-size: 18px; padding: 16px 20px 4px; margin: 0; }
+      .sub { padding: 0 20px 12px; color: #666; font-size: 12px; }
+      section { padding: 4px 20px 18px; }
+      h2 { font-size: 15px; margin: 12px 0 2px; }
+      .meta { color: #666; font-size: 11px; margin-bottom: 6px; }
+      .strip { display: flex; gap: 0; overflow-x: auto; border: 1px solid #d8d2c2; background: #fffdf6; width: fit-content; max-width: 100%; }
+      .frame { display: flex; flex-direction: column; align-items: center; border-right: 1px solid #ece7d8; }
+      .frame:last-child { border-right: none; }
+      .frame .t { font-size: 10px; color: #888; padding: 3px 0; font-variant-numeric: tabular-nums; }
+      .frame.blink .t { color: #d6006e; font-weight: 700; }
+      .frame svg { display: block; background: #fffdf6; }
+      .amp .frame svg { background: #f7f4ff; }
+      .walk .frame svg { background: #eefaf0; }
+      .look .frame svg { background: #eef4ff; }
+      .live { display: flex; gap: 14px; flex-wrap: wrap; }
+      .live .panel { border: 1px solid #d8d2c2; }
+      .live .panel .cap { font-size: 11px; color: #666; padding: 2px 6px; background: #e9e4d6; }
+      .live svg { display: block; }
+    </style>
+  </head>
+  <body>
+    <h1>Dash Engine v2 — Phase 4 life review</h1>
+    <div class="sub">Always-on controllers (breathing, weight-shift, blink, look-at), two-bone IK gait, and the eye aux channel. Strips are deterministic; live panels run a real loop.</div>
+    <div id="app"></div>
+    <script type="module" src="./life.tsx"></script>
+  </body>
+</html>

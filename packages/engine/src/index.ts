@@ -31,3 +31,24 @@ export type { ClipSample, ClipPlayer, ClipPlayerState } from './clip'
 
 export { createBlender } from './blender'
 export type { Blender, BlenderState, BlenderTick, BlenderOptions, AdditiveFn } from './blender'
+
+// ── Phase 4: procedural controllers, IK, gait (L2) ───────────────────────────
+export { solveTwoBone, solveChainToLocal } from './ik'
+export type { TwoBoneResult, ChainLocalAngles } from './ik'
+
+export { breathing, weightShift, blink, lookAt, createControllerSet, NEUTRAL_FACE } from './controllers'
+export type {
+  FaceAux,
+  FaceFn,
+  Controller,
+  BlinkController,
+  BlinkState,
+  LookAtController,
+  LookAtOptions,
+  HeadFrame,
+  ControllerSet,
+  ControllerSetOptions,
+} from './controllers'
+
+export { createGait } from './gait'
+export type { Gait, GaitOptions, GaitFrame, PlantedFoot } from './gait'

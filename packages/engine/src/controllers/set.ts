@@ -1,0 +1,109 @@
+// Controller set (L2) — the small convenience that wires the standard always-on
+// controllers to a blender and exposes the eye aux channel + a per-tick update.
+//
+// It registers the ANGLE additives (breathing, weight-shift, look-at head) on the
+// blender at construction and unregisters them on dispose(). The FACE contributors
+// (blink, look-at pupils) are pulled by update(tick), which returns this tick's
+// FaceAux. Look-at needs the head's solved world frame, so the caller feeds each
+// tick's post-FK skeleton back via feedSolved() — a one-frame lag, which is the
+// bounded gaze lag the gate allows.
+//
+// Intended per-tick wiring (idle):
+//   const face = set.update(tick)        // advances blink/pupils, returns FaceAux
+//   const { pose } = blender.tick()      // pulls additives incl. look-at head
+//   const solved = solveFk(rig, pose, …) // post-additive FK
+//   set.feedSolved(solved)               // frame for NEXT tick's look-at
+//   renderer.render(solved, face)
+//
+// Controllers are BEHAVIOR, not blender state: after blender.setState(...) the
+// caller rebuilds the set (or re-adds additives) exactly as it re-registers any
+// additive. Blink carries a tiny schedule counter — snapshot via getBlinkState().
+
+import type { CharacterDoc, PersonalityParams, RigTemplate } from '@dash/schema'
+import type { Blender } from '../blender'
+import type { SolvedSkeleton } from '../fk'
+import type { Rng } from '../rng'
+import { breathing } from './breathing'
+import { weightShift } from './weight-shift'
+import { blink, type BlinkState } from './blink'
+import { lookAt, type HeadFrame, type LookAtOptions } from './look-at'
+import { NEUTRAL_FACE, type FaceAux } from './face'
+
+const HEAD_JOINT_ID = 'head'
+
+export interface ControllerSetOptions {
+  rng: Rng
+  /** Look-at target getter (world px). Omit or return null → no look-at. */
+  getTarget?: () => { x: number; y: number } | null
+  /** Override the character's personality (defaults to character.personality). */
+  personality?: PersonalityParams
+  lookAt?: LookAtOptions
+}
+
+export interface ControllerSet {
+  /** Additive ids registered on the blender (breathing, weightShift, lookAt). */
+  readonly additiveIds: readonly string[]
+  /** Advance the face contributors and return this tick's aux channel. */
+  update(tick: number): FaceAux
+  /** Feed the post-additive FK so the NEXT tick's look-at has a head frame. */
+  feedSolved(solved: SolvedSkeleton): void
+  /** Snapshot the blink schedule (the set's only non-rng internal state). */
+  getBlinkState(): BlinkState
+  setBlinkState(s: BlinkState): void
+  /** Unregister every additive this set added to the blender. */
+  dispose(): void
+}
+
+export function createControllerSet(
+  blender: Blender,
+  rig: RigTemplate,
+  character: CharacterDoc,
+  opts: ControllerSetOptions,
+): ControllerSet {
+  const personality = opts.personality ?? character.personality
+  const hasHead = rig.joints.some((j) => j.id === HEAD_JOINT_ID)
+
+  let lastHead: HeadFrame | null = null
+
+  const breathe = breathing(personality)
+  const sway = weightShift(personality)
+  const blinker = blink(opts.rng)
+  const gaze = opts.getTarget
+    ? lookAt(opts.getTarget, () => lastHead, opts.lookAt)
+    : null
+
+  blender.addAdditive(breathe.id, breathe.fn)
+  blender.addAdditive(sway.id, sway.fn)
+  if (gaze) blender.addAdditive(gaze.id, gaze.fn)
+
+  const additiveIds = gaze ? [breathe.id, sway.id, gaze.id] : [breathe.id, sway.id]
+
+  return {
+    additiveIds,
+
+    update(tick: number): FaceAux {
+      const face: FaceAux = { ...NEUTRAL_FACE }
+      const b = blinker.face(tick)
+      if (b.blink !== undefined) face.blink = b.blink
+      if (gaze) {
+        const g = gaze.face(tick)
+        if (g.pupilDx !== undefined) face.pupilDx = g.pupilDx
+        if (g.pupilDy !== undefined) face.pupilDy = g.pupilDy
+      }
+      return face
+    },
+
+    feedSolved(solved: SolvedSkeleton): void {
+      if (!hasHead) return
+      const head = solved.bones.find((bn) => bn.id === HEAD_JOINT_ID)
+      if (head) lastHead = { cx: head.ex, cy: head.ey, worldAngle: head.worldAngle }
+    },
+
+    getBlinkState: () => blinker.getState(),
+    setBlinkState: (s) => blinker.setState(s),
+
+    dispose(): void {
+      for (const id of additiveIds) blender.removeAdditive(id)
+    },
+  }
+}
