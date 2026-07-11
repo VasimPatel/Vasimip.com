@@ -52,7 +52,14 @@ export function createSim(worldDoc: WorldDocV2, opts?: { seed?: number }): Sim {
   const world = validated.doc
 
   let ctx: EngineContext = createContext({ seed: opts?.seed ?? world.seed })
-  let entities: EntityState[] = world.entities.map((e) => ({ id: e.id, x: e.x, y: e.y }))
+  // The Phase-1 placeholder dynamics only need a 2D position per entity; read it
+  // from the real `transform` component (default 0,0 when absent). Everything else
+  // about this file is still Phase-1 placeholder motion (see note below).
+  let entities: EntityState[] = world.entities.map((e) => ({
+    id: e.id,
+    x: e.components.transform?.x ?? 0,
+    y: e.components.transform?.y ?? 0,
+  }))
   let scheduled = new Map<number, Input[]>()
 
   // ── PHASE 1 PLACEHOLDER DYNAMICS ───────────────────────────────────────────

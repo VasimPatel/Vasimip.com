@@ -1,0 +1,27 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Dash Engine v2 — Phase 6a world review</title>
+    <style>
+      body { margin: 0; font: 14px/1.4 system-ui, sans-serif; background: #f4f1e8; color: #1a1a1a; }
+      h1 { font-size: 18px; padding: 16px 20px 4px; margin: 0; }
+      .sub { padding: 0 20px 12px; color: #666; font-size: 12px; }
+      section { padding: 4px 20px 18px; }
+      h2 { font-size: 15px; margin: 12px 0 2px; }
+      .meta { color: #666; font-size: 11px; margin-bottom: 6px; }
+      .box { border: 1px solid #d8d2c2; background: #fffdf6; width: fit-content; max-width: 100%; overflow: auto; }
+      .legend { display: flex; gap: 14px; font-size: 11px; margin: 4px 0 8px; align-items: center; flex-wrap: wrap; }
+      .swatch { display: inline-block; width: 16px; height: 3px; margin-right: 4px; vertical-align: middle; }
+      .readout { font: 12px ui-monospace, monospace; background: #fff; border: 1px solid #d8d2c2; padding: 6px 10px; margin-top: 6px; white-space: pre; }
+      svg { display: block; }
+    </style>
+  </head>
+  <body>
+    <h1>Dash Engine v2 — Phase 6a world review</h1>
+    <div class="sub">Real notebook layout as world surfaces: traversal graph overlay, swept-capsule collision events + enclosure, and a prop/rope resting on a panel via the verlet collision pass. Deterministic strips; the capsule panel is draggable.</div>
+    <div id="app"></div>
+    <script type="module" src="./world.tsx"></script>
+  </body>
+</html>

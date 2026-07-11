@@ -2,12 +2,20 @@ import { test, expect } from 'bun:test'
 import { tryValidateWorldV2, migrateToCurrent, CURRENT_SCHEMA_VERSION } from '../src/index'
 
 test('a valid WorldDocV2 passes', () => {
-  const r = tryValidateWorldV2({ schemaVersion: 2, seed: 1, entities: [{ id: 'a', x: 0, y: 0 }] })
+  const r = tryValidateWorldV2({
+    schemaVersion: 2,
+    seed: 1,
+    entities: [{ id: 'a', components: { transform: { x: 0, y: 0 } } }],
+  })
   expect(r.ok).toBe(true)
 })
 
 test('collects ALL problems as `path: message` strings (legacy ergonomics)', () => {
-  const r = tryValidateWorldV2({ schemaVersion: 1, seed: 'nope', entities: [{ id: '', x: 'a', y: 0 }] })
+  const r = tryValidateWorldV2({
+    schemaVersion: 1,
+    seed: 'nope',
+    entities: [{ id: '', components: { transform: { x: 'a', y: 0 } } }],
+  })
   expect(r.ok).toBe(false)
   if (!r.ok) {
     expect(r.errors.length).toBeGreaterThan(1)
@@ -16,7 +24,14 @@ test('collects ALL problems as `path: message` strings (legacy ergonomics)', () 
 })
 
 test('duplicate entity ids are flagged', () => {
-  const r = tryValidateWorldV2({ schemaVersion: 2, seed: 1, entities: [{ id: 'a', x: 0, y: 0 }, { id: 'a', x: 1, y: 1 }] })
+  const r = tryValidateWorldV2({
+    schemaVersion: 2,
+    seed: 1,
+    entities: [
+      { id: 'a', components: {} },
+      { id: 'a', components: {} },
+    ],
+  })
   expect(r.ok).toBe(false)
   if (!r.ok) expect(r.errors.some((e) => e.includes('duplicate'))).toBe(true)
 })

@@ -7,10 +7,10 @@ function makeWorld(): WorldDocV2 {
     schemaVersion: 2,
     seed: 1337,
     entities: [
-      { id: 'dash', x: 0, y: 0 },
-      { id: 'pip', x: 5, y: -3 },
-      { id: 'ball', x: -8, y: 2 },
-      { id: 'crate', x: 12, y: 7 },
+      { id: 'dash', components: { transform: { x: 0, y: 0 } } },
+      { id: 'pip', components: { transform: { x: 5, y: -3 } } },
+      { id: 'ball', components: { transform: { x: -8, y: 2 } } },
+      { id: 'crate', components: { transform: { x: 12, y: 7 } } },
     ],
   }
 }

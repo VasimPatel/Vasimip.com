@@ -80,3 +80,41 @@ export type {
 
 export { createSecondary, SECONDARY_STIFFNESS, SECONDARY_DAMPING, SECONDARY_ITERS } from './secondary'
 export type { Secondary, SecondaryOptions } from './secondary'
+
+export type { ParticleView, CollisionPass } from './verlet'
+
+// ── Phase 6a: world model (L5) — surfaces, collision, traversal ──────────────────
+export { surfaceGeometry, panelEdges, pointInBox } from './world/surfaces'
+export type { SurfaceGeometry } from './world/surfaces'
+
+export {
+  sweptCircleVsSegment,
+  sweptCapsuleVsSegment,
+  sweptCapsuleVsSegments,
+  sweptPointVsSegments,
+  stopAt,
+  slideAlong,
+  reflect,
+  buildCollisionWorld,
+  isEnclosed,
+  nearestSurface,
+  createContactTracker,
+  createVerletPanelCollider,
+} from './world/collision'
+export type {
+  Capsule,
+  SegmentRef,
+  SweptHit,
+  PanelCollision,
+  CollisionWorld,
+  NearestSurface,
+  Contact,
+  ContactEvent,
+  ContactTracker,
+} from './world/collision'
+
+export { buildTraversalGraph, checkGraphSanity } from './world/traversal'
+export type { TraversalGraph, TravNode, TravEdge, EdgeType, NodeKind, SanityReport } from './world/traversal'
+
+export { worldFromNotebook } from './world/from-notebook'
+export type { NotebookPageInput, NotebookPanelInput, PageWorld } from './world/from-notebook'
