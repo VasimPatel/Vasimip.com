@@ -13,6 +13,7 @@ import { migrate } from 'drizzle-orm/postgres-js/migrator'
 import { existsSync } from 'node:fs'
 import { db } from './db'
 import { seed } from './db/seed'
+import { auth } from './auth'
 import notebook from './routes/notebook'
 
 const PORT = Number(process.env.PORT) || 8787
@@ -37,6 +38,8 @@ app.use(
 app.use('/api/*', bodyLimit({ maxSize: 1024 * 1024 })) // 1 MB
 
 app.get('/api/health', (c) => c.json({ ok: true }))
+// Better Auth owns everything under /api/auth/* (passkey + magic-link + session).
+app.on(['GET', 'POST'], '/api/auth/*', (c) => auth.handler(c.req.raw))
 app.route('/api', notebook)
 
 // Static assets, then an SPA fallback for anything else that isn't /api/* and

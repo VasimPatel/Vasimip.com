@@ -14,4 +14,13 @@ export default defineConfig({
   build: {
     target: 'es2022',
   },
+  server: {
+    // Dev proxy so /api/auth (Better Auth) works under `bun run dev` WHEN the bun
+    // server is running on :8787. When it ISN'T, these requests fail — the admin's
+    // session check treats that network error as a DEV fail-open (see src/App.tsx),
+    // so the file-backed /__notebook admin keeps working fully offline.
+    proxy: {
+      '/api': { target: 'http://localhost:8787', changeOrigin: true },
+    },
+  },
 })

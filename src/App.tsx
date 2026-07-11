@@ -1,18 +1,51 @@
 import { lazy, Suspense } from 'react'
 import Notebook from './notebook/Notebook'
+import { useSession } from './admin/auth-client'
 
-// Dev-only WYSIWYG admin at /admin. `import.meta.env.DEV` is statically replaced
-// at build time, so in production this const is `null` and the dynamic import
-// (plus the entire src/admin tree) is dead-code-eliminated from the bundle.
-const Admin = import.meta.env.DEV ? lazy(() => import('./admin/Admin')) : null
+// The admin now ships in production at /admin — the server (`requireOwner`) is the
+// real boundary, so the client gate is purely cosmetic. The lazy chunk always
+// exists in the bundle now (fine).
+const Admin = lazy(() => import('./admin/Admin'))
+const Login = lazy(() => import('./admin/Login'))
 
-export default function App() {
-  if (Admin && window.location.pathname === '/admin') {
+function SpinCard() {
+  return (
+    <div className="login login-spin">
+      <div className="login-card">…unrolling the notebook</div>
+    </div>
+  )
+}
+
+function AdminGate() {
+  const { data, isPending, error, refetch } = useSession()
+
+  if (isPending) return <SpinCard />
+
+  // DEV fail-open: `bun run dev` (vite) proxies /api → the bun server, but that
+  // server may not be running (file-backed /__notebook admin still works). A
+  // NETWORK error (proxy can't reach it → 5xx / no status) in DEV means "no auth
+  // server" → let the admin through so offline editing keeps working. Any real
+  // 401/403 still shows the Login screen.
+  const status = (error as { status?: number } | null)?.status
+  const networkish = !!error && (status === undefined || status === 0 || status >= 500)
+  const devBypass = import.meta.env.DEV && networkish
+
+  if (data || devBypass) {
     return (
-      <Suspense fallback={<div style={{ padding: 24, fontFamily: 'system-ui' }}>loading admin…</div>}>
-        <Admin />
+      <Suspense fallback={<SpinCard />}>
+        <Admin devBypass={devBypass && !data} />
       </Suspense>
     )
   }
+
+  return (
+    <Suspense fallback={<SpinCard />}>
+      <Login onSignedIn={() => refetch()} />
+    </Suspense>
+  )
+}
+
+export default function App() {
+  if (window.location.pathname === '/admin') return <AdminGate />
   return <Notebook />
 }

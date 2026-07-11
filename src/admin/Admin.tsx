@@ -13,13 +13,14 @@ import PageCanvas from './PageCanvas'
 import Inspector from './Inspector'
 import ActionEditor from './ActionEditor'
 import Preview from './Preview'
+import { signOut, passkey } from './auth-client'
 
 type Sel = { kind: 'cover' } | { kind: 'page'; page: number }
 
 const seedTextBox = (w: number): BoxDoc => ({ kind: 'text', x: 18, y: 24, w: Math.min(200, w - 36), h: 30, text: 'PANEL', fam: 'marker', size: 20 })
 const NEW_PANEL: PanelDoc = { x: 340, y: 240, w: 240, h: 180, anchor: { dx: 120, dy: 0 }, sketch: 'b', boxes: [seedTextBox(240)] }
 
-export default function Admin() {
+export default function Admin({ devBypass = false }: { devBypass?: boolean }) {
   const [doc, setDoc] = useState<NotebookDoc | null>(null)
   // Undo/redo history of IMMUTABLE doc snapshots. `savedDocRef` marks the
   // last-persisted snapshot; because snapshots are shared by reference, dirty is
@@ -318,6 +319,22 @@ export default function Admin() {
         <button className="qbtn" onClick={() => fileRef.current?.click()}>import</button>
         <input ref={fileRef} type="file" accept="application/json" style={{ display: 'none' }} onChange={(e) => { const f = e.target.files?.[0]; if (f) importDoc(f); e.target.value = '' }} />
         <button className="savebtn" data-testid="save-btn" disabled={!valid} onClick={save}>{dirty ? 'save the page' : 'saved ✓'}</button>
+        {devBypass ? (
+          // No auth server reachable in dev — the gate was bypassed; flag it.
+          <span className="acct-badge" title="dev bypass — no auth server">dev</span>
+        ) : (
+          <>
+            <button
+              className="acct-btn"
+              title="register a passkey on this device for faster sign-in next time"
+              onClick={async () => {
+                const res = await passkey.addPasskey()
+                window.alert(res?.error ? 'Could not add a passkey: ' + res.error.message : 'Passkey added to this device ✓')
+              }}
+            >+ passkey</button>
+            <button className="acct-btn" onClick={async () => { await signOut(); window.location.reload() }}>sign out</button>
+          </>
+        )}
       </header>
 
       {errs.length > 0 && showErrs && (

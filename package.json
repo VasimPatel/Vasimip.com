@@ -16,6 +16,8 @@
     "db:seed": "bun server/db/seed.ts"
   },
   "dependencies": {
+    "@better-auth/passkey": "^1.6.23",
+    "better-auth": "^1.6.23",
     "drizzle-orm": "^0.44.0",
     "hono": "^4.6.0",
     "postgres": "^3.4.0",

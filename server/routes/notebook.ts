@@ -3,22 +3,17 @@
 // Every save is a new `notebook_revisions` row; `notebook_current` is a
 // singleton pointer. `baseRevisionId` mismatch on PUT → 409 (two-device safety).
 //
-// TEMP AUTH STUB: mutating routes require header `x-admin-token` to match env
-// `ADMIN_DEV_TOKEN`. This is replaced by Better Auth's `requireOwner` in step 2
-// of the plan — do not build on top of this beyond that point.
+// GET /notebook is public; every mutating/owner route is gated by `requireOwner`
+// (Better Auth session → owner email). See server/middleware.ts.
 // ─────────────────────────────────────────────────────────────────────────────
 import { Hono } from 'hono'
 import { eq, desc } from 'drizzle-orm'
 import { db } from '../db'
 import { notebookRevisions, notebookCurrent } from '../db/schema'
 import { tryValidateDoc } from '../../src/notebook/doc/validate'
+import { requireOwner } from '../middleware'
 
 const notebook = new Hono()
-
-async function requireAdminStub(c: { req: { header: (k: string) => string | undefined } }): Promise<boolean> {
-  const token = c.req.header('x-admin-token')
-  return Boolean(token) && token === process.env.ADMIN_DEV_TOKEN
-}
 
 async function getCurrent(): Promise<{ revisionId: number; doc: unknown } | null> {
   const rows = await db
@@ -41,9 +36,7 @@ notebook.get('/notebook', async (c) => {
   return c.json({ doc: current.doc, revisionId: current.revisionId })
 })
 
-notebook.put('/notebook', async (c) => {
-  if (!(await requireAdminStub(c))) return c.json({ errors: ['unauthorized'] }, 401)
-
+notebook.put('/notebook', requireOwner, async (c) => {
   const body = await c.req.json().catch(() => null) as { doc?: unknown; baseRevisionId?: unknown; note?: unknown } | null
   if (!body || typeof body.baseRevisionId !== 'number') {
     return c.json({ errors: ['body must be { doc, baseRevisionId, note? }'] }, 400)
@@ -72,9 +65,7 @@ notebook.put('/notebook', async (c) => {
   return c.json({ revisionId })
 })
 
-notebook.get('/revisions', async (c) => {
-  if (!(await requireAdminStub(c))) return c.json({ errors: ['unauthorized'] }, 401)
-
+notebook.get('/revisions', requireOwner, async (c) => {
   const rows = await db
     .select({
       id: notebookRevisions.id,
@@ -89,9 +80,7 @@ notebook.get('/revisions', async (c) => {
   return c.json(rows)
 })
 
-notebook.post('/revisions/:id/restore', async (c) => {
-  if (!(await requireAdminStub(c))) return c.json({ errors: ['unauthorized'] }, 401)
-
+notebook.post('/revisions/:id/restore', requireOwner, async (c) => {
   const id = Number(c.req.param('id'))
   if (!Number.isInteger(id)) return c.json({ errors: ['invalid revision id'] }, 400)
 

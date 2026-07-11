@@ -409,6 +409,72 @@
 .cue-lbl { font: 9px/1.2 ui-monospace, monospace; color: #6a6458; margin-top: 1px; white-space: nowrap; }
 .cue-auto { margin-left: 3px; font-size: 8px; text-transform: uppercase; letter-spacing: .4px; background: #e6e0cc; color: #8a8272; padding: 0 3px; border-radius: 6px; }
 
+/* ── login gate (the cosmetic front door) ────────────────────────────────── */
+.login {
+  position: fixed; inset: 0; display: flex; align-items: center; justify-content: center;
+  background: #8f7b5e; padding: 20px;
+  font: 13px/1.4 system-ui, -apple-system, sans-serif; color: #23211c;
+}
+.login-card {
+  width: 340px; max-width: 100%; background: #fdfbf6;
+  border: 2.5px solid #23211c; border-radius: 18px 24px 18px 26px;
+  box-shadow: 5px 7px 0 rgba(35, 33, 28, .25); padding: 26px 26px 28px;
+  transform: rotate(-.6deg);
+}
+.login-title { font-family: 'Permanent Marker', cursive; font-size: 27px; line-height: 1; }
+.login-sub { font-family: 'Caveat', cursive; font-size: 17px; color: #6f6a5c; margin: 4px 0 20px; }
+.login-primary {
+  width: 100%; font: inherit; font-family: 'Permanent Marker', cursive; font-size: 18px;
+  padding: 9px 18px; cursor: pointer; background: #ffd23f; color: #23211c;
+  border: 2.5px solid #23211c; border-radius: 12px 16px 12px 16px;
+  box-shadow: 2px 3px 0 rgba(35, 33, 28, .25);
+}
+.login-primary:hover:not(:disabled) { background: #ffda5c; }
+.login-primary:disabled { opacity: .6; cursor: default; box-shadow: none; }
+.login-or {
+  display: flex; align-items: center; gap: 10px; margin: 16px 2px;
+  font-family: 'Caveat', cursive; font-size: 16px; color: #9a937f;
+}
+.login-or::before, .login-or::after { content: ''; flex: 1; border-top: 2px dashed #c9c1a8; }
+.login-email { display: flex; flex-direction: column; gap: 9px; }
+.login-input {
+  width: 100%; box-sizing: border-box; font: inherit; font-size: 15px; color: #23211c;
+  padding: 8px 11px; background: #fffdf6; outline: none;
+  border: 2px dashed #b0a88e; border-radius: 9px;
+}
+.login-input:focus { border-color: #23211c; border-style: solid; }
+.login-secondary {
+  width: 100%; font: inherit; font-size: 15px; padding: 7px 16px; cursor: pointer;
+  background: #fff; color: #23211c; border: 2.5px solid #23211c; border-radius: 16px 12px 16px 12px;
+  box-shadow: 2px 3px 0 rgba(35, 33, 28, .2);
+}
+.login-secondary:hover:not(:disabled) { background: #fdf3cf; }
+.login-secondary:disabled { opacity: .5; cursor: default; box-shadow: none; }
+.login-err { font-family: 'Caveat', cursive; font-size: 16px; color: #b03030; margin-top: 12px; }
+.login-sent { text-align: center; padding: 6px 0 2px; }
+.login-sent-big { font-family: 'Permanent Marker', cursive; font-size: 21px; }
+.login-sent-sm { font-family: 'Caveat', cursive; font-size: 16px; color: #6f6a5c; margin: 8px 0 16px; line-height: 1.3; }
+.login-ghost {
+  font: inherit; font-family: 'Caveat', cursive; font-size: 16px; color: #6f6a5c;
+  background: transparent; border: none; cursor: pointer;
+}
+.login-ghost:hover { color: #23211c; }
+
+/* a tiny comic spinner card while the session resolves */
+.login-spin { font-family: 'Caveat', cursive; font-size: 20px; color: #6f6a5c; text-align: center; }
+.login-spin .login-card { transform: rotate(.5deg); padding: 30px 34px; }
+
+/* ── admin header account bits (sign out · add passkey · dev badge) ───────── */
+.acct-badge {
+  font-family: 'Caveat', cursive; font-size: 15px; color: #8a7f66;
+  border: 1.5px dashed #c9bda2; border-radius: 7px; padding: 0 8px; white-space: nowrap;
+}
+.acct-btn {
+  font: inherit; font-size: 13px; padding: 2px 10px; cursor: pointer; color: #6f6a5c;
+  background: transparent; border: 1.5px solid #d6cdb2; border-radius: 7px; white-space: nowrap;
+}
+.acct-btn:hover { background: #efe9d6; border-color: #b0a88e; color: #23211c; }
+
 /* ── preview drawer ──────────────────────────────────────────────────────── */
 .preview { flex-shrink: 0; border-top: 2.5px solid #23211c; background: #23211d; }
 .preview-bar { display: flex; align-items: center; gap: 8px; padding: 5px 16px; color: #ece6d6; cursor: pointer; font-family: 'Caveat', cursive; font-size: 16px; }
