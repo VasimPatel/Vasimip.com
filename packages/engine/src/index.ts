@@ -18,3 +18,6 @@ export { createContext } from './context'
 export type { EngineContext } from './context'
 
 export { serializeState, hashState } from './hash'
+
+export { solveFk } from './fk'
+export type { SolvedBone, SolvedSkeleton, SolveFkOptions } from './fk'

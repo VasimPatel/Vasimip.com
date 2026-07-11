@@ -1,0 +1,23 @@
+{
+  "id": "stand",
+  "root": {
+    "x": -2,
+    "y": 16,
+    "rot": 0
+  },
+  "angles": {
+    "pelvis": -1.490966,
+    "neck": -0.07983,
+    "head": 0.141897,
+    "upperArmR": 1.980924,
+    "foreArmR": 1.621259,
+    "upperArmL": -2.359253,
+    "foreArmL": -1.14047,
+    "thighR": 2.408916,
+    "shinR": 0.535738,
+    "footR": -1.273834,
+    "thighL": -2.672873,
+    "shinL": -0.424194,
+    "footL": 1.249046
+  }
+}

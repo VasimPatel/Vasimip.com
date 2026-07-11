@@ -1,0 +1,23 @@
+{
+  "id": "cheer",
+  "root": {
+    "x": -2,
+    "y": 16,
+    "rot": 0
+  },
+  "angles": {
+    "pelvis": -1.490966,
+    "neck": -0.07983,
+    "head": 0.141897,
+    "upperArmR": 0.575866,
+    "foreArmR": 0,
+    "upperArmL": -0.774568,
+    "foreArmL": 0.089194,
+    "thighR": 2.4471,
+    "shinR": 0.497554,
+    "footR": -1.273834,
+    "thighL": -2.714324,
+    "shinL": -0.382744,
+    "footL": 1.249046
+  }
+}

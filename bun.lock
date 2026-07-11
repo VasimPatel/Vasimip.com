@@ -30,9 +30,20 @@
     "packages/engine": {
       "name": "@dash/engine",
       "version": "0.0.0",
+      "dependencies": {
+        "@dash/schema": "workspace:*",
+      },
     },
     "packages/headless": {
       "name": "@dash/headless",
+      "version": "0.0.0",
+      "dependencies": {
+        "@dash/engine": "workspace:*",
+        "@dash/schema": "workspace:*",
+      },
+    },
+    "packages/renderer-svg": {
+      "name": "@dash/renderer-svg",
       "version": "0.0.0",
       "dependencies": {
         "@dash/engine": "workspace:*",
@@ -68,6 +79,8 @@
     "@dash/engine": ["@dash/engine@workspace:packages/engine"],
 
     "@dash/headless": ["@dash/headless@workspace:packages/headless"],
+
+    "@dash/renderer-svg": ["@dash/renderer-svg@workspace:packages/renderer-svg"],
 
     "@dash/schema": ["@dash/schema@workspace:packages/schema"],
 

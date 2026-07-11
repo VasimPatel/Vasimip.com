@@ -1,0 +1,23 @@
+{
+  "id": "squash-land",
+  "root": {
+    "x": 0,
+    "y": 28,
+    "rot": 0
+  },
+  "angles": {
+    "pelvis": -1.19029,
+    "neck": -0.135528,
+    "head": 0.076772,
+    "upperArmR": 2.173084,
+    "foreArmR": 0.047583,
+    "upperArmL": -1.592532,
+    "foreArmL": 0.537285,
+    "thighR": 0.772066,
+    "shinR": 1.889352,
+    "footR": -1.273732,
+    "thighL": -1.592532,
+    "shinL": -2.040224,
+    "footL": 1.484058
+  }
+}
