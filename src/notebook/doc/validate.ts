@@ -5,15 +5,22 @@
 // POSTing hand-edited docs.
 // ─────────────────────────────────────────────────────────────────────────────
 import {
-  ARRIVAL_POSES, ELEMENT_TYPES, BUILTIN_MODES, STEP_KINDS, FX_KINDS, EASE_NAMES, SFX_KINDS, POSES, SKETCH_RADII,
+  ARRIVAL_POSES, BOX_KINDS, FAM_VALUES, BUILTIN_MODES, STEP_KINDS, FX_KINDS, EASE_NAMES, SFX_KINDS, POSES, SKETCH_RADII,
 } from './docTypes'
 import type {
-  NotebookDoc, CoverDoc, PageDoc, PanelDoc, ArrivalDoc, ElementDoc, ActionDoc, ActionWhen, Step, MoveTarget, TravelConfig,
+  NotebookDoc, CoverDoc, PageDoc, PanelDoc, ArrivalDoc, BoxDoc, ActionDoc, ActionWhen, Step, MoveTarget, TravelConfig,
 } from './docTypes'
 
 const MAX_PAGES = 12
 const MAX_STEPS = 32
 const MAX_ACTION_MS = 8000
+const MAX_TEXT_CHARS = 2000
+const MAX_STROKES = 64
+const MAX_PATH_CHARS = 6000
+const MAX_PID_CHARS = 24
+/** How far (px) a box may stray beyond its panel's rect before it's flagged. */
+const BOX_BAND = 400
+const PATH_D_RE = /^[MLQCZmlqcz0-9 ,.\-]+$/
 
 type Issues = string[]
 
@@ -31,55 +38,60 @@ function oneOf<T extends string>(x: unknown, allowed: readonly T[]): x is T {
 
 // ── field checkers (push problems onto `issues`, prefixed with `path`) ─────
 
-function checkPlace(x: unknown, path: string, issues: Issues): void {
-  if (x === undefined) return
-  if (!isPlainObject(x)) { issues.push(`${path}: place must be an object`); return }
-  for (const k of ['left', 'right', 'top', 'bottom', 'width'] as const) {
-    if (x[k] !== undefined && !isFiniteNumber(x[k])) issues.push(`${path}.place.${k}: must be a finite number`)
-  }
-}
+function checkBox(x: unknown, path: string, issues: Issues, panelW: unknown, panelH: unknown): void {
+  if (!isPlainObject(x)) { issues.push(`${path}: box must be an object`); return }
+  if (!oneOf(x.kind, BOX_KINDS)) { issues.push(`${path}.kind: unknown box kind ${JSON.stringify(x.kind)}`); return }
 
-function checkElement(x: unknown, path: string, issues: Issues): void {
-  if (!isPlainObject(x)) { issues.push(`${path}: element must be an object`); return }
-  if (!oneOf(x.type, ELEMENT_TYPES)) { issues.push(`${path}.type: unknown element type ${JSON.stringify(x.type)}`); return }
-  checkPlace(x.place, path, issues)
-  if (x.grow !== undefined && typeof x.grow !== 'boolean') issues.push(`${path}.grow: must be a boolean`)
+  // Geometry: finite, and within a generous band around the panel's rect.
+  for (const k of ['x', 'y', 'w', 'h'] as const) {
+    if (!isFiniteNumber(x[k])) issues.push(`${path}.${k}: required finite number`)
+  }
+  if (isFiniteNumber(x.x) && isFiniteNumber(x.y) && isFiniteNumber(panelW) && isFiniteNumber(panelH)) {
+    if (x.x < -BOX_BAND || x.x > panelW + BOX_BAND || x.y < -BOX_BAND || x.y > panelH + BOX_BAND) {
+      issues.push(`${path}: strayed too far from its panel (x ${x.x}, y ${x.y})`)
+    }
+  }
+  if (x.rot !== undefined && !isFiniteNumber(x.rot)) issues.push(`${path}.rot: must be a finite number`)
   if (x.showIfFlag !== undefined && typeof x.showIfFlag !== 'string') issues.push(`${path}.showIfFlag: must be a string`)
 
-  switch (x.type) {
-    case 'heading':
-      if (typeof x.text !== 'string') issues.push(`${path}.text: required string`)
-      if (x.prefix !== undefined && typeof x.prefix !== 'string') issues.push(`${path}.prefix: must be a string`)
-      if (!isFiniteNumber(x.size)) issues.push(`${path}.size: required finite number`)
-      if (x.highlight !== undefined && !oneOf(x.highlight, ['yellow', 'pink'])) issues.push(`${path}.highlight: must be 'yellow' or 'pink'`)
-      if (x.suffix !== undefined && typeof x.suffix !== 'string') issues.push(`${path}.suffix: must be a string`)
-      if (x.rotate !== undefined && !isFiniteNumber(x.rotate)) issues.push(`${path}.rotate: must be a finite number`)
-      break
-    case 'text':
-      if (typeof x.text !== 'string') issues.push(`${path}.text: required string`)
-      if (!isFiniteNumber(x.size)) issues.push(`${path}.size: required finite number`)
-      if (x.tone !== undefined && !oneOf(x.tone, ['ink', 'muted', 'faint'])) issues.push(`${path}.tone: must be ink|muted|faint`)
-      if (x.lineHeight !== undefined && !isFiniteNumber(x.lineHeight)) issues.push(`${path}.lineHeight: must be a finite number`)
-      break
-    case 'caption':
-      if (typeof x.text !== 'string') issues.push(`${path}.text: required string`)
+  switch (x.kind) {
+    case 'text': {
+      if (typeof x.text !== 'string') { issues.push(`${path}.text: required string`); break }
+      if (x.text.length > MAX_TEXT_CHARS) issues.push(`${path}.text: ${x.text.length} chars exceeds the cap of ${MAX_TEXT_CHARS}`)
+      if (x.fam !== undefined && !oneOf(x.fam, FAM_VALUES)) issues.push(`${path}.fam: unknown family ${JSON.stringify(x.fam)}`)
       if (x.size !== undefined && !isFiniteNumber(x.size)) issues.push(`${path}.size: must be a finite number`)
+      if (x.color !== undefined && typeof x.color !== 'string') issues.push(`${path}.color: must be a string`)
+      if (x.hl !== undefined && !oneOf(x.hl, ['yellow', 'pink'])) issues.push(`${path}.hl: must be 'yellow' or 'pink'`)
+      if (x.note !== undefined && typeof x.note !== 'boolean') issues.push(`${path}.note: must be a boolean`)
+      if (x.charRots !== undefined) {
+        if (!Array.isArray(x.charRots)) {
+          issues.push(`${path}.charRots: must be an array`)
+        } else {
+          const nonSpace = (x.text.match(/\S/g) ?? []).length
+          if (x.charRots.length > nonSpace) issues.push(`${path}.charRots: length ${x.charRots.length} exceeds non-space char count ${nonSpace}`)
+          x.charRots.forEach((r, i) => {
+            if (r === null) return
+            if (!isFiniteNumber(r) || r < -45 || r > 45) issues.push(`${path}.charRots[${i}]: must be null or a number in [-45, 45]`)
+          })
+        }
+      }
       break
-    case 'note':
-      if (typeof x.text !== 'string') issues.push(`${path}.text: required string`)
-      if (x.size !== undefined && !isFiniteNumber(x.size)) issues.push(`${path}.size: must be a finite number`)
-      if (x.lineHeight !== undefined && !isFiniteNumber(x.lineHeight)) issues.push(`${path}.lineHeight: must be a finite number`)
+    }
+    case 'draw': {
+      if (x.strokeColor !== undefined && typeof x.strokeColor !== 'string') issues.push(`${path}.strokeColor: must be a string`)
+      if (x.strokeW !== undefined && !isFiniteNumber(x.strokeW)) issues.push(`${path}.strokeW: must be a finite number`)
+      if (!Array.isArray(x.strokes)) { issues.push(`${path}.strokes: required array of path strings`); break }
+      if (x.strokes.length > MAX_STROKES) issues.push(`${path}.strokes: ${x.strokes.length} strokes exceeds the cap of ${MAX_STROKES}`)
+      let total = 0
+      x.strokes.forEach((d, i) => {
+        if (typeof d !== 'string') { issues.push(`${path}.strokes[${i}]: must be a string`); return }
+        total += d.length
+        if (!PATH_D_RE.test(d)) issues.push(`${path}.strokes[${i}]: contains characters outside the allowed path grammar`)
+      })
+      if (total > MAX_PATH_CHARS) issues.push(`${path}.strokes: ${total} total path chars exceeds the cap of ${MAX_PATH_CHARS}`)
       break
-    case 'placeholder':
-      if (typeof x.text !== 'string') issues.push(`${path}.text: required string`)
-      break
-    case 'checklist':
-      if (!Array.isArray(x.items) || !x.items.every((i) => typeof i === 'string')) issues.push(`${path}.items: required string[]`)
-      if (x.size !== undefined && !isFiniteNumber(x.size)) issues.push(`${path}.size: must be a finite number`)
-      if (x.lineHeight !== undefined && !isFiniteNumber(x.lineHeight)) issues.push(`${path}.lineHeight: must be a finite number`)
-      if (x.gap !== undefined && !isFiniteNumber(x.gap)) issues.push(`${path}.gap: must be a finite number`)
-      break
-    case 'custom':
+    }
+    case 'art':
       if (typeof x.component !== 'string' || x.component.length === 0) issues.push(`${path}.component: required non-empty string`)
       if (x.props !== undefined && !isPlainObject(x.props)) issues.push(`${path}.props: must be an object`)
       break
@@ -135,13 +147,11 @@ function checkPanel(x: unknown, path: string, issues: Issues, actionNames: Set<s
   checkTravelConfig(x.travel, `${path}.travel`, issues, actionNames)
   if (x.rotate !== undefined && !isFiniteNumber(x.rotate)) issues.push(`${path}.rotate: must be a finite number`)
   if (x.sketch !== undefined && !(typeof x.sketch === 'string' && x.sketch in SKETCH_RADII)) issues.push(`${path}.sketch: unknown sketch variant ${JSON.stringify(x.sketch)}`)
-  if (x.padding !== undefined && typeof x.padding !== 'string') issues.push(`${path}.padding: must be a string`)
-  if (x.layout !== undefined && !oneOf(x.layout, ['flow', 'none'])) issues.push(`${path}.layout: must be 'flow' or 'none'`)
-  if (x.gap !== undefined && !isFiniteNumber(x.gap)) issues.push(`${path}.gap: must be a finite number`)
-  if (!Array.isArray(x.elements) || x.elements.length === 0) {
-    issues.push(`${path}.elements: required non-empty array`)
+  if (x.pid !== undefined && (typeof x.pid !== 'string' || x.pid.length > MAX_PID_CHARS)) issues.push(`${path}.pid: must be a string of at most ${MAX_PID_CHARS} chars`)
+  if (!Array.isArray(x.boxes) || x.boxes.length === 0) {
+    issues.push(`${path}.boxes: required non-empty array`)
   } else {
-    x.elements.forEach((el, i) => checkElement(el, `${path}.elements[${i}]`, issues))
+    x.boxes.forEach((b, i) => checkBox(b, `${path}.boxes[${i}]`, issues, x.w, x.h))
   }
 }
 
@@ -314,4 +324,4 @@ export function validateDoc(x: unknown): NotebookDoc {
 }
 
 // Re-exported so callers of validate.ts don't need a separate import for these types.
-export type { NotebookDoc, CoverDoc, PageDoc, PanelDoc, ArrivalDoc, ElementDoc, ActionDoc, ActionWhen, Step, MoveTarget, TravelConfig }
+export type { NotebookDoc, CoverDoc, PageDoc, PanelDoc, ArrivalDoc, BoxDoc, ActionDoc, ActionWhen, Step, MoveTarget, TravelConfig }

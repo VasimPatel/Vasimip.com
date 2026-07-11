@@ -15,7 +15,7 @@ import Preview from './Preview'
 type Sel = { kind: 'cover' } | { kind: 'page'; page: number }
 type Tab = 'pages' | 'actions'
 
-const NEW_PANEL: PanelDoc = { x: 60, y: 90, w: 240, h: 180, anchor: { dx: 120, dy: 0 }, elements: [{ type: 'heading', text: 'PANEL', size: 20 }] }
+const NEW_PANEL: PanelDoc = { x: 60, y: 90, w: 240, h: 180, anchor: { dx: 120, dy: 0 }, boxes: [{ kind: 'text', x: 16, y: 16, w: 200, h: 26, text: 'PANEL', fam: 'marker', size: 20 }] }
 
 export default function Admin() {
   const [doc, setDoc] = useState<NotebookDoc | null>(null)
@@ -200,7 +200,7 @@ export default function Admin() {
 
   // ── page-list operations ───────────────────────────────────────────────────
   const addPage = () => {
-    update((d) => ({ ...d, pages: [...d.pages, { name: 'PAGE ' + (d.pages.length + 1), snark: '', panels: [{ ...NEW_PANEL, elements: [{ type: 'heading', text: 'PANEL', size: 20 }] }] }] }))
+    update((d) => ({ ...d, pages: [...d.pages, { name: 'PAGE ' + (d.pages.length + 1), snark: '', panels: [{ ...NEW_PANEL, boxes: [{ kind: 'text', x: 16, y: 16, w: 200, h: 26, text: 'PANEL', fam: 'marker', size: 20 }] }] }] }))
     setSel({ kind: 'page', page: doc.pages.length })
     setPanelSel(0)
   }

@@ -15,8 +15,12 @@ export type JsonValue = string | number | boolean | null | JsonValue[] | { [key:
 export const ARRIVAL_POSES = ['fight', 'think', 'spray', 'cheer'] as const
 export type ArrivalPose = (typeof ARRIVAL_POSES)[number]
 
-export const ELEMENT_TYPES = ['heading', 'text', 'caption', 'note', 'placeholder', 'checklist', 'custom'] as const
-export type ElementType = (typeof ELEMENT_TYPES)[number]
+export const BOX_KINDS = ['text', 'draw', 'art'] as const
+export type BoxKind = (typeof BOX_KINDS)[number]
+
+/** Text-box font families: hand = 'Patrick Hand', marker = 'Permanent Marker', caveat = 'Caveat'. */
+export const FAM_VALUES = ['hand', 'marker', 'caveat'] as const
+export type FamKind = (typeof FAM_VALUES)[number]
 
 export const BUILTIN_MODES = ['walk', 'hop', 'roll', 'poof', 'vault', 'rope', 'swing', 'wallrun', 'slide', 'smash', 'combo'] as const
 export type BuiltinMode = (typeof BUILTIN_MODES)[number]
@@ -55,88 +59,52 @@ export const SKETCH_RADII: Record<'a' | 'b' | 'c', string> = {
 }
 export type SketchVariant = keyof typeof SKETCH_RADII
 
-// ── Elements ────────────────────────────────────────────────────────────────
-/** Absolute placement of an element within its panel (overrides normal flow). */
-export interface PlaceDoc {
-  left?: number
-  right?: number
-  top?: number
-  bottom?: number
-  width?: number
-}
-
-interface ElementShared {
-  /** Absolute position within the panel; omit to let the element sit in normal flow. */
-  place?: PlaceDoc
-  /** flex:1 — let the element grow to fill remaining panel space (flow layout only). */
-  grow?: boolean
-  /** Only render this element once `state.flags[showIfFlag]` is true. */
+// ── Boxes ─────────────────────────────────────────────────────────────────
+// A panel is a free-positioned whiteboard: every piece of content is a `BoxDoc`
+// placed absolutely (x/y/w/h in panel-local px, optional rotation). Three kinds:
+// text (words), draw (pen strokes), art (a locked registry component).
+export interface BoxBase {
+  /** Panel-local position + size, in px (top-left origin). */
+  x: number
+  y: number
+  w: number
+  h: number
+  /** Degrees, applied to the box itself (independent of panel rotate). */
+  rot?: number
+  /** Only render this box once `state.flags[showIfFlag]` is true. */
   showIfFlag?: string
 }
 
-export interface HeadingElement extends ElementShared {
-  type: 'heading'
+export interface TextBox extends BoxBase {
+  kind: 'text'
+  /** '\n' renders as a line break (whitespace: pre-line). */
   text: string
-  /** Plain (non-highlighted) text rendered before `text`, e.g. "THE ADVENTURES OF". */
-  prefix?: string
-  size: number
-  highlight?: 'yellow' | 'pink'
-  /** Small Caveat aside after the heading, e.g. "(verified-ish)". */
-  suffix?: string
-  /** Degrees, applied to the heading text itself (independent of panel rotate). */
-  rotate?: number
-}
-
-export interface TextElement extends ElementShared {
-  type: 'text'
-  /** '\n' renders as a <br>. */
-  text: string
-  size: number
-  tone?: 'ink' | 'muted' | 'faint'
-  lineHeight?: number
-}
-
-export interface CaptionElement extends ElementShared {
-  type: 'caption'
-  text: string
+  fam?: FamKind
   size?: number
+  color?: string
+  hl?: 'yellow' | 'pink'
+  /** Render inside the bordered index-card style. */
+  note?: boolean
+  /** Sparse per-(non-space-)char tilt in degrees; null entries render upright. */
+  charRots?: (number | null)[]
 }
 
-export interface NoteElement extends ElementShared {
-  type: 'note'
-  text: string
-  size?: number
-  lineHeight?: number
+export interface DrawBox extends BoxBase {
+  kind: 'draw'
+  strokeColor?: string
+  strokeW?: number
+  /** SVG path `d` strings, panel-local coordinates. */
+  strokes: string[]
 }
 
-export interface PlaceholderElement extends ElementShared {
-  type: 'placeholder'
-  text: string
-}
-
-export interface ChecklistElement extends ElementShared {
-  type: 'checklist'
-  items: string[]
-  size?: number
-  lineHeight?: number
-  gap?: number
-}
-
-export interface CustomElement extends ElementShared {
-  type: 'custom'
+export interface ArtBox extends BoxBase {
+  kind: 'art'
   /** Registry component name, e.g. 'fightScene'. Unknown names render a labeled dashed box. */
   component: string
   props?: Record<string, JsonValue>
 }
 
-export type ElementDoc =
-  | HeadingElement
-  | TextElement
-  | CaptionElement
-  | NoteElement
-  | PlaceholderElement
-  | ChecklistElement
-  | CustomElement
+export type BoxDoc = TextBox | DrawBox | ArtBox
 
 // ── Arrival (Dash's behaviour on landing at a panel) ───────────────────────
 export interface ArrivalDoc {
@@ -206,12 +174,9 @@ export interface PanelDoc {
   /** Degrees. */
   rotate?: number
   sketch?: SketchVariant
-  /** CSS padding shorthand, e.g. "16px 22px". */
-  padding?: string
-  /** 'flow' = flex column (see `gap`); omit for plain block stacking. */
-  layout?: 'flow' | 'none'
-  gap?: number
-  elements: ElementDoc[]
+  /** Editable ID tag (e.g. "P·01"), authoring metadata only — no runtime semantics. */
+  pid?: string
+  boxes: BoxDoc[]
 }
 
 export interface PageDoc {

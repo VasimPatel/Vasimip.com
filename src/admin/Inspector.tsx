@@ -1,12 +1,12 @@
-// Right-hand inspector. For a selected panel: geometry, presentation, the
-// ordered element list (with per-type mini-forms) and Dash's arrival + travel
-// config. For the cover selection: the three cover text fields.
-import { useState } from 'react'
+// Right-hand inspector. For a selected panel: geometry, presentation, Dash's
+// arrival + travel config, and a read-only box count. The per-box whiteboard
+// editor is coming with the admin rebuild (Part 2) — for now content is edited
+// by re-running the migration or hand-editing the doc.
 import {
-  ARRIVAL_POSES, BUILTIN_MODES, ELEMENT_TYPES, SFX_KINDS,
-  type ArrivalDoc, type CoverDoc, type ElementDoc, type ElementType, type JsonValue, type PanelDoc, type PlaceDoc,
+  ARRIVAL_POSES, BUILTIN_MODES, SFX_KINDS,
+  type ArrivalDoc, type CoverDoc, type PanelDoc,
 } from '../notebook/doc/docTypes'
-import { CheckField, Field, NumField, Section, SelectField, TextField } from './fields'
+import { CheckField, NumField, Section, SelectField, TextField } from './fields'
 
 interface Props {
   kind: 'cover' | 'page'
@@ -16,16 +16,6 @@ interface Props {
   registryKeys: string[]
   updateCover: (fn: (c: CoverDoc) => CoverDoc) => void
   updatePanel: (fn: (p: PanelDoc) => PanelDoc) => void
-}
-
-const DEFAULT_ELEMENTS: Record<ElementType, () => ElementDoc> = {
-  heading: () => ({ type: 'heading', text: 'HEADING', size: 20 }),
-  text: () => ({ type: 'text', text: 'text', size: 16 }),
-  caption: () => ({ type: 'caption', text: 'caption' }),
-  note: () => ({ type: 'note', text: 'note' }),
-  placeholder: () => ({ type: 'placeholder', text: 'placeholder' }),
-  checklist: () => ({ type: 'checklist', items: ['item one'] }),
-  custom: () => ({ type: 'custom', component: '' }),
 }
 
 export default function Inspector(props: Props) {
@@ -46,22 +36,7 @@ function CoverInspector({ cover, updateCover }: { cover: CoverDoc; updateCover: 
   )
 }
 
-function PanelInspector({ panel, actionNames, registryKeys, updatePanel }: Props & { panel: PanelDoc }) {
-  const [openEl, setOpenEl] = useState<number | null>(null)
-  const [addType, setAddType] = useState<ElementType>('heading')
-
-  const setEl = (i: number, fn: (e: ElementDoc) => ElementDoc) =>
-    updatePanel((p) => ({ ...p, elements: p.elements.map((e, idx) => (idx === i ? fn(e) : e)) }))
-  const moveEl = (i: number, dir: -1 | 1) => updatePanel((p) => {
-    const j = i + dir
-    if (j < 0 || j >= p.elements.length) return p
-    const els = p.elements.slice()
-    ;[els[i], els[j]] = [els[j], els[i]]
-    return { ...p, elements: els }
-  })
-  const removeEl = (i: number) => updatePanel((p) => ({ ...p, elements: p.elements.filter((_, idx) => idx !== i) }))
-  const addEl = () => updatePanel((p) => ({ ...p, elements: [...p.elements, DEFAULT_ELEMENTS[addType]()] }))
-
+function PanelInspector({ panel, actionNames, updatePanel }: Props & { panel: PanelDoc }) {
   return (
     <div>
       <Section title="Geometry">
@@ -85,175 +60,16 @@ function PanelInspector({ panel, actionNames, registryKeys, updatePanel }: Props
 
       <Section title="Presentation">
         <SelectField label="sketch" value={panel.sketch ?? 'a'} options={['a', 'b', 'c']} onChange={(v) => updatePanel((p) => ({ ...p, sketch: v }))} />
-        <TextField label="padding" value={panel.padding ?? ''} onChange={(v) => updatePanel((p) => ({ ...p, padding: v || undefined }))} placeholder="16px 22px" />
-        <SelectField label="layout" value={panel.layout ?? 'none'} options={['none', 'flow']} onChange={(v) => updatePanel((p) => ({ ...p, layout: v === 'none' ? undefined : v }))} />
-        {panel.layout === 'flow' && <NumField label="gap" value={panel.gap} onChange={(v) => updatePanel((p) => ({ ...p, gap: v }))} />}
+        <TextField label="pid tag" value={panel.pid ?? ''} onChange={(v) => updatePanel((p) => ({ ...p, pid: v || undefined }))} placeholder="P·01" />
       </Section>
 
-      <Section title="Elements">
-        {panel.elements.map((el, i) => (
-          <div key={i}>
-            <div className="el-row" onClick={() => setOpenEl(openEl === i ? null : i)}>
-              <span className="badge">{el.type}</span>
-              <span className="nm">{elementSummary(el)}</span>
-              <button className="btn mini" onClick={(e) => { e.stopPropagation(); moveEl(i, -1) }} disabled={i === 0}>▲</button>
-              <button className="btn mini" onClick={(e) => { e.stopPropagation(); moveEl(i, 1) }} disabled={i === panel.elements.length - 1}>▼</button>
-              <button className="btn mini" onClick={(e) => { e.stopPropagation(); removeEl(i) }}>✕</button>
-            </div>
-            {openEl === i && (
-              <div className="el-body">
-                <ElementForm key={i} el={el} onChange={(fn) => setEl(i, fn)} registryKeys={registryKeys} />
-                <SharedElementForm el={el} onChange={(fn) => setEl(i, fn)} />
-              </div>
-            )}
-          </div>
-        ))}
-        <div className="row" style={{ marginTop: 6 }}>
-          <select value={addType} onChange={(e) => setAddType(e.target.value as ElementType)}>
-            {ELEMENT_TYPES.map((t) => <option key={t} value={t}>{t}</option>)}
-          </select>
-          <button className="btn" onClick={addEl}>+ element</button>
-        </div>
+      <Section title="Content">
+        <div className="muted" style={{ fontSize: 12 }}>boxes: {panel.boxes.length} (whiteboard editor coming)</div>
       </Section>
 
       <ArrivalForm panel={panel} updatePanel={updatePanel} />
       <TravelForm panel={panel} actionNames={actionNames} updatePanel={updatePanel} />
     </div>
-  )
-}
-
-// ── element summaries + per-type forms ──────────────────────────────────────
-function elementSummary(el: ElementDoc): string {
-  switch (el.type) {
-    case 'heading': case 'text': case 'caption': case 'note': case 'placeholder': return el.text
-    case 'checklist': return el.items.join(', ')
-    case 'custom': return el.component || '(no component)'
-  }
-}
-
-function ElementForm({ el, onChange, registryKeys }: {
-  el: ElementDoc
-  onChange: (fn: (e: ElementDoc) => ElementDoc) => void
-  registryKeys: string[]
-}) {
-  const patch = <T extends ElementDoc>(p: Partial<T>) => onChange((e) => ({ ...e, ...p } as ElementDoc))
-  switch (el.type) {
-    case 'heading':
-      return (
-        <>
-          <TextField label="text" value={el.text} onChange={(v) => patch({ text: v })} />
-          <NumField label="size" value={el.size} onChange={(v) => patch({ size: v ?? 16 })} />
-          <SelectField label="highlight" value={el.highlight ?? 'none'} options={['none', 'yellow', 'pink']} onChange={(v) => patch({ highlight: v === 'none' ? undefined : v })} />
-          <TextField label="prefix" value={el.prefix ?? ''} onChange={(v) => patch({ prefix: v || undefined })} />
-          <TextField label="suffix" value={el.suffix ?? ''} onChange={(v) => patch({ suffix: v || undefined })} />
-          <NumField label="rotate°" value={el.rotate} onChange={(v) => patch({ rotate: v })} step={0.5} />
-        </>
-      )
-    case 'text':
-      return (
-        <>
-          <TextField label="text" value={el.text} onChange={(v) => patch({ text: v })} area />
-          <NumField label="size" value={el.size} onChange={(v) => patch({ size: v ?? 16 })} />
-          <SelectField label="tone" value={el.tone ?? 'ink'} options={['ink', 'muted', 'faint']} onChange={(v) => patch({ tone: v })} />
-          <NumField label="lineHeight" value={el.lineHeight} onChange={(v) => patch({ lineHeight: v })} step={0.05} />
-        </>
-      )
-    case 'caption':
-      return (
-        <>
-          <TextField label="text" value={el.text} onChange={(v) => patch({ text: v })} area />
-          <NumField label="size" value={el.size} onChange={(v) => patch({ size: v })} />
-        </>
-      )
-    case 'note':
-      return (
-        <>
-          <TextField label="text" value={el.text} onChange={(v) => patch({ text: v })} area rows={4} />
-          <NumField label="size" value={el.size} onChange={(v) => patch({ size: v })} />
-          <NumField label="lineHeight" value={el.lineHeight} onChange={(v) => patch({ lineHeight: v })} step={0.05} />
-        </>
-      )
-    case 'placeholder':
-      return <TextField label="label" value={el.text} onChange={(v) => patch({ text: v })} />
-    case 'checklist':
-      return <ItemsEditor key="items" items={el.items} onChange={(items) => patch({ items })} />
-    case 'custom':
-      return (
-        <>
-          <Field label="component">
-            <select value={el.component} onChange={(e) => patch({ component: e.target.value })}>
-              <option value="">— pick —</option>
-              {registryKeys.map((k) => <option key={k} value={k}>{k}</option>)}
-            </select>
-          </Field>
-          <PropsEditor key="props" value={el.props} onChange={(props) => patch({ props })} />
-        </>
-      )
-  }
-}
-
-function SharedElementForm({ el, onChange }: { el: ElementDoc; onChange: (fn: (e: ElementDoc) => ElementDoc) => void }) {
-  const setShared = (p: Partial<ElementDoc>) => onChange((e) => ({ ...e, ...p } as ElementDoc))
-  const place = el.place
-  const setPlace = (k: keyof PlaceDoc, v: number | undefined) => {
-    const next: PlaceDoc = { ...place, [k]: v }
-    if (v === undefined) delete next[k]
-    setShared({ place: Object.keys(next).length ? next : undefined })
-  }
-  return (
-    <div className="sec">
-      <div className="sec-h">placement</div>
-      <div className="row">
-        <NumField label="left" value={place?.left} onChange={(v) => setPlace('left', v)} placeholder="—" />
-        <NumField label="right" value={place?.right} onChange={(v) => setPlace('right', v)} placeholder="—" />
-      </div>
-      <div className="row">
-        <NumField label="top" value={place?.top} onChange={(v) => setPlace('top', v)} placeholder="—" />
-        <NumField label="bottom" value={place?.bottom} onChange={(v) => setPlace('bottom', v)} placeholder="—" />
-      </div>
-      <NumField label="width" value={place?.width} onChange={(v) => setPlace('width', v)} placeholder="—" />
-      <CheckField label="grow (flex:1)" checked={!!el.grow} onChange={(v) => setShared({ grow: v || undefined })} />
-      <TextField label="showIfFlag" value={el.showIfFlag ?? ''} onChange={(v) => setShared({ showIfFlag: v || undefined })} />
-    </div>
-  )
-}
-
-function ItemsEditor({ items, onChange }: { items: string[]; onChange: (items: string[]) => void }) {
-  const [text, setText] = useState(items.join('\n'))
-  return (
-    <Field label="items">
-      <textarea
-        rows={4}
-        value={text}
-        onChange={(e) => { setText(e.target.value); onChange(e.target.value.split('\n').filter((l) => l.length > 0)) }}
-      />
-    </Field>
-  )
-}
-
-function PropsEditor({ value, onChange }: { value: Record<string, JsonValue> | undefined; onChange: (p: Record<string, JsonValue> | undefined) => void }) {
-  const [text, setText] = useState(value ? JSON.stringify(value, null, 2) : '')
-  const [err, setErr] = useState<string | null>(null)
-  return (
-    <Field label="props JSON">
-      <div style={{ flex: 1 }}>
-        <textarea
-          rows={5}
-          value={text}
-          onChange={(e) => {
-            const t = e.target.value
-            setText(t)
-            if (t.trim() === '') { setErr(null); onChange(undefined); return }
-            try {
-              const parsed = JSON.parse(t)
-              if (typeof parsed !== 'object' || parsed === null || Array.isArray(parsed)) { setErr('must be an object'); return }
-              setErr(null); onChange(parsed)
-            } catch (e2) { setErr((e2 as Error).message) }
-          }}
-        />
-        {err && <div className="err-line">{err}</div>}
-      </div>
-    </Field>
   )
 }
 

@@ -127,7 +127,7 @@ export default function PageCanvas({ page, cover, flags, selected, onSelect, upd
     addPanel({
       x: Math.max(0, x), y: Math.max(0, y), w: 200, h: 160,
       anchor: { dx: 100, dy: 0 },
-      elements: [{ type: 'heading', text: 'NEW PANEL', size: 20 }],
+      boxes: [{ kind: 'text', x: 16, y: 16, w: 168, h: 26, text: 'NEW PANEL', fam: 'marker', size: 20 }],
     })
   }
 

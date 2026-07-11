@@ -16,7 +16,7 @@ export function allFlagsOn(doc: NotebookDoc): Record<string, boolean> {
   for (const page of doc.pages) {
     for (const panel of page.panels) {
       if (panel.arrival?.setFlag) flags[panel.arrival.setFlag] = true
-      for (const el of panel.elements) if (el.showIfFlag) flags[el.showIfFlag] = true
+      for (const box of panel.boxes) if (box.showIfFlag) flags[box.showIfFlag] = true
     }
   }
   return flags
