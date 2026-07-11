@@ -61,23 +61,26 @@
               "y": 242,
               "w": 328,
               "h": 30,
-              "text": "issue #01 \u00b7 self-published \u00b7 priceless",
+              "text": "issue #01 · self-published · priceless",
               "fam": "hand",
               "size": 16,
               "color": "#8a8378"
             }
-          ]
+          ],
+          "arrival": {
+            "say": "HELLO THERE"
+          }
         },
         {
           "x": 464,
           "y": 80,
-          "w": 416,
-          "h": 304,
+          "w": 403,
+          "h": 169,
           "anchor": {
             "dx": 140,
             "dy": 0
           },
-          "rotate": 0.6,
+          "rotate": -6,
           "sketch": "b",
           "boxes": [
             {
@@ -93,17 +96,21 @@
             },
             {
               "kind": "art",
-              "x": 22,
-              "y": 39,
+              "x": 0,
+              "y": 22,
               "w": 372,
               "h": 247,
               "component": "pipFigure",
               "props": {
-                "dashLine": "DASH \u2014 does the stunts.",
-                "pipLine": "PIP \u2014 does the judging."
+                "dashLine": "DASH — does the stunts.",
+                "pipLine": "PIP — does the judging."
               }
             }
-          ]
+          ],
+          "arrival": {
+            "say": "Hello Friends",
+            "pose": "cheer"
+          }
         },
         {
           "x": 72,
@@ -242,7 +249,7 @@
               "y": 62,
               "w": 230,
               "h": 248,
-              "text": "Builds things for the web. Draws in the margins. Jumps off the occasional deadline (professionally). Currently accepting quests \u2014 freelance or full-time. Weakness: unclosed browser tabs. Based in the internet.",
+              "text": "Builds things for the web. Draws in the margins. Jumps off the occasional deadline (professionally). Currently accepting quests — freelance or full-time. Weakness: unclosed browser tabs. Based in the internet.",
               "fam": "hand",
               "size": 16,
               "note": true
@@ -307,7 +314,7 @@
               "y": 35,
               "w": 210,
               "h": 179,
-              "text": "\u2713 ships fast, refactors faster\n\u2713 has strong opinions about spacing\n\u2713 the cape is one CSS gradient, load-bearing\n\u2713 narrates his own commit messages",
+              "text": "✓ ships fast, refactors faster\n✓ has strong opinions about spacing\n✓ the cape is one CSS gradient, load-bearing\n✓ narrates his own commit messages",
               "fam": "hand",
               "size": 16
             }
@@ -411,7 +418,7 @@
               "y": 221,
               "w": 340,
               "h": 45,
-              "text": "award-adjacent. the judges said \"hm!\" \u2014 a review.",
+              "text": "award-adjacent. the judges said \"hm!\" — a review.",
               "fam": "hand",
               "size": 16,
               "color": "#1a1a1a"
@@ -449,7 +456,7 @@
               "y": 36,
               "w": 512,
               "h": 71,
-              "text": "More work exists. It's in a drawer. Ask about the drawer. (Replace these with your real projects \u2014 Dash will guard them.)",
+              "text": "More work exists. It's in a drawer. Ask about the drawer. (Replace these with your real projects — Dash will guard them.)",
               "fam": "hand",
               "size": 17,
               "color": "#1a1a1a"
@@ -524,7 +531,7 @@
               "y": 301,
               "w": 136,
               "h": 19,
-              "text": "fresh paint \u2014 wet",
+              "text": "fresh paint — wet",
               "fam": "caveat",
               "size": 16,
               "color": "#8a8378"
@@ -625,7 +632,7 @@
               "y": 152,
               "w": 412,
               "h": 24,
-              "text": "responds within 1\u20132 business rolls.",
+              "text": "responds within 1–2 business rolls.",
               "fam": "hand",
               "size": 17,
               "color": "#5a544a"
