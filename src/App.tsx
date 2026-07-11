@@ -1,79 +1,68 @@
-import { useEffect, useMemo } from 'react'
-import { Canvas } from '@react-three/fiber'
-import { useTorchInput } from '@/scene/torch/useTorchInput'
-import { useDescent } from '@/hooks/useDescent'
-import { useDescentDom } from '@/hooks/useDescentDom'
-import { useTorchReveal } from '@/hooks/useTorchReveal'
-import { useReducedMotion } from '@/hooks/useReducedMotion'
-import { useJourney } from '@/hooks/useJourney'
-import { CodexScene } from '@/scene/CodexScene'
-import { Codex } from '@/dom/Codex'
-import { DescentHud } from '@/dom/DescentHud'
-import { ReadingModeToggle } from '@/dom/ReadingModeToggle'
-import { usePerfStore } from '@/state/perfStore'
-import { useUiStore } from '@/state/uiStore'
-import { probeGpu } from '@/lib/gpuProbe'
-import { TORCH } from '@/scene/torch/torch.constants'
+import { lazy, Suspense, useEffect, useState } from 'react'
+import Notebook from './notebook/Notebook'
+import type { NotebookDoc } from './notebook/doc/validate'
+import { loadDoc } from './admin/docStore'
+import { useSession } from './admin/auth-client'
 
-/**
- * One persistent fixed <Canvas> (the torch-lit scene) behind the DOM codex. The
- * descent is DISCRETE — wheel/keys/touch/the HUD move you one depth at a time
- * with a choreographed plunge; the page never free-scrolls. The torch follows
- * the cursor; prose reveals where the light falls, with reading mode as the
- * backstop. No-WebGL devices fall back to a plain, readable dark page.
- */
-export default function App() {
-  const probe = useMemo(() => probeGpu(), [])
+// The admin now ships in production at /admin — the server (`requireOwner`) is the
+// real boundary, so the client gate is purely cosmetic. The lazy chunk always
+// exists in the bundle now (fine).
+const Admin = lazy(() => import('./admin/Admin'))
+const Login = lazy(() => import('./admin/Login'))
 
-  useTorchInput()
-  useDescent()
-  useDescentDom()
-  useTorchReveal()
-  useReducedMotion()
-  useJourney()
+function SpinCard() {
+  return (
+    <div className="login login-spin">
+      <div className="login-card">…unrolling the notebook</div>
+    </div>
+  )
+}
 
-  useEffect(() => {
-    usePerfStore.getState().setProbe(probe.tier, probe.webgl2)
-    if (!probe.webgl2 || probe.tier === 'minimal') useUiStore.getState().setReadingMode(true)
-    document.documentElement.classList.toggle('no-webgl', !probe.webgl2)
-  }, [probe])
+function AdminGate() {
+  const { data, isPending, error, refetch } = useSession()
 
-  const dpr = usePerfStore((s) => s.flags.dpr)
+  if (isPending) return <SpinCard />
+
+  // DEV fail-open: `bun run dev` (vite) proxies /api → the bun server, but that
+  // server may not be running (file-backed /__notebook admin still works). A
+  // NETWORK error (proxy can't reach it → 5xx / no status) in DEV means "no auth
+  // server" → let the admin through so offline editing keeps working. Any real
+  // 401/403 still shows the Login screen.
+  const status = (error as { status?: number } | null)?.status
+  const networkish = !!error && (status === undefined || status === 0 || status >= 500)
+  const devBypass = import.meta.env.DEV && networkish
+
+  if (data || devBypass) {
+    return (
+      <Suspense fallback={<SpinCard />}>
+        <Admin devBypass={devBypass && !data} />
+      </Suspense>
+    )
+  }
 
   return (
-    <>
-      <a className="skip-link" href="#codex">
-        Skip to the text
-      </a>
-
-      {probe.webgl2 ? (
-        <Canvas
-          className="codex-canvas"
-          style={{ position: 'fixed', inset: 0, width: '100vw', height: '100dvh', pointerEvents: 'none', touchAction: 'none' }}
-          dpr={dpr}
-          shadows
-          gl={{ antialias: false, alpha: false, powerPreference: 'high-performance', stencil: false }}
-          camera={{ position: [0, 0, 6], fov: 38 }}
-          onCreated={({ gl }) => {
-            gl.toneMappingExposure = TORCH.exposure
-            gl.domElement.addEventListener(
-              'webglcontextlost',
-              (e) => {
-                e.preventDefault()
-                useUiStore.getState().setReadingMode(true)
-              },
-              { passive: false },
-            )
-          }}
-        >
-          <color attach="background" args={['#0b0e14']} />
-          <CodexScene />
-        </Canvas>
-      ) : null}
-
-      <Codex />
-      <DescentHud />
-      <ReadingModeToggle />
-    </>
+    <Suspense fallback={<SpinCard />}>
+      <Login onSignedIn={() => refetch()} />
+    </Suspense>
   )
+}
+
+// The live site: paint instantly from the baked DEFAULT_DOC (doc=undefined), then
+// hot-swap to the server's copy once it arrives via the `componentDidUpdate`
+// doc-swap contract. Fetch failure (offline / API down) is silent → baked doc
+// stays. In dev the Vite middleware serves the SAME file as the baked fallback,
+// so there's no visible swap — that's fine.
+function SiteNotebook() {
+  const [doc, setDoc] = useState<NotebookDoc | undefined>(undefined)
+  useEffect(() => {
+    const ac = new AbortController()
+    loadDoc(ac.signal).then(({ doc: d }) => setDoc(d)).catch(() => {})
+    return () => ac.abort()
+  }, [])
+  return <Notebook doc={doc} />
+}
+
+export default function App() {
+  if (window.location.pathname === '/admin') return <AdminGate />
+  return <SiteNotebook />
 }

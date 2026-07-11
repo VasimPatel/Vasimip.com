@@ -1,36 +1,39 @@
 {
-  "name": "the-codex",
+  "name": "dash-notebook",
   "private": true,
   "version": "0.1.0",
   "type": "module",
-  "description": "An illuminated codex read by torchlight in the dark — a single descent.",
+  "description": "An interactive comic-book notebook portfolio — starring Dash.",
   "scripts": {
     "dev": "vite",
     "build": "tsc --noEmit -p tsconfig.json && vite build",
     "build:nocheck": "vite build",
     "preview": "vite preview",
-    "typecheck": "tsc --noEmit -p tsconfig.json && tsc --noEmit -p tsconfig.node.json"
+    "typecheck": "tsc --noEmit -p tsconfig.json && tsc --noEmit -p tsconfig.node.json && tsc --noEmit -p tsconfig.server.json",
+    "start": "bun server/index.ts",
+    "pull-doc": "bun scripts/pull-doc.mjs",
+    "db:generate": "drizzle-kit generate",
+    "db:migrate": "drizzle-kit migrate",
+    "db:seed": "bun server/db/seed.ts"
   },
   "dependencies": {
-    "@react-three/drei": "^10.7.0",
-    "@react-three/fiber": "^9.6.0",
-    "@react-three/postprocessing": "^3.0.0",
-    "gsap": "^3.13.0",
-    "postprocessing": "^6.37.0",
+    "@better-auth/passkey": "^1.6.23",
+    "better-auth": "^1.6.23",
+    "drizzle-orm": "^0.44.0",
+    "hono": "^4.6.0",
+    "postgres": "^3.4.0",
     "react": "~19.2.0",
-    "react-dom": "~19.2.0",
-    "simplex-noise": "^4.0.0",
-    "three": "0.184.0",
-    "zustand": "^5.0.0"
+    "react-dom": "~19.2.0"
   },
   "devDependencies": {
+    "@types/bun": "^1.3.14",
     "@types/node": "^22.12.0",
     "@types/react": "~19.2.0",
     "@types/react-dom": "~19.2.0",
-    "@types/three": "^0.184.0",
     "@vitejs/plugin-react": "^6.0.0",
+    "drizzle-kit": "^0.31.0",
+    "puppeteer-core": "^25.3.0",
     "typescript": "^5.0.0",
     "vite": "^8.0.0"
-  },
-  "packageManager": "pnpm@10.30.3+sha512.c961d1e0a2d8e354ecaa5166b822516668b7f44cb5bd95122d590dd81922f606f5473b6d23ec4a5be05e7fcd18e8488d47d978bbe981872f1145d06e9a740017"
+  }
 }
