@@ -30,7 +30,13 @@ export type {
   ProjectileStub,
   AttachmentStub,
   SpeechStub,
+  HoleEdge,
+  HolePersistScope,
 } from './world'
+
+// ── Phase 6b: interaction rule table (L5) ────────────────────────────────────
+export { tryValidateRuleTable, WORLD_RESPONSE_KINDS } from './rules'
+export type { RuleRow, RuleTableDoc, WorldResponse, WorldResponseKind, ComponentKind } from './rules'
 
 // ── Phase 2: rig / pose / character (L0–L1a) ─────────────────────────────────
 export { tryValidateRig } from './rig'

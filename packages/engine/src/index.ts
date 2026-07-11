@@ -118,3 +118,13 @@ export type { TraversalGraph, TravNode, TravEdge, EdgeType, NodeKind, SanityRepo
 
 export { worldFromNotebook } from './world/from-notebook'
 export type { NotebookPageInput, NotebookPanelInput, PageWorld } from './world/from-notebook'
+
+// ── Phase 6b: mutable boundaries (holes + heal) + rule table + projectiles (L5) ──
+export { createMutableWorld, DEFAULT_HEAL_MS, HOLE_EDGE_TRIM } from './world/holes'
+export type { MutableWorld, MutableWorldOptions, MutableWorldState, HoleSpec, HoleId, HoleRecord, CutOpts } from './world/holes'
+
+export { createRuleTable, dispatch, nearestEdgeInterval, DEFAULT_RULES, DEFAULT_CUT_WIDTH } from './world/rules'
+export type { RuleTable, RuleEntity, RuleEventCtx, DispatchAction, DispatchResult } from './world/rules'
+
+export { createProjectileSim } from './world/projectile'
+export type { ProjectileSim, ProjectileSpec, ProjectileState, ProjectileSimState, ProjectileSimOptions } from './world/projectile'
