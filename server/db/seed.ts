@@ -23,8 +23,16 @@ export async function seed(): Promise<void> {
       .insert(notebookRevisions)
       .values({ doc, note: 'seed from notebook.json', createdBy: 'seed' })
       .returning({ id: notebookRevisions.id })
-    await tx.insert(notebookCurrent).values({ id: 1, revisionId: revision.id })
-    console.log(`seed: inserted revision ${revision.id} and set as current`)
+    // ON CONFLICT DO NOTHING on the singleton: even without the boot advisory
+    // lock, a lost race here leaves the pointer intact (the orphan revision row
+    // is harmless) rather than erroring on the primary-key clash.
+    const [current] = await tx
+      .insert(notebookCurrent)
+      .values({ id: 1, revisionId: revision.id })
+      .onConflictDoNothing({ target: notebookCurrent.id })
+      .returning({ id: notebookCurrent.id })
+    if (current) console.log(`seed: inserted revision ${revision.id} and set as current`)
+    else console.log('seed: notebook_current already set by a concurrent seed, skipping')
   })
 }
 

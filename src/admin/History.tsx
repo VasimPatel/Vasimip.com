@@ -20,11 +20,12 @@ function relTime(iso: string): string {
   return Math.round(h / 24) + 'd ago'
 }
 
-export default function History({ onRestored }: { onRestored: () => void }) {
+export default function History({ onRestored, currentRevisionId }: { onRestored: () => void; currentRevisionId: number | null }) {
   const [available, setAvailable] = useState<boolean | null>(null) // null = probing
   const [open, setOpen] = useState(false)
   const [revs, setRevs] = useState<Revision[]>([])
   const [busy, setBusy] = useState(false)
+  const [err, setErr] = useState<string | null>(null)
   const wrapRef = useRef<HTMLDivElement>(null)
 
   const refresh = useCallback(async () => {
@@ -45,15 +46,15 @@ export default function History({ onRestored }: { onRestored: () => void }) {
 
   if (available === false) return null
 
-  const toggle = () => { const n = !open; setOpen(n); if (n) void refresh() }
+  const toggle = () => { const n = !open; setOpen(n); if (n) { setErr(null); void refresh() } }
 
   const restore = async (id: number) => {
-    setBusy(true)
-    const ok = await restoreRevision(id)
+    setBusy(true); setErr(null)
+    const res = await restoreRevision(id, currentRevisionId ?? undefined)
     setBusy(false)
-    if (!ok) return
-    setOpen(false)
-    onRestored()
+    if ('ok' in res) { setOpen(false); onRestored(); return }
+    if ('conflict' in res) { setErr('someone else saved since you opened this — reloading their version.'); onRestored(); return }
+    setErr(res.error)
   }
 
   return (
@@ -62,6 +63,7 @@ export default function History({ onRestored }: { onRestored: () => void }) {
       {open && (
         <div className="hist-menu">
           <div className="hist-head">recent revisions</div>
+          {err && <div className="hist-err">{err}</div>}
           {revs.length === 0 ? (
             <div className="hist-empty">no revisions yet</div>
           ) : (

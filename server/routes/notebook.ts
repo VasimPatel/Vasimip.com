@@ -7,13 +7,18 @@
 // (Better Auth session → owner email). See server/middleware.ts.
 // ─────────────────────────────────────────────────────────────────────────────
 import { Hono } from 'hono'
-import { eq, desc } from 'drizzle-orm'
+import { and, eq, desc } from 'drizzle-orm'
 import { db } from '../db'
 import { notebookRevisions, notebookCurrent } from '../db/schema'
 import { tryValidateDoc } from '../../src/notebook/doc/validate'
 import { requireOwner, type OwnerEnv } from '../middleware'
 
 const notebook = new Hono<OwnerEnv>()
+
+// Thrown inside a save/restore transaction when the atomic compare-and-swap on
+// `notebook_current` matches 0 rows (someone else moved the pointer since the
+// caller's baseRevisionId) → the tx rolls back and the route answers 409.
+class RevisionConflict extends Error {}
 
 async function getCurrent(): Promise<{ revisionId: number; doc: unknown } | null> {
   const rows = await db
@@ -25,14 +30,24 @@ async function getCurrent(): Promise<{ revisionId: number; doc: unknown } | null
   return rows[0] ?? null
 }
 
+// If-None-Match may carry a weak prefix, quotes, `*`, or a comma-list of tags —
+// parse tolerantly and match against the current revision id.
+function ifNoneMatchHit(header: string | undefined, revisionId: number): boolean {
+  if (!header) return false
+  const target = String(revisionId)
+  return header.split(',').some((raw) => {
+    const tag = raw.trim().replace(/^W\//i, '').replace(/^"(.*)"$/, '$1')
+    return tag === '*' || tag === target
+  })
+}
+
 notebook.get('/notebook', async (c) => {
   const current = await getCurrent()
   if (!current) return c.json({ errors: ['no notebook doc seeded'] }, 500)
 
-  const etag = String(current.revisionId)
-  if (c.req.header('if-none-match') === etag) return c.body(null, 304)
+  if (ifNoneMatchHit(c.req.header('if-none-match'), current.revisionId)) return c.body(null, 304)
 
-  c.header('ETag', etag)
+  c.header('ETag', `"${current.revisionId}"`)
   return c.json({ doc: current.doc, revisionId: current.revisionId })
 })
 
@@ -45,24 +60,34 @@ notebook.put('/notebook', requireOwner, async (c) => {
   const result = tryValidateDoc(body.doc)
   if (!result.ok) return c.json({ errors: result.errors }, 400)
 
-  const current = await getCurrent()
-  if (!current) return c.json({ errors: ['no notebook doc seeded'] }, 500)
-  if (current.revisionId !== body.baseRevisionId) {
-    return c.json({ currentRevisionId: current.revisionId }, 409)
-  }
-
   const note = typeof body.note === 'string' ? body.note : null
+  const baseRevisionId = body.baseRevisionId
 
-  const revisionId = await db.transaction(async (tx) => {
-    const [revision] = await tx
-      .insert(notebookRevisions)
-      .values({ doc: result.doc, note, createdBy: c.get('userEmail') ?? 'owner' })
-      .returning({ id: notebookRevisions.id })
-    await tx.update(notebookCurrent).set({ revisionId: revision.id }).where(eq(notebookCurrent.id, 1))
-    return revision.id
-  })
-
-  return c.json({ revisionId })
+  try {
+    const revisionId = await db.transaction(async (tx) => {
+      const [revision] = await tx
+        .insert(notebookRevisions)
+        .values({ doc: result.doc, note, createdBy: c.get('userEmail') ?? 'owner' })
+        .returning({ id: notebookRevisions.id })
+      // Atomic compare-and-swap: only advance the pointer if it still points at
+      // the revision the caller based their edit on. 0 rows → a concurrent save
+      // won the race → roll back (throw) and 409 with a fresh read.
+      const swapped = await tx
+        .update(notebookCurrent)
+        .set({ revisionId: revision.id })
+        .where(and(eq(notebookCurrent.id, 1), eq(notebookCurrent.revisionId, baseRevisionId)))
+        .returning({ id: notebookCurrent.id })
+      if (swapped.length === 0) throw new RevisionConflict()
+      return revision.id
+    })
+    return c.json({ revisionId })
+  } catch (e) {
+    if (e instanceof RevisionConflict) {
+      const fresh = await getCurrent()
+      return c.json({ currentRevisionId: fresh?.revisionId ?? null }, 409)
+    }
+    throw e
+  }
 })
 
 notebook.get('/revisions', requireOwner, async (c) => {
@@ -84,20 +109,41 @@ notebook.post('/revisions/:id/restore', requireOwner, async (c) => {
   const id = Number(c.req.param('id'))
   if (!Number.isInteger(id)) return c.json({ errors: ['invalid revision id'] }, 400)
 
+  // Optional baseRevisionId: when the admin sends the revision its draft is based
+  // on we CAS against it (409 on a concurrent move); when absent (e.g. the dev
+  // mock) we restore unconditionally — backward compatible.
+  const body = await c.req.json().catch(() => null) as { baseRevisionId?: unknown } | null
+  const baseRevisionId = body && typeof body.baseRevisionId === 'number' ? body.baseRevisionId : null
+
   const rows = await db.select({ doc: notebookRevisions.doc }).from(notebookRevisions).where(eq(notebookRevisions.id, id)).limit(1)
   const old = rows[0]
   if (!old) return c.json({ errors: [`revision ${id} not found`] }, 404)
 
-  const revisionId = await db.transaction(async (tx) => {
-    const [revision] = await tx
-      .insert(notebookRevisions)
-      .values({ doc: old.doc, note: `restore of #${id}`, createdBy: c.get('userEmail') ?? 'owner' })
-      .returning({ id: notebookRevisions.id })
-    await tx.update(notebookCurrent).set({ revisionId: revision.id }).where(eq(notebookCurrent.id, 1))
-    return revision.id
-  })
-
-  return c.json({ revisionId })
+  try {
+    const revisionId = await db.transaction(async (tx) => {
+      const [revision] = await tx
+        .insert(notebookRevisions)
+        .values({ doc: old.doc, note: `restore of #${id}`, createdBy: c.get('userEmail') ?? 'owner' })
+        .returning({ id: notebookRevisions.id })
+      const where = baseRevisionId == null
+        ? eq(notebookCurrent.id, 1)
+        : and(eq(notebookCurrent.id, 1), eq(notebookCurrent.revisionId, baseRevisionId))
+      const swapped = await tx
+        .update(notebookCurrent)
+        .set({ revisionId: revision.id })
+        .where(where)
+        .returning({ id: notebookCurrent.id })
+      if (swapped.length === 0) throw new RevisionConflict()
+      return revision.id
+    })
+    return c.json({ revisionId })
+  } catch (e) {
+    if (e instanceof RevisionConflict) {
+      const fresh = await getCurrent()
+      return c.json({ currentRevisionId: fresh?.revisionId ?? null }, 409)
+    }
+    throw e
+  }
 })
 
 export default notebook

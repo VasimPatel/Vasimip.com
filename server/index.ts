@@ -10,6 +10,7 @@ import { serveStatic } from 'hono/bun'
 import { secureHeaders } from 'hono/secure-headers'
 import { bodyLimit } from 'hono/body-limit'
 import { migrate } from 'drizzle-orm/postgres-js/migrator'
+import { sql } from 'drizzle-orm'
 import { existsSync } from 'node:fs'
 import { db } from './db'
 import { seed } from './db/seed'
@@ -19,6 +20,25 @@ import invites from './routes/invites'
 
 const PORT = Number(process.env.PORT) || 8787
 const DIST_DIR = './dist'
+// A fixed key so concurrent replicas serialize migrate+seed on one advisory lock.
+const BOOT_LOCK_KEY = 428_517_001
+
+// Fail fast in production if the security-critical env is missing or weak. Dev
+// (NODE_ENV !== 'production') keeps the lenient localhost defaults elsewhere.
+function requireProdEnv(): void {
+  if (process.env.NODE_ENV !== 'production') return
+  const problems: string[] = []
+  const secret = process.env.BETTER_AUTH_SECRET
+  if (!secret || secret.length < 32) problems.push('BETTER_AUTH_SECRET must be set and at least 32 characters (openssl rand -base64 32)')
+  if (!process.env.OWNER_EMAIL) problems.push('OWNER_EMAIL must be set (the single owner login)')
+  const base = process.env.BASE_URL
+  if (!base || !base.startsWith('https://')) problems.push('BASE_URL must be set and start with https://')
+  if (problems.length > 0) {
+    console.error('FATAL: production environment is misconfigured — refusing to start:')
+    for (const p of problems) console.error('  · ' + p)
+    process.exit(1)
+  }
+}
 
 const app = new Hono()
 
@@ -53,13 +73,22 @@ app.get('*', async (c, next) => {
 })
 
 async function boot(): Promise<void> {
-  if (!existsSync('./drizzle')) {
-    console.warn('boot: no ./drizzle migrations folder found, skipping migrate')
-  } else {
-    await migrate(db, { migrationsFolder: './drizzle' })
-    console.log('boot: migrations applied')
+  requireProdEnv()
+
+  // Serialize DDL: a session-level advisory lock so concurrent replicas can't
+  // both run migrate+seed at once (double DDL). Held across both, released after.
+  await db.execute(sql`SELECT pg_advisory_lock(${BOOT_LOCK_KEY})`)
+  try {
+    if (!existsSync('./drizzle')) {
+      console.warn('boot: no ./drizzle migrations folder found, skipping migrate')
+    } else {
+      await migrate(db, { migrationsFolder: './drizzle' })
+      console.log('boot: migrations applied')
+    }
+    await seed()
+  } finally {
+    await db.execute(sql`SELECT pg_advisory_unlock(${BOOT_LOCK_KEY})`)
   }
-  await seed()
 
   Bun.serve({ port: PORT, fetch: app.fetch })
   console.log(`boot: listening on :${PORT}`)

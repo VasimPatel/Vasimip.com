@@ -364,7 +364,7 @@ export default function Admin({ devBypass = false }: { devBypass?: boolean }) {
         <button className="qbtn" onClick={exportDoc}>export</button>
         <button className="qbtn" onClick={() => fileRef.current?.click()}>import</button>
         <input ref={fileRef} type="file" accept="application/json" style={{ display: 'none' }} onChange={(e) => { const f = e.target.files?.[0]; if (f) importDoc(f); e.target.value = '' }} />
-        <History onRestored={loadTheirs} />
+        <History onRestored={loadTheirs} currentRevisionId={revisionRef.current} />
         <input className="note-input" value={saveNote} onChange={(e) => setSaveNote(e.target.value)} placeholder="note (optional)" title="a short note stamped onto this revision" />
         <button className="savebtn" data-testid="save-btn" disabled={!valid} onClick={save}>{dirty ? 'save the page' : 'saved ✓'}</button>
         {devBypass ? (

@@ -16,20 +16,32 @@ export type SaveResult =
 
 export type Revision = { id: number; note: string | null; createdBy: string | null; createdAt: string }
 
+export type RestoreResult =
+  | { ok: true; revisionId: number }
+  | { conflict: true; currentRevisionId: number }
+  | { error: string }
+
 export async function loadDoc(signal?: AbortSignal): Promise<LoadResult> {
-  const res = await fetch('/api/notebook', { credentials: 'same-origin', signal })
+  // `no-store`: the notebook is ETag'd, and a conditional 304 would hand us an
+  // empty body — always fetch the full doc fresh.
+  const res = await fetch('/api/notebook', { credentials: 'same-origin', cache: 'no-store', signal })
   if (!res.ok) throw new Error('GET /api/notebook → ' + res.status)
   const body = await res.json()
   return { doc: body.doc as NotebookDoc, revisionId: body.revisionId as number }
 }
 
 export async function saveDoc(doc: NotebookDoc, baseRevisionId: number, note?: string): Promise<SaveResult> {
-  const res = await fetch('/api/notebook', {
-    method: 'PUT',
-    credentials: 'same-origin',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ doc, baseRevisionId, note: note && note.length ? note : undefined }),
-  })
+  let res: Response
+  try {
+    res = await fetch('/api/notebook', {
+      method: 'PUT',
+      credentials: 'same-origin',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ doc, baseRevisionId, note: note && note.length ? note : undefined }),
+    })
+  } catch {
+    return { errors: ['could not reach the server — your scribbles are safe, try again'] }
+  }
   if (res.status === 409) {
     const body = await res.json().catch(() => ({}))
     return { conflict: true, currentRevisionId: body.currentRevisionId as number }
@@ -38,8 +50,8 @@ export async function saveDoc(doc: NotebookDoc, baseRevisionId: number, note?: s
     const body = await res.json().catch(() => ({ errors: ['save failed (' + res.status + ')'] }))
     return { errors: (body.errors as string[]) ?? ['save failed (' + res.status + ')'] }
   }
-  const body = await res.json()
-  return { ok: true, revisionId: body.revisionId as number }
+  const body = await res.json().catch(() => ({}))
+  return { ok: true, revisionId: (body as { revisionId?: number }).revisionId as number }
 }
 
 // null → the endpoint isn't there (dev file mode 404s /api/revisions, or the
@@ -54,7 +66,25 @@ export async function listRevisions(): Promise<Revision[] | null> {
   }
 }
 
-export async function restoreRevision(id: number): Promise<boolean> {
-  const res = await fetch('/api/revisions/' + id + '/restore', { method: 'POST', credentials: 'same-origin' })
-  return res.ok
+// Restore an old revision as a new one. Passes the admin's current baseRevisionId
+// so the server can CAS the pointer (409 if someone else saved in the meantime).
+export async function restoreRevision(id: number, baseRevisionId?: number): Promise<RestoreResult> {
+  let res: Response
+  try {
+    res = await fetch('/api/revisions/' + id + '/restore', {
+      method: 'POST',
+      credentials: 'same-origin',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(baseRevisionId != null ? { baseRevisionId } : {}),
+    })
+  } catch {
+    return { error: 'could not reach the server — try again' }
+  }
+  if (res.status === 409) {
+    const body = await res.json().catch(() => ({}))
+    return { conflict: true, currentRevisionId: (body as { currentRevisionId?: number }).currentRevisionId as number }
+  }
+  if (!res.ok) return { error: 'restore failed (' + res.status + ')' }
+  const body = await res.json().catch(() => ({}))
+  return { ok: true, revisionId: (body as { revisionId?: number }).revisionId as number }
 }

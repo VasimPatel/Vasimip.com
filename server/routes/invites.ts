@@ -162,15 +162,9 @@ app.post('/invite/:token/submissions', bodyLimit({ maxSize: 64 * 1024 }), async 
   const [inv] = await db.select().from(invites).where(eq(invites.token, token)).limit(1)
   if (!inv || inviteStatus(inv) !== 'active') return c.json(NOT_FOUND, 404)
 
-  // Rate limit (per token AND per IP) over a sliding window — pg counts.
   const ipHash = hashIp(clientIp(c.req.raw.headers))
-  const since = new Date(Date.now() - RATE_WINDOW_MS)
-  const [byToken] = await db.select({ n: count() }).from(submissions).where(and(eq(submissions.inviteId, inv.id), gte(submissions.createdAt, since)))
-  if (byToken.n >= MAX_PER_TOKEN) return c.json({ errors: ['too many submissions for this invite — try again later'] }, 429)
-  const [byIp] = await db.select({ n: count() }).from(submissions).where(and(eq(submissions.ipHash, ipHash), gte(submissions.createdAt, since)))
-  if (byIp.n >= MAX_PER_IP) return c.json({ errors: ['too many submissions from your network — try again later'] }, 429)
 
-  // Content + author validation.
+  // Content + author validation (no db) — a bad body never enters the tx.
   const errors: string[] = []
   const authorName = typeof body.authorName === 'string' ? body.authorName.trim() : ''
   if (authorName.length < 1 || authorName.length > 40) errors.push('authorName: must be 1..40 characters')
@@ -178,32 +172,46 @@ app.post('/invite/:token/submissions', bodyLimit({ maxSize: 64 * 1024 }), async 
   if (!validated.ok) errors.push(...validated.errors)
   if (errors.length > 0) return c.json({ errors }, 400)
 
-  // Transactionally bump use_count (guarded by validity so it can't race past
-  // max_uses), then insert the submission. A failed guard → uniform 404.
-  try {
-    await db.transaction(async (tx) => {
-      const bumped = await tx
-        .update(invites)
-        .set({ useCount: sql`${invites.useCount} + 1` })
-        .where(and(
-          eq(invites.id, inv.id),
-          isNull(invites.revokedAt),
-          or(isNull(invites.expiresAt), gt(invites.expiresAt, new Date())),
-          or(isNull(invites.maxUses), lt(invites.useCount, invites.maxUses)),
-        ))
-        .returning({ id: invites.id })
-      if (bumped.length === 0) throw new Error('exhausted')
-      await tx.insert(submissions).values({
-        inviteId: inv.id,
-        authorName: authorName.slice(0, 40),
-        panel: (validated as { ok: true; panel: unknown }).panel,
-        ipHash,
-      })
-    })
-  } catch {
-    return c.json(NOT_FOUND, 404)
-  }
+  // Critical section: the sliding-window counts, the validity-guarded use_count
+  // bump, and the submission INSERT all run in ONE transaction that first takes
+  // per-token AND per-IP advisory xact locks — so parallel submissions serialize
+  // and can't both read a stale count and slip past the rate limit / max_uses.
+  const since = new Date(Date.now() - RATE_WINDOW_MS)
+  type Outcome =
+    | { status: 201 }
+    | { status: 429; msg: string }
+    | { status: 404 }
+  const outcome = await db.transaction<Outcome>(async (tx) => {
+    await tx.execute(sql`SELECT pg_advisory_xact_lock(hashtext(${token}))`)
+    await tx.execute(sql`SELECT pg_advisory_xact_lock(hashtext(${ipHash}))`)
 
+    const [byToken] = await tx.select({ n: count() }).from(submissions).where(and(eq(submissions.inviteId, inv.id), gte(submissions.createdAt, since)))
+    if (byToken.n >= MAX_PER_TOKEN) return { status: 429, msg: 'too many submissions for this invite — try again later' }
+    const [byIp] = await tx.select({ n: count() }).from(submissions).where(and(eq(submissions.ipHash, ipHash), gte(submissions.createdAt, since)))
+    if (byIp.n >= MAX_PER_IP) return { status: 429, msg: 'too many submissions from your network — try again later' }
+
+    const bumped = await tx
+      .update(invites)
+      .set({ useCount: sql`${invites.useCount} + 1` })
+      .where(and(
+        eq(invites.id, inv.id),
+        isNull(invites.revokedAt),
+        or(isNull(invites.expiresAt), gt(invites.expiresAt, new Date())),
+        or(isNull(invites.maxUses), lt(invites.useCount, invites.maxUses)),
+      ))
+      .returning({ id: invites.id })
+    if (bumped.length === 0) return { status: 404 }
+    await tx.insert(submissions).values({
+      inviteId: inv.id,
+      authorName: authorName.slice(0, 40),
+      panel: (validated as { ok: true; panel: unknown }).panel,
+      ipHash,
+    })
+    return { status: 201 }
+  })
+
+  if (outcome.status === 429) return c.json({ errors: [outcome.msg] }, 429)
+  if (outcome.status === 404) return c.json(NOT_FOUND, 404)
   return c.json({ ok: true }, 201)
 })
 

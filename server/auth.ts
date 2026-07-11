@@ -20,6 +20,7 @@ import * as authSchema from './db/auth-schema'
 
 const BASE_URL = process.env.BASE_URL || 'http://localhost:8787'
 const OWNER_EMAIL = process.env.OWNER_EMAIL?.toLowerCase() ?? ''
+const IS_PROD = process.env.NODE_ENV === 'production'
 
 const isOwner = (email: string): boolean => email.toLowerCase() === OWNER_EMAIL
 
@@ -63,6 +64,12 @@ export const auth = betterAuth({
     // Same-origin cookie session; better-auth defaults are httpOnly + SameSite=Lax.
     expiresIn: 60 * 60 * 24 * 30, // 30 days
     updateAge: 60 * 60 * 24, // refresh once a day
+  },
+  // Throttle brute-force / abuse on the auth endpoints (magic-link, passkey).
+  rateLimit: { enabled: true, window: 60, max: 100 },
+  advanced: {
+    // Secure (https-only) cookies in production; dev over http keeps them usable.
+    useSecureCookies: IS_PROD,
   },
   databaseHooks: {
     user: {

@@ -60,6 +60,7 @@
 }
 .hist-head { font-family: 'Permanent Marker', cursive; font-size: 14px; margin: 0 2px 6px; }
 .hist-empty { font-family: 'Caveat', cursive; font-size: 16px; color: #9a937f; padding: 8px 2px; }
+.hist-err { font-family: 'Caveat', cursive; font-size: 15px; color: #b23b2e; padding: 4px 2px 8px; }
 .hist-row {
   display: flex; align-items: center; gap: 8px; padding: 5px 6px; border-radius: 8px;
   border-bottom: 1.5px dashed #e0d8c1;
@@ -554,6 +555,7 @@
 .inbox-lhead { font-family: 'Permanent Marker', cursive; font-size: 14px; color: #4a463c; margin: 2px 4px 8px; }
 .inbox-dim { color: #9a937f; font-family: 'Caveat', cursive; }
 .inbox-empty { font-family: 'Caveat', cursive; font-size: 18px; color: #9a937f; text-align: center; padding: 30px 16px; }
+.inbox-err { font-family: 'Caveat', cursive; font-size: 16px; color: #b23b2e; margin-top: 8px; }
 .inbox-row {
   position: relative; background: #fffdf6; border: 1.5px solid #d6cdb2; border-radius: 9px;
   padding: 7px 10px; margin-bottom: 7px; cursor: pointer;

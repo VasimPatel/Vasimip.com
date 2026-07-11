@@ -59,6 +59,7 @@ export default function Inbox({ onAddToPage, pageName }: Props) {
   const [invites, setInvites] = useState<InviteRow[]>([])
   const [selId, setSelId] = useState<number | null>(null)
   const [busy, setBusy] = useState(false)
+  const [detailErr, setDetailErr] = useState<string | null>(null)
   const [copied, setCopied] = useState<number | null>(null)
   // create-invite form
   const [label, setLabel] = useState('')
@@ -104,7 +105,15 @@ export default function Inbox({ onAddToPage, pageName }: Props) {
   }
 
   const addToPage = async (s: SubmissionRow) => {
-    if (s.status === 'pending') { setBusy(true); await approveSubmission(s.id); setBusy(false); await refresh() }
+    setDetailErr(null)
+    // Approve first if still pending — only insert + close if that succeeds.
+    if (s.status === 'pending') {
+      setBusy(true)
+      const ok = await approveSubmission(s.id)
+      setBusy(false)
+      if (!ok) { setDetailErr('could not approve this panel — try again.'); return }
+      await refresh()
+    }
     const { w, h, boxes } = s.panel
     onAddToPage({ x: 40, y: 40, w, h, anchor: { dx: w / 2, dy: 0 }, sketch: 'b', boxes, pid: undefined })
     setOpen(false)
@@ -162,7 +171,7 @@ export default function Inbox({ onAddToPage, pageName }: Props) {
                       key={s.id}
                       className={`inbox-row${s.id === selId ? ' active' : ''}`}
                       data-testid={`sub-row-${s.id}`}
-                      onClick={() => setSelId(s.id)}
+                      onClick={() => { setSelId(s.id); setDetailErr(null) }}
                     >
                       <div className="inbox-row-name">{s.authorName || 'someone'}</div>
                       <div className="inbox-row-sub">{relTime(s.createdAt)}{s.inviteLabel ? ' · ' + s.inviteLabel : ''}</div>
@@ -188,6 +197,7 @@ export default function Inbox({ onAddToPage, pageName }: Props) {
                           <button className="ibtn add" disabled={busy || pageName == null} title={pageName == null ? 'select a page first' : 'add to ' + pageName} onClick={() => addToPage(selected)}>→ add to this page</button>
                         )}
                       </div>
+                      {detailErr && <div className="inbox-err">{detailErr}</div>}
                     </>
                   ) : (
                     <div className="inbox-empty">pick a submission to preview it</div>
