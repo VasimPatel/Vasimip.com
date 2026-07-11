@@ -1,5 +1,7 @@
-import { lazy, Suspense } from 'react'
+import { lazy, Suspense, useEffect, useState } from 'react'
 import Notebook from './notebook/Notebook'
+import type { NotebookDoc } from './notebook/doc/validate'
+import { loadDoc } from './admin/docStore'
 import { useSession } from './admin/auth-client'
 
 // The admin now ships in production at /admin — the server (`requireOwner`) is the
@@ -45,7 +47,22 @@ function AdminGate() {
   )
 }
 
+// The live site: paint instantly from the baked DEFAULT_DOC (doc=undefined), then
+// hot-swap to the server's copy once it arrives via the `componentDidUpdate`
+// doc-swap contract. Fetch failure (offline / API down) is silent → baked doc
+// stays. In dev the Vite middleware serves the SAME file as the baked fallback,
+// so there's no visible swap — that's fine.
+function SiteNotebook() {
+  const [doc, setDoc] = useState<NotebookDoc | undefined>(undefined)
+  useEffect(() => {
+    const ac = new AbortController()
+    loadDoc(ac.signal).then(({ doc: d }) => setDoc(d)).catch(() => {})
+    return () => ac.abort()
+  }, [])
+  return <Notebook doc={doc} />
+}
+
 export default function App() {
   if (window.location.pathname === '/admin') return <AdminGate />
-  return <Notebook />
+  return <SiteNotebook />
 }

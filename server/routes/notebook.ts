@@ -11,9 +11,9 @@ import { eq, desc } from 'drizzle-orm'
 import { db } from '../db'
 import { notebookRevisions, notebookCurrent } from '../db/schema'
 import { tryValidateDoc } from '../../src/notebook/doc/validate'
-import { requireOwner } from '../middleware'
+import { requireOwner, type OwnerEnv } from '../middleware'
 
-const notebook = new Hono()
+const notebook = new Hono<OwnerEnv>()
 
 async function getCurrent(): Promise<{ revisionId: number; doc: unknown } | null> {
   const rows = await db
@@ -56,7 +56,7 @@ notebook.put('/notebook', requireOwner, async (c) => {
   const revisionId = await db.transaction(async (tx) => {
     const [revision] = await tx
       .insert(notebookRevisions)
-      .values({ doc: result.doc, note, createdBy: 'admin' })
+      .values({ doc: result.doc, note, createdBy: c.get('userEmail') ?? 'owner' })
       .returning({ id: notebookRevisions.id })
     await tx.update(notebookCurrent).set({ revisionId: revision.id }).where(eq(notebookCurrent.id, 1))
     return revision.id
@@ -91,7 +91,7 @@ notebook.post('/revisions/:id/restore', requireOwner, async (c) => {
   const revisionId = await db.transaction(async (tx) => {
     const [revision] = await tx
       .insert(notebookRevisions)
-      .values({ doc: old.doc, note: `restore of #${id}`, createdBy: 'admin' })
+      .values({ doc: old.doc, note: `restore of #${id}`, createdBy: c.get('userEmail') ?? 'owner' })
       .returning({ id: notebookRevisions.id })
     await tx.update(notebookCurrent).set({ revisionId: revision.id }).where(eq(notebookCurrent.id, 1))
     return revision.id

@@ -13,6 +13,8 @@ import PageCanvas from './PageCanvas'
 import Inspector from './Inspector'
 import ActionEditor from './ActionEditor'
 import Preview from './Preview'
+import History from './History'
+import { loadDoc, saveDoc } from './docStore'
 import { signOut, passkey } from './auth-client'
 
 type Sel = { kind: 'cover' } | { kind: 'page'; page: number }
@@ -28,12 +30,19 @@ export default function Admin({ devBypass = false }: { devBypass?: boolean }) {
   const undoRef = useRef<NotebookDoc[]>([])
   const redoRef = useRef<NotebookDoc[]>([])
   const savedDocRef = useRef<NotebookDoc | null>(null)
+  // The revisionId the current draft is based on — sent as `baseRevisionId` on
+  // save so the server can detect a concurrent edit (→ 409 → conflict banner).
+  const revisionRef = useRef<number | null>(null)
   const docRef = useRef<NotebookDoc | null>(null)
   const lastPushRef = useRef(0) // wall-clock of the last history push (drag coalescing)
   const [histTick, setHistTick] = useState(0) // force re-render when stacks change
   const [loadErr, setLoadErr] = useState<string | null>(null)
   const [saveErrs, setSaveErrs] = useState<string[] | null>(null)
   const [showErrs, setShowErrs] = useState(false)
+  // A 409 from the server: someone else saved since we loaded. Holds their
+  // revisionId so the banner can offer load-theirs / overwrite-anyway.
+  const [conflict, setConflict] = useState<{ currentRevisionId: number } | null>(null)
+  const [saveNote, setSaveNote] = useState('') // optional note stamped onto the revision
   const [sel, setSel] = useState<Sel>({ kind: 'page', page: 0 })
   const [panelSel, setPanelSel] = useState<number | null>(0)
   const [boxSel, setBoxSel] = useState<number | null>(null)
@@ -44,18 +53,23 @@ export default function Admin({ devBypass = false }: { devBypass?: boolean }) {
   const [dojoOpen, setDojoOpen] = useState(false)
   const fileRef = useRef<HTMLInputElement>(null)
 
-  useEffect(() => {
-    fetch('/__notebook')
-      .then((r) => r.json())
-      .then((d) => {
-        savedDocRef.current = d as NotebookDoc
-        undoRef.current = []
-        redoRef.current = []
-        lastPushRef.current = 0 // fresh history after load
-        setDoc(d as NotebookDoc)
-      })
-      .catch((e) => setLoadErr(String(e)))
+  // Adopt a freshly-loaded (or restored / conflict-resolved) doc as the new
+  // baseline: pin its revisionId and reset the undo history (same as import).
+  const applyLoaded = useCallback((loaded: NotebookDoc, revisionId: number) => {
+    savedDocRef.current = loaded
+    revisionRef.current = revisionId
+    undoRef.current = []
+    redoRef.current = []
+    lastPushRef.current = 0 // fresh history after load
+    setDoc(loaded)
+    setHistTick((t) => t + 1)
   }, [])
+
+  useEffect(() => {
+    loadDoc()
+      .then(({ doc: d, revisionId }) => applyLoaded(d, revisionId))
+      .catch((e) => setLoadErr(String(e)))
+  }, [applyLoaded])
 
   const update = useCallback((fn: (d: NotebookDoc) => NotebookDoc) => {
     setDoc((d) => {
@@ -168,13 +182,44 @@ export default function Admin({ devBypass = false }: { devBypass?: boolean }) {
   const validation = useMemo(() => (doc ? tryValidateDoc(doc) : null), [doc])
   const valid = validation?.ok ?? false
 
+  // Mark the just-persisted snapshot as clean and pin the new revisionId.
+  const commitSaved = (saved: NotebookDoc, revisionId: number) => {
+    savedDocRef.current = saved
+    revisionRef.current = revisionId
+    lastPushRef.current = 0
+    setSaveErrs(null); setConflict(null); setSaveNote('')
+    setHistTick((t) => t + 1)
+  }
+
+  // PUT the draft against `baseRev`. Success → clean; 409 → conflict banner;
+  // 400 → surface the validator errors in the strip.
+  const putDoc = async (draft: NotebookDoc, baseRev: number) => {
+    const res = await saveDoc(draft, baseRev, saveNote.trim())
+    if ('ok' in res) { commitSaved(draft, res.revisionId); return }
+    if ('conflict' in res) { setConflict({ currentRevisionId: res.currentRevisionId }); return }
+    setSaveErrs(res.errors); setShowErrs(true)
+  }
+
   const save = async () => {
-    if (!doc) return
-    const res = await fetch('/__notebook', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(doc) })
-    if (res.status === 204) { savedDocRef.current = doc; lastPushRef.current = 0; setSaveErrs(null); setHistTick((t) => t + 1); return }
-    const body = await res.json().catch(() => ({ errors: ['save failed (' + res.status + ')'] }))
-    setSaveErrs(body.errors ?? ['save failed'])
-    setShowErrs(true)
+    if (!doc || revisionRef.current == null) return
+    await putDoc(doc, revisionRef.current)
+  }
+
+  // Conflict banner — "load theirs (discard mine)": re-fetch the server's doc and
+  // reset the editor onto it (same as an import), throwing away local edits.
+  const loadTheirs = async () => {
+    try {
+      const { doc: fresh, revisionId } = await loadDoc()
+      applyLoaded(fresh, revisionId)
+      setConflict(null); setSaveErrs(null)
+    } catch (e) { setSaveErrs([String(e)]); setShowErrs(true) }
+  }
+
+  // "overwrite anyway": re-PUT the local draft against THEIR fresh revisionId so
+  // the server accepts it (a newer save since then just re-arms the banner).
+  const overwriteAnyway = async () => {
+    if (!doc || !conflict) return
+    await putDoc(doc, conflict.currentRevisionId)
   }
 
   const exportDoc = () => {
@@ -200,7 +245,7 @@ export default function Admin({ devBypass = false }: { devBypass?: boolean }) {
     })
   }
 
-  if (loadErr) return <div className="admin"><div className="errs">failed to load /__notebook — is the dev server running?<br />{loadErr}</div></div>
+  if (loadErr) return <div className="admin"><div className="errs">failed to load /api/notebook — is the server running?<br />{loadErr}</div></div>
   if (!doc) return <div className="admin"><div className="ce-empty" style={{ margin: 'auto' }}>loading the notebook…</div></div>
 
   // ── doc mutators bound to the current selection ────────────────────────────
@@ -318,6 +363,8 @@ export default function Admin({ devBypass = false }: { devBypass?: boolean }) {
         <button className="qbtn" onClick={exportDoc}>export</button>
         <button className="qbtn" onClick={() => fileRef.current?.click()}>import</button>
         <input ref={fileRef} type="file" accept="application/json" style={{ display: 'none' }} onChange={(e) => { const f = e.target.files?.[0]; if (f) importDoc(f); e.target.value = '' }} />
+        <History onRestored={loadTheirs} />
+        <input className="note-input" value={saveNote} onChange={(e) => setSaveNote(e.target.value)} placeholder="note (optional)" title="a short note stamped onto this revision" />
         <button className="savebtn" data-testid="save-btn" disabled={!valid} onClick={save}>{dirty ? 'save the page' : 'saved ✓'}</button>
         {devBypass ? (
           // No auth server reachable in dev — the gate was bypassed; flag it.
@@ -336,6 +383,14 @@ export default function Admin({ devBypass = false }: { devBypass?: boolean }) {
           </>
         )}
       </header>
+
+      {conflict && (
+        <div className="conflict">
+          <span className="conflict-msg">✋ someone else scribbled since you opened this.</span>
+          <button className="conflict-btn" onClick={loadTheirs}>load theirs (discard mine)</button>
+          <button className="conflict-btn danger" onClick={overwriteAnyway}>overwrite anyway</button>
+        </div>
+      )}
 
       {errs.length > 0 && showErrs && (
         <div className="errs">
