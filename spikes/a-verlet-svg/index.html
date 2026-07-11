@@ -1,0 +1,53 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Spike A — Verlet SVG render-mode perf test</title>
+  <style>
+    html, body { margin: 0; padding: 0; background: #0c0f14; overflow: hidden; height: 100%; }
+    svg { display: block; width: 100vw; height: 100vh; background: #0c0f14; }
+    #hud {
+      position: fixed; top: 8px; left: 8px; z-index: 10;
+      font: 12px/1.4 ui-monospace, Menlo, monospace; color: #b7ffcf;
+      background: rgba(0,0,0,0.55); padding: 8px 10px; border-radius: 6px;
+      pointer-events: none; white-space: pre;
+    }
+    /* stroke-linecap MUST be 'butt' (not 'round') here: these lines are unit-length
+       (0,0)-(1,0) geometry stretched to bone/segment length via a non-uniform
+       transform scale(len, 1). A round cap is generated as a circle in that same
+       pre-transform local space, so the non-uniform scale stretches the cap into a
+       long ellipse/needle reaching ~ (strokeWidth/2 * len) beyond the endpoint —
+       see spikes/a-verlet-svg notes. Joints already get their own circle element,
+       so a flat butt cap here costs nothing visually. */
+    .bone { stroke: #e8e8e8; stroke-width: 6; stroke-linecap: butt; }
+    .joint { fill: #ffb15c; }
+    .joint.pinned { fill: #ff5c5c; }
+    .rope-seg { stroke: #c9a06a; stroke-width: 4; stroke-linecap: butt; }
+    .rope-weight { fill: #7ec8ff; }
+    .rope-anchor { fill: #888; }
+    .prop { fill: #7effc0; stroke: #2c8a5f; stroke-width: 2; cursor: pointer; }
+  </style>
+</head>
+<body>
+  <div id="hud">loading…</div>
+  <svg id="stage" viewBox="0 0 1440 900" preserveAspectRatio="xMidYMid meet">
+    <defs>
+      <line id="segGeom" x1="0" y1="0" x2="1" y2="0" />
+      <circle id="jointGeom" r="1" cx="0" cy="0" />
+      <rect id="rectGeom" x="-1" y="-1" width="2" height="2" />
+      <circle id="circGeom" r="1" cx="0" cy="0" />
+    </defs>
+
+    <!-- static anchors (never re-rendered) -->
+    <g id="anchors"></g>
+
+    <!-- direct-geometry render targets (used for attr + css modes) -->
+    <g id="gDirect"></g>
+
+    <!-- shared <use> render targets (used for 'use' mode) -->
+    <g id="gUse"></g>
+  </svg>
+  <script type="module" src="./main.js"></script>
+</body>
+</html>
