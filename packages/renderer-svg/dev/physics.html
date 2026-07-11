@@ -1,0 +1,34 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Dash Engine v2 — Phase 5 physics review</title>
+    <style>
+      body { margin: 0; font: 14px/1.4 system-ui, sans-serif; background: #f4f1e8; color: #1a1a1a; }
+      h1 { font-size: 18px; padding: 16px 20px 4px; margin: 0; }
+      .sub { padding: 0 20px 12px; color: #666; font-size: 12px; }
+      section { padding: 4px 20px 18px; }
+      h2 { font-size: 15px; margin: 12px 0 2px; }
+      .meta { color: #666; font-size: 11px; margin-bottom: 6px; }
+      .strip { display: flex; gap: 0; overflow-x: auto; border: 1px solid #d8d2c2; background: #fffdf6; width: fit-content; max-width: 100%; }
+      .frame { display: flex; flex-direction: column; align-items: center; border-right: 1px solid #ece7d8; }
+      .frame:last-child { border-right: none; }
+      .frame .t { font-size: 10px; color: #888; padding: 3px 0; font-variant-numeric: tabular-nums; }
+      .frame svg { display: block; background: #fffdf6; }
+      .props .frame svg { background: #fff7ed; }
+      .rope .frame svg { background: #eef4ff; }
+      .live { display: flex; gap: 14px; flex-wrap: wrap; align-items: flex-start; }
+      .live .panel { border: 1px solid #d8d2c2; padding: 6px 8px; background: #fffdf6; }
+      .live .panel .cap { font-size: 11px; color: #666; padding: 2px 0 4px; }
+      button { font: inherit; padding: 4px 10px; margin-bottom: 4px; cursor: pointer; }
+      .live svg { display: block; }
+    </style>
+  </head>
+  <body>
+    <h1>Dash Engine v2 — Phase 5 physics review</h1>
+    <div class="sub">One shared verlet solver: character secondary follow-through, spring-anchored props (sleep when settled), and ropes. Strips are deterministic; live panels run a real loop and take pointer input.</div>
+    <div id="app"></div>
+    <script type="module" src="./physics.tsx"></script>
+  </body>
+</html>

@@ -15,6 +15,17 @@
 //   set.feedSolved(solved)               // frame for NEXT tick's look-at
 //   renderer.render(solved, face)
 //
+// Full per-tick order WITH the P5 secondary (normative — one shared verlet solver):
+//   const face = set.update(tick)
+//   const { pose } = blender.tick()
+//   const solved = solveFk(rig, pose, …) // POST-ADDITIVE — the verlet tap point
+//   set.feedSolved(solved)
+//   secondary.step(solved)               // updates verlet pin/spring TARGETS only
+//   world.step()                         // the ONE shared solve (secondary+props+ropes)
+//   renderer.render(solved, face, secondary.overrides())
+// secondary.step does NOT step the world (the world is shared): a scene with N
+// characters updates N secondaries then steps the single solver once.
+//
 // Controllers are BEHAVIOR, not blender state: after blender.setState(...) the
 // caller rebuilds the set (or re-adds additives) exactly as it re-registers any
 // additive. Blink carries a tiny schedule counter — snapshot via getBlinkState().

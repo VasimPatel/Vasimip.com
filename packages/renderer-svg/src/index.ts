@@ -31,11 +31,18 @@ const EYE_WHITE_R = 0.26 // in head radii
 const PUPIL_R = 0.15 // in head radii
 const EYE_STROKE_W = 0.9
 
+/** Optional per-bone endpoint overrides (P5 secondary): boneId → the world-space END
+ * to draw that bone to, INSTEAD of its FK end. The origin is unchanged, so a hard
+ * length-locked verlet end reads as angular follow-through. Backward-compatible:
+ * omit it and rendering is exactly the FK result. */
+export type EndpointOverrides = Record<string, { ex: number; ey: number }>
+
 export interface CharacterRenderer {
   /** Update all bone/head geometry from a freshly solved skeleton. `face` drives
    * the pupils + lids; omitting it renders a neutral (open, centred) face, so P2/P3
-   * callers are unaffected. */
-  render(solved: SolvedSkeleton, face?: FaceAux): void
+   * callers are unaffected. `overrides` redraws named bones to a verlet endpoint
+   * (P5 secondary); omitting it is the plain FK render (P2–P4 callers unaffected). */
+  render(solved: SolvedSkeleton, face?: FaceAux, overrides?: EndpointOverrides): void
   /** Remove every element this renderer created from the SVG root. */
   destroy(): void
 }
@@ -141,18 +148,21 @@ export function createCharacterRenderer(
   for (const b of bones) lineById.set(b.id, b.line)
 
   return {
-    render(solved: SolvedSkeleton, face: FaceAux = NEUTRAL_FACE): void {
+    render(solved: SolvedSkeleton, face: FaceAux = NEUTRAL_FACE, overrides?: EndpointOverrides): void {
       for (const bone of solved.bones) {
+        const ov = overrides?.[bone.id]
+        const ex = ov ? ov.ex : bone.ex
+        const ey = ov ? ov.ey : bone.ey
         if (bone.id === HEAD_JOINT_ID) {
           if (headEl) {
-            headEl.setAttribute('cx', String(bone.ex))
-            headEl.setAttribute('cy', String(bone.ey))
+            headEl.setAttribute('cx', String(ex))
+            headEl.setAttribute('cy', String(ey))
           }
           if (faceGroup) {
             // Head centre = bone end; orient the face with the head bone (which
             // points "up" the head, ≈ −π/2 at rest, so +π/2 makes rest upright).
             const rot = bone.worldAngle + Math.PI / 2
-            faceGroup.style.transform = `translate(${bone.ex}px, ${bone.ey}px) rotate(${rot}rad)`
+            faceGroup.style.transform = `translate(${ex}px, ${ey}px) rotate(${rot}rad)`
             const openY = 1 - Math.min(1, Math.max(0, face.blink))
             const maxOff = Math.max(0, (EYE_WHITE_R - PUPIL_R) * headR)
             let dx = face.pupilDx
@@ -175,13 +185,93 @@ export function createCharacterRenderer(
         if (!line) continue
         line.setAttribute('x1', String(bone.ox))
         line.setAttribute('y1', String(bone.oy))
-        line.setAttribute('x2', String(bone.ex))
-        line.setAttribute('y2', String(bone.ey))
+        line.setAttribute('x2', String(ex))
+        line.setAttribute('y2', String(ey))
       }
     },
     destroy(): void {
       group.remove()
       eyes = []
+    },
+  }
+}
+
+// ── P5 prop + rope drawing (dev-harness layer) ───────────────────────────────────
+// Minimal SVG for the shared verlet solver's props and ropes, used by the physics
+// review harness. Production panel content stays render-layer (PageRenderer/site is
+// untouched — nothing there imports these). A prop is a rect drawn from a particle
+// PAIR (midpoint = centre, angle = atan2 of the pair) via CSS transform (spike
+// guidance: transformed groups use CSS transform). A rope is a <polyline> through the
+// sampled chain points.
+
+export interface PropRenderer {
+  /** a/b are the two prop particle world positions (verlet.particle(id)). */
+  render(a: { x: number; y: number }, b: { x: number; y: number }, asleep?: boolean): void
+  destroy(): void
+}
+
+export function createPropRenderer(
+  svgRoot: SVGSVGElement,
+  spec: { w: number; h: number; fill?: string; stroke?: string; strokeWidth?: number },
+): PropRenderer {
+  const g = document.createElementNS(SVG_NS, 'g')
+  const rect = document.createElementNS(SVG_NS, 'rect')
+  rect.setAttribute('x', String(-spec.w / 2))
+  rect.setAttribute('y', String(-spec.h / 2))
+  rect.setAttribute('width', String(spec.w))
+  rect.setAttribute('height', String(spec.h))
+  rect.setAttribute('rx', '2')
+  rect.setAttribute('fill', spec.fill ?? '#ffd8a8')
+  rect.setAttribute('stroke', spec.stroke ?? '#1a1a1a')
+  rect.setAttribute('stroke-width', String(spec.strokeWidth ?? 2))
+  g.appendChild(rect)
+  // Sleep indicator dot — filled when awake, hollow when asleep.
+  const dot = document.createElementNS(SVG_NS, 'circle')
+  dot.setAttribute('cx', '0')
+  dot.setAttribute('cy', String(-spec.h / 2 - 6))
+  dot.setAttribute('r', '2.4')
+  g.appendChild(dot)
+  svgRoot.appendChild(g)
+  return {
+    render(a, b, asleep = false): void {
+      const cx = (a.x + b.x) / 2
+      const cy = (a.y + b.y) / 2
+      const rot = Math.atan2(b.y - a.y, b.x - a.x)
+      g.style.transform = `translate(${cx}px, ${cy}px) rotate(${rot}rad)`
+      dot.setAttribute('fill', asleep ? 'none' : '#2f9e44')
+      dot.setAttribute('stroke', asleep ? '#adb5bd' : 'none')
+      dot.setAttribute('stroke-width', asleep ? '1' : '0')
+    },
+    destroy(): void {
+      g.remove()
+    },
+  }
+}
+
+export interface RopeRenderer {
+  render(points: ReadonlyArray<{ x: number; y: number }>): void
+  destroy(): void
+}
+
+export function createRopeRenderer(
+  svgRoot: SVGSVGElement,
+  opts?: { stroke?: string; strokeWidth?: number },
+): RopeRenderer {
+  const poly = document.createElementNS(SVG_NS, 'polyline')
+  poly.setAttribute('fill', 'none')
+  poly.setAttribute('stroke', opts?.stroke ?? '#495057')
+  poly.setAttribute('stroke-width', String(opts?.strokeWidth ?? 2.5))
+  poly.setAttribute('stroke-linecap', 'round')
+  poly.setAttribute('stroke-linejoin', 'round')
+  svgRoot.appendChild(poly)
+  return {
+    render(points): void {
+      let s = ''
+      for (const p of points) s += `${p.x},${p.y} `
+      poly.setAttribute('points', s.trim())
+    },
+    destroy(): void {
+      poly.remove()
     },
   }
 }
