@@ -141,7 +141,13 @@ export default function Admin() {
   // window handlers see the key — matches the keydown shield's precedence).
   useEffect(() => {
     if (!dojoOpen) return
-    const h = (e: KeyboardEvent) => { if (e.key === 'Escape') { e.stopPropagation(); setDojoOpen(false) } }
+    const h = (e: KeyboardEvent) => {
+      if (e.key !== 'Escape') return
+      const t = e.target as HTMLElement | null
+      if (t && (t.tagName === 'INPUT' || t.tagName === 'TEXTAREA' || t.tagName === 'SELECT')) return // let fields keep Esc
+      e.stopPropagation()
+      setDojoOpen(false)
+    }
     window.addEventListener('keydown', h, true)
     return () => window.removeEventListener('keydown', h, true)
   }, [dojoOpen])

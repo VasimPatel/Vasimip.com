@@ -155,6 +155,7 @@ export default function PageCanvas({
     const move = (ev: PointerEvent) => {
       const p = pt(ev)
       if (Math.hypot(p.nx - lastX, p.ny - lastY) < 2) return // ~2px min segment
+      if (d.length > 1400) return // per-stroke budget — keeps a box's total under the validator's path cap
       lastX = p.nx; lastY = p.ny
       d += ` L${p.x},${p.y}`
       if (live) live.setAttribute('d', d)
@@ -162,16 +163,25 @@ export default function PageCanvas({
     const up = () => {
       window.removeEventListener('pointermove', move)
       window.removeEventListener('pointerup', up)
+      window.removeEventListener('pointercancel', up)
       if (live) live.setAttribute('d', '')
       if (d.includes('L')) {
         updatePanel(pi, (p) => ({
           ...p,
-          boxes: p.boxes.map((b, j) => (j === bi && b.kind === 'draw' ? { ...b, strokes: [...b.strokes, d] } : b)),
+          boxes: p.boxes.map((b, j) => {
+            if (j !== bi || b.kind !== 'draw') return b
+            // Respect the validator caps: ≤64 strokes and ≤6000 total path chars
+            // per box — silently dropping the oldest stroke beats locking Save.
+            let strokes = [...b.strokes, d]
+            while (strokes.length > 64 || strokes.reduce((n, s) => n + s.length, 0) > 6000) strokes = strokes.slice(1)
+            return { ...b, strokes }
+          }),
         }))
       }
     }
     window.addEventListener('pointermove', move)
     window.addEventListener('pointerup', up)
+    window.addEventListener('pointercancel', up)
     void p0
   }, [onSelectBox, updatePanel])
 

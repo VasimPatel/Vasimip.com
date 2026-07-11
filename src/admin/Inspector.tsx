@@ -240,7 +240,26 @@ function TextBoxEditor({ box, updateBox, deleteBox }: { box: TextBox; updateBox:
   return (
     <div className="ce-pad">
       <div className="ce-head"><span className="ce-title">THE WORDS</span></div>
-      <textarea className="ce-words" rows={2} value={box.text} onChange={(e) => set({ text: e.target.value })} />
+      <textarea
+        className="ce-words"
+        rows={2}
+        value={box.text}
+        onChange={(e) => {
+          // Trim charRots to the new non-space char count, else the validator
+          // rejects the doc (length > count) and Save silently locks up.
+          const text = e.target.value
+          const ns = [...text].filter((c) => /\S/.test(c)).length
+          updateBox((b) => {
+            if (b.kind !== 'text') return b
+            let charRots = b.charRots
+            if (charRots && charRots.length > ns) {
+              const cut = charRots.slice(0, ns)
+              charRots = cut.some((v) => v !== null) ? cut : undefined
+            }
+            return { ...b, text, charRots }
+          })
+        }}
+      />
 
       <div className="ce-row" style={{ marginTop: 9 }}>
         {FONTS.map((f) => (
