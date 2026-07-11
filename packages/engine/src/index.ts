@@ -52,3 +52,31 @@ export type {
 
 export { createGait } from './gait'
 export type { Gait, GaitOptions, GaitFrame, PlantedFoot } from './gait'
+
+// ── Phase 5: shared verlet solver + character secondary (L3) ─────────────────
+export {
+  createVerletWorld,
+  DEFAULT_GRAVITY,
+  DEFAULT_DAMPING,
+  DEFAULT_ITERATIONS,
+  SLEEP_EPSILON,
+  SLEEP_TICKS,
+  PROP_STIFFNESS,
+} from './verlet'
+export type {
+  VerletWorld,
+  VerletWorldOptions,
+  VerletState,
+  BodyHandle,
+  BodyKind,
+  BodyOptions,
+  ParticleSpec,
+  ConstraintSpec,
+  PropSpec,
+  RopeSpec,
+  StiffnessClass,
+  Point,
+} from './verlet'
+
+export { createSecondary, SECONDARY_STIFFNESS, SECONDARY_DAMPING, SECONDARY_ITERS } from './secondary'
+export type { Secondary, SecondaryOptions } from './secondary'
