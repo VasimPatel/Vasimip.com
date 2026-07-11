@@ -1,0 +1,435 @@
+{
+  "id": "idle-shuffle",
+  "loop": true,
+  "tracks": [
+    {
+      "jointId": "pelvis",
+      "keys": [
+        {
+          "t": 0,
+          "angle": -1.490966,
+          "ease": "easeInOut"
+        },
+        {
+          "t": 650,
+          "angle": -1.540966,
+          "ease": "easeInOut"
+        },
+        {
+          "t": 1300,
+          "angle": -1.490966,
+          "ease": "easeInOut"
+        },
+        {
+          "t": 1950,
+          "angle": -1.440966,
+          "ease": "easeInOut"
+        },
+        {
+          "t": 2600,
+          "angle": -1.490966,
+          "ease": "easeInOut"
+        }
+      ]
+    },
+    {
+      "jointId": "neck",
+      "keys": [
+        {
+          "t": 0,
+          "angle": -0.07983,
+          "ease": "easeInOut"
+        },
+        {
+          "t": 650,
+          "angle": -0.04983,
+          "ease": "easeInOut"
+        },
+        {
+          "t": 1300,
+          "angle": -0.07983,
+          "ease": "easeInOut"
+        },
+        {
+          "t": 1950,
+          "angle": -0.10983,
+          "ease": "easeInOut"
+        },
+        {
+          "t": 2600,
+          "angle": -0.07983,
+          "ease": "easeInOut"
+        }
+      ]
+    },
+    {
+      "jointId": "head",
+      "keys": [
+        {
+          "t": 0,
+          "angle": 0.141897,
+          "ease": "easeInOut"
+        },
+        {
+          "t": 650,
+          "angle": 0.181897,
+          "ease": "easeInOut"
+        },
+        {
+          "t": 1300,
+          "angle": 0.141897,
+          "ease": "easeInOut"
+        },
+        {
+          "t": 1950,
+          "angle": 0.101897,
+          "ease": "easeInOut"
+        },
+        {
+          "t": 2600,
+          "angle": 0.141897,
+          "ease": "easeInOut"
+        }
+      ]
+    },
+    {
+      "jointId": "upperArmR",
+      "keys": [
+        {
+          "t": 0,
+          "angle": 1.980924,
+          "ease": "easeInOut"
+        },
+        {
+          "t": 650,
+          "angle": 1.930924,
+          "ease": "easeInOut"
+        },
+        {
+          "t": 1300,
+          "angle": 1.980924,
+          "ease": "easeInOut"
+        },
+        {
+          "t": 1950,
+          "angle": 2.030924,
+          "ease": "easeInOut"
+        },
+        {
+          "t": 2600,
+          "angle": 1.980924,
+          "ease": "easeInOut"
+        }
+      ]
+    },
+    {
+      "jointId": "foreArmR",
+      "keys": [
+        {
+          "t": 0,
+          "angle": 1.621259,
+          "ease": "easeInOut"
+        },
+        {
+          "t": 650,
+          "angle": 1.621259,
+          "ease": "easeInOut"
+        },
+        {
+          "t": 1300,
+          "angle": 1.621259,
+          "ease": "easeInOut"
+        },
+        {
+          "t": 1950,
+          "angle": 1.621259,
+          "ease": "easeInOut"
+        },
+        {
+          "t": 2600,
+          "angle": 1.621259,
+          "ease": "easeInOut"
+        }
+      ]
+    },
+    {
+      "jointId": "upperArmL",
+      "keys": [
+        {
+          "t": 0,
+          "angle": -2.359253,
+          "ease": "easeInOut"
+        },
+        {
+          "t": 650,
+          "angle": -2.409253,
+          "ease": "easeInOut"
+        },
+        {
+          "t": 1300,
+          "angle": -2.359253,
+          "ease": "easeInOut"
+        },
+        {
+          "t": 1950,
+          "angle": -2.309253,
+          "ease": "easeInOut"
+        },
+        {
+          "t": 2600,
+          "angle": -2.359253,
+          "ease": "easeInOut"
+        }
+      ]
+    },
+    {
+      "jointId": "foreArmL",
+      "keys": [
+        {
+          "t": 0,
+          "angle": -1.14047,
+          "ease": "easeInOut"
+        },
+        {
+          "t": 650,
+          "angle": -1.14047,
+          "ease": "easeInOut"
+        },
+        {
+          "t": 1300,
+          "angle": -1.14047,
+          "ease": "easeInOut"
+        },
+        {
+          "t": 1950,
+          "angle": -1.14047,
+          "ease": "easeInOut"
+        },
+        {
+          "t": 2600,
+          "angle": -1.14047,
+          "ease": "easeInOut"
+        }
+      ]
+    },
+    {
+      "jointId": "thighR",
+      "keys": [
+        {
+          "t": 0,
+          "angle": 2.408916,
+          "ease": "easeInOut"
+        },
+        {
+          "t": 650,
+          "angle": 2.378916,
+          "ease": "easeInOut"
+        },
+        {
+          "t": 1300,
+          "angle": 2.408916,
+          "ease": "easeInOut"
+        },
+        {
+          "t": 1950,
+          "angle": 2.438916,
+          "ease": "easeInOut"
+        },
+        {
+          "t": 2600,
+          "angle": 2.408916,
+          "ease": "easeInOut"
+        }
+      ]
+    },
+    {
+      "jointId": "shinR",
+      "keys": [
+        {
+          "t": 0,
+          "angle": 0.535738,
+          "ease": "easeInOut"
+        },
+        {
+          "t": 650,
+          "angle": 0.535738,
+          "ease": "easeInOut"
+        },
+        {
+          "t": 1300,
+          "angle": 0.535738,
+          "ease": "easeInOut"
+        },
+        {
+          "t": 1950,
+          "angle": 0.535738,
+          "ease": "easeInOut"
+        },
+        {
+          "t": 2600,
+          "angle": 0.535738,
+          "ease": "easeInOut"
+        }
+      ]
+    },
+    {
+      "jointId": "footR",
+      "keys": [
+        {
+          "t": 0,
+          "angle": -1.273834,
+          "ease": "easeInOut"
+        },
+        {
+          "t": 650,
+          "angle": -1.273834,
+          "ease": "easeInOut"
+        },
+        {
+          "t": 1300,
+          "angle": -1.273834,
+          "ease": "easeInOut"
+        },
+        {
+          "t": 1950,
+          "angle": -1.273834,
+          "ease": "easeInOut"
+        },
+        {
+          "t": 2600,
+          "angle": -1.273834,
+          "ease": "easeInOut"
+        }
+      ]
+    },
+    {
+      "jointId": "thighL",
+      "keys": [
+        {
+          "t": 0,
+          "angle": -2.672873,
+          "ease": "easeInOut"
+        },
+        {
+          "t": 650,
+          "angle": -2.702873,
+          "ease": "easeInOut"
+        },
+        {
+          "t": 1300,
+          "angle": -2.672873,
+          "ease": "easeInOut"
+        },
+        {
+          "t": 1950,
+          "angle": -2.642873,
+          "ease": "easeInOut"
+        },
+        {
+          "t": 2600,
+          "angle": -2.672873,
+          "ease": "easeInOut"
+        }
+      ]
+    },
+    {
+      "jointId": "shinL",
+      "keys": [
+        {
+          "t": 0,
+          "angle": -0.424194,
+          "ease": "easeInOut"
+        },
+        {
+          "t": 650,
+          "angle": -0.424194,
+          "ease": "easeInOut"
+        },
+        {
+          "t": 1300,
+          "angle": -0.424194,
+          "ease": "easeInOut"
+        },
+        {
+          "t": 1950,
+          "angle": -0.424194,
+          "ease": "easeInOut"
+        },
+        {
+          "t": 2600,
+          "angle": -0.424194,
+          "ease": "easeInOut"
+        }
+      ]
+    },
+    {
+      "jointId": "footL",
+      "keys": [
+        {
+          "t": 0,
+          "angle": 1.249046,
+          "ease": "easeInOut"
+        },
+        {
+          "t": 650,
+          "angle": 1.249046,
+          "ease": "easeInOut"
+        },
+        {
+          "t": 1300,
+          "angle": 1.249046,
+          "ease": "easeInOut"
+        },
+        {
+          "t": 1950,
+          "angle": 1.249046,
+          "ease": "easeInOut"
+        },
+        {
+          "t": 2600,
+          "angle": 1.249046,
+          "ease": "easeInOut"
+        }
+      ]
+    }
+  ],
+  "rootTrack": {
+    "keys": [
+      {
+        "t": 0,
+        "x": -2,
+        "y": 16,
+        "rot": 0,
+        "ease": "easeInOut"
+      },
+      {
+        "t": 650,
+        "x": -3.5,
+        "y": 16.4,
+        "rot": 0,
+        "ease": "easeInOut"
+      },
+      {
+        "t": 1300,
+        "x": -2,
+        "y": 16,
+        "rot": 0,
+        "ease": "easeInOut"
+      },
+      {
+        "t": 1950,
+        "x": -0.5,
+        "y": 16.4,
+        "rot": 0,
+        "ease": "easeInOut"
+      },
+      {
+        "t": 2600,
+        "x": -2,
+        "y": 16,
+        "rot": 0,
+        "ease": "easeInOut"
+      }
+    ]
+  }
+}

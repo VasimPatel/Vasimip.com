@@ -27,6 +27,10 @@ export function isStr(x: unknown): x is string {
   return typeof x === 'string'
 }
 
+export function isBool(x: unknown): x is boolean {
+  return typeof x === 'boolean'
+}
+
 export function isArr(x: unknown): x is unknown[] {
   return Array.isArray(x)
 }
