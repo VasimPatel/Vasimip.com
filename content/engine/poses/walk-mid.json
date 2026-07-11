@@ -1,0 +1,23 @@
+{
+  "id": "walk-mid",
+  "root": {
+    "x": -2,
+    "y": 16,
+    "rot": 0
+  },
+  "angles": {
+    "pelvis": -1.412141,
+    "neck": -0.016758,
+    "head": 0.069196,
+    "upperArmR": -2.567433,
+    "foreArmR": -0.192396,
+    "upperArmL": 2.040937,
+    "foreArmL": 0.156602,
+    "thighR": 2.350189,
+    "shinR": 0.476147,
+    "footR": -1.234341,
+    "thighL": -2.55187,
+    "shinL": -0.389607,
+    "footL": 1.430695
+  }
+}

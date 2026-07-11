@@ -1,0 +1,33 @@
+{
+  "id": "dash",
+  "rig": "dash",
+  "proportions": {},
+  "style": {
+    "color": "#1a1a1a",
+    "width": 5,
+    "linecap": "round"
+  },
+  "palette": {
+    "head": "#fffdf6",
+    "cape": "#ff5ca8"
+  },
+  "personality": {
+    "energy": 0.8,
+    "bounciness": 0.85,
+    "confidence": 0.8,
+    "sloppiness": 0.3
+  },
+  "locomotion": {
+    "modes": [
+      "walk",
+      "hop",
+      "fly"
+    ],
+    "maxJumpHeight": 120,
+    "maxJumpDistance": 180,
+    "flySpeed": 220
+  },
+  "accessoryPoints": [
+    "neck"
+  ]
+}

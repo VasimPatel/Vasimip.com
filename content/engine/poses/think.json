@@ -1,0 +1,23 @@
+{
+  "id": "think",
+  "root": {
+    "x": -2,
+    "y": 16,
+    "rot": 0
+  },
+  "angles": {
+    "pelvis": -1.487655,
+    "neck": -0.083141,
+    "head": 0.141897,
+    "upperArmR": 1.667509,
+    "foreArmR": -1.977449,
+    "upperArmL": -2.117585,
+    "foreArmL": -1.717875,
+    "thighR": 2.484147,
+    "shinR": 0.44995,
+    "footR": -1.266588,
+    "thighL": -2.717635,
+    "shinL": -0.382744,
+    "footL": 1.249046
+  }
+}

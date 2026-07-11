@@ -10,7 +10,7 @@
     "build": "tsc --noEmit -p tsconfig.json && vite build",
     "build:nocheck": "vite build",
     "preview": "vite preview",
-    "typecheck": "tsc --noEmit -p tsconfig.json && tsc --noEmit -p tsconfig.node.json && tsc --noEmit -p tsconfig.server.json && tsc --noEmit -p packages/schema/tsconfig.json && tsc --noEmit -p packages/engine/tsconfig.json && tsc --noEmit -p packages/headless/tsconfig.json",
+    "typecheck": "tsc --noEmit -p tsconfig.json && tsc --noEmit -p tsconfig.node.json && tsc --noEmit -p tsconfig.server.json && tsc --noEmit -p packages/schema/tsconfig.json && tsc --noEmit -p packages/engine/tsconfig.json && tsc --noEmit -p packages/headless/tsconfig.json && tsc --noEmit -p packages/renderer-svg/tsconfig.json",
     "lint:determinism": "eslint packages/engine packages/headless",
     "test:engine": "bun test packages",
     "start": "bun server/index.ts",

@@ -1,0 +1,23 @@
+{
+  "id": "jump-tuck",
+  "root": {
+    "x": -4,
+    "y": 18,
+    "rot": 0.2
+  },
+  "angles": {
+    "pelvis": -1.506308,
+    "neck": -0.09934,
+    "head": 0.865228,
+    "upperArmR": 2.219216,
+    "foreArmR": 1.885661,
+    "upperArmL": 2.447342,
+    "foreArmL": 1.70206,
+    "thighR": 0.346238,
+    "shinR": -2.576313,
+    "footR": -0.617406,
+    "thighL": 0.490616,
+    "shinL": -3.000642,
+    "footL": -0.432408
+  }
+}

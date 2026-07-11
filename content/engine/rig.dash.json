@@ -1,0 +1,114 @@
+{
+  "id": "dash",
+  "joints": [
+    {
+      "id": "pelvis",
+      "parentId": null,
+      "length": 25,
+      "attach": "end"
+    },
+    {
+      "id": "neck",
+      "parentId": "pelvis",
+      "length": 7,
+      "attach": "end"
+    },
+    {
+      "id": "head",
+      "parentId": "neck",
+      "length": 14,
+      "attach": "end"
+    },
+    {
+      "id": "upperArmR",
+      "parentId": "pelvis",
+      "length": 17,
+      "attach": "end",
+      "bendHint": 1
+    },
+    {
+      "id": "foreArmR",
+      "parentId": "upperArmR",
+      "length": 16,
+      "attach": "end",
+      "bendHint": 1
+    },
+    {
+      "id": "upperArmL",
+      "parentId": "pelvis",
+      "length": 17,
+      "attach": "end",
+      "bendHint": -1
+    },
+    {
+      "id": "foreArmL",
+      "parentId": "upperArmL",
+      "length": 16,
+      "attach": "end",
+      "bendHint": -1
+    },
+    {
+      "id": "thighR",
+      "parentId": "pelvis",
+      "length": 21,
+      "attach": "origin",
+      "bendHint": -1
+    },
+    {
+      "id": "shinR",
+      "parentId": "thighR",
+      "length": 16,
+      "attach": "end",
+      "bendHint": -1
+    },
+    {
+      "id": "footR",
+      "parentId": "shinR",
+      "length": 11,
+      "attach": "end"
+    },
+    {
+      "id": "thighL",
+      "parentId": "pelvis",
+      "length": 21,
+      "attach": "origin",
+      "bendHint": 1
+    },
+    {
+      "id": "shinL",
+      "parentId": "thighL",
+      "length": 16,
+      "attach": "end",
+      "bendHint": 1
+    },
+    {
+      "id": "footL",
+      "parentId": "shinL",
+      "length": 11,
+      "attach": "end"
+    }
+  ],
+  "chains": [
+    {
+      "id": "legR",
+      "jointIds": [
+        "thighR",
+        "shinR",
+        "footR"
+      ]
+    },
+    {
+      "id": "legL",
+      "jointIds": [
+        "thighL",
+        "shinL",
+        "footL"
+      ]
+    }
+  ],
+  "secondarySlots": [
+    "foreArmL",
+    "foreArmR",
+    "head"
+  ]
+}

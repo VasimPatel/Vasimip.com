@@ -1,0 +1,27 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Dash Engine v2 — Phase 2 pose review</title>
+    <style>
+      body { margin: 0; font: 14px/1.4 system-ui, sans-serif; background: #f4f1e8; color: #1a1a1a; }
+      h1 { font-size: 18px; padding: 16px 20px 4px; margin: 0; }
+      .sub { padding: 0 20px 12px; color: #666; font-size: 12px; }
+      .grid { display: grid; grid-template-columns: 120px 1fr 1fr; gap: 0; max-width: 720px; }
+      .head { position: sticky; top: 0; background: #e9e4d6; font-weight: 600; padding: 8px 12px; border-bottom: 2px solid #1a1a1a; }
+      .row { display: contents; }
+      .cell { border-bottom: 1px solid #d8d2c2; display: flex; align-items: center; justify-content: center; padding: 8px; }
+      .label { justify-content: flex-start; font-weight: 600; padding-left: 16px; }
+      .legacy { background: #fffdf6; }
+      .new { background: #eef4ff; }
+      svg { display: block; }
+    </style>
+  </head>
+  <body>
+    <h1>Dash Engine v2 — Phase 2 pose review</h1>
+    <div class="sub">Left: legacy React SVG pose components (src/notebook/poses). Right: new solveFk → createCharacterRenderer, same viewBox.</div>
+    <div id="app"></div>
+    <script type="module" src="./main.tsx"></script>
+  </body>
+</html>

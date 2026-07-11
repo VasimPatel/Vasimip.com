@@ -1,0 +1,22 @@
+{
+  // renderer-svg is the ONE DOM writer among the packages, so it gets its own
+  // tsconfig WITH the DOM lib (the DOM-free base is deliberately not extended).
+  // It is exempt from the determinism ESLint scope (which stays engine+headless).
+  "compilerOptions": {
+    "target": "ES2022",
+    "lib": ["ES2022", "DOM", "DOM.Iterable"],
+    "module": "ESNext",
+    "moduleResolution": "bundler",
+    "allowImportingTsExtensions": true,
+    "isolatedModules": true,
+    "moduleDetection": "force",
+    "noEmit": true,
+    "strict": true,
+    "noUnusedLocals": true,
+    "noUnusedParameters": true,
+    "noFallthroughCasesInSwitch": true,
+    "jsx": "react-jsx",
+    "skipLibCheck": true
+  },
+  "include": ["src", "dev"]
+}
