@@ -4,7 +4,14 @@ ENV NODE_ENV=production
 
 WORKDIR /app
 
+# Copy the root manifest + every workspace manifest before install, so bun can
+# resolve/link the packages/* workspaces. Keeping this to just the manifests
+# preserves the layer-caching intent: the install layer only busts when a
+# package.json or the lockfile changes, not on every source edit.
 COPY package.json bun.lock ./
+COPY packages/schema/package.json ./packages/schema/
+COPY packages/engine/package.json ./packages/engine/
+COPY packages/headless/package.json ./packages/headless/
 RUN bun install --frozen-lockfile
 
 COPY . .

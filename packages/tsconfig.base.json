@@ -1,0 +1,23 @@
+{
+  // Shared config for every packages/* workspace. lib is ES2022 with NO "dom":
+  // this is what ENFORCES the DOM-free rule (ENGINE_V2 §3 rule 2) — a stray
+  // `document`/`window` reference in engine or headless fails typecheck, not a
+  // code-review convention. `types: ["bun"]` is only for the bun:test imports in
+  // test files; it does not pull in DOM lib.
+  "compilerOptions": {
+    "target": "ES2022",
+    "lib": ["ES2022"],
+    "module": "ESNext",
+    "moduleResolution": "bundler",
+    "allowImportingTsExtensions": true,
+    "isolatedModules": true,
+    "moduleDetection": "force",
+    "noEmit": true,
+    "strict": true,
+    "noUnusedLocals": true,
+    "noUnusedParameters": true,
+    "noFallthroughCasesInSwitch": true,
+    "types": ["bun"],
+    "skipLibCheck": true
+  }
+}
