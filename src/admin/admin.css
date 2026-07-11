@@ -237,18 +237,127 @@
 .ce-mini2 { font-size: 14px; padding: 2px 12px; border: 2px solid #23211c; border-radius: 9px; cursor: pointer; background: #fff; }
 .ce-note { font-size: 15.5px; line-height: 1.45; margin-top: 8px; }
 
-/* ── DASH DOJO overlay ───────────────────────────────────────────────────── */
-.dojo-overlay { position: fixed; inset: 0; z-index: 30; background: rgba(35, 33, 28, .5); display: grid; place-items: center; }
-.dojo-modal {
-  width: 1080px; max-width: 94vw; height: 78vh; display: flex; flex-direction: column;
-  background: #fdfbf6; border: 3px solid #23211c; border-radius: 14px 22px 16px 20px;
-  box-shadow: 8px 10px 0 rgba(35, 33, 28, .3); padding: 18px 22px 20px;
+/* ── THE DASH DOJO (full-screen overlay on the brown deck) ───────────────── */
+.dojo-overlay { position: fixed; inset: 0; z-index: 30; background: #8f7b5e; display: flex; flex-direction: column; }
+.dojo-screen { flex: 1; display: flex; flex-direction: column; min-height: 0; padding: 16px 20px 20px; }
+.dojo-head {
+  display: flex; align-items: baseline; gap: 12px; flex: none;
+  background: #fdfbf6; border: 2.5px solid #23211c; border-radius: 14px 20px 14px 22px;
+  box-shadow: 3px 4px 0 rgba(35, 33, 28, .22); padding: 10px 22px 12px;
 }
-.dojo-head { display: flex; align-items: baseline; gap: 10px; flex: none; }
-.dojo-title { font-family: 'Permanent Marker', cursive; font-size: 24px; }
+.dojo-title { font-family: 'Permanent Marker', cursive; font-size: 26px; }
 .dojo-sub { font-family: 'Caveat', cursive; font-size: 18px; color: #6f6a5c; }
-.dojo-x { font-family: 'Permanent Marker', cursive; font-size: 16px; cursor: pointer; color: #6f6a5c; }
-.dojo-editor { flex: 1; min-height: 0; display: flex; margin-top: 12px; border: 2px solid #23211c; border-radius: 8px; background: #f6f2e6; overflow: hidden; }
+.dojo-x { font-family: 'Permanent Marker', cursive; font-size: 20px; cursor: pointer; color: #6f6a5c; line-height: 1; }
+.dojo-x:hover { color: #23211c; }
+
+/* dojo body: moves shelf (left) + stunt detail (right) */
+.dojo-ae { flex: 1; display: flex; gap: 16px; min-height: 0; margin-top: 14px; }
+.dojo-moves {
+  width: 300px; flex: none; display: flex; flex-direction: column; overflow: auto;
+  background: #fdfbf6; border: 2.5px solid #23211c; border-radius: 8px 12px 8px 12px;
+  box-shadow: 3px 4px 0 rgba(35, 33, 28, .2); padding: 14px 16px 16px;
+}
+.moves-h, .moves-h2 { font-family: 'Permanent Marker', cursive; font-size: 15px; margin-bottom: 8px; }
+.moves-h2 { margin-top: 18px; }
+.stunt-chips { display: flex; flex-wrap: wrap; gap: 6px; }
+.stunt-chip {
+  font-size: 14.5px; padding: 2px 12px; cursor: pointer; background: #fff; color: #23211c;
+  border: 2px solid #23211c; border-radius: 180px 12px 180px 12px/12px 180px 12px 180px;
+  display: inline-flex; align-items: center; gap: 3px;
+}
+.stunt-chip:hover { background: #fdf3cf; }
+.stunt-chip.on { background: rgba(255, 210, 63, .6); box-shadow: 2px 2px 0 rgba(35, 33, 28, .2); }
+.stunt-chip.custom { background: #ffd23f; }
+.stunt-chip.custom.on { outline: 2px solid #23211c; }
+.sc-op {
+  font: inherit; font-size: 11px; line-height: 1; padding: 1px 2px; border: none;
+  background: transparent; cursor: pointer; color: #6f6a5c; opacity: 0;
+}
+.stunt-chip:hover .sc-op { opacity: 1; }
+.sc-op:hover { color: #23211c; }
+.moves-none { font-family: 'Caveat', cursive; font-size: 16px; color: #9a937f; }
+.teach-btn {
+  align-self: flex-start; margin-top: 18px; font: inherit; font-size: 15px; padding: 4px 16px;
+  border: 2.5px solid #23211c; border-radius: 12px 8px 12px 8px; background: #ffd23f; cursor: pointer;
+  box-shadow: 2px 3px 0 rgba(35, 33, 28, .25);
+}
+.teach-btn:hover { background: #ffda5c; }
+
+.dojo-detail {
+  flex: 1; min-width: 0; overflow: auto; background: #fff; border: 2.5px solid #23211c;
+  border-radius: 6px; box-shadow: 3px 4px 0 rgba(35, 33, 28, .2); padding: 16px 20px 20px;
+}
+.dojo-blank { font-family: 'Caveat', cursive; font-size: 20px; color: #9a937f; text-align: center; padding: 44px 20px; }
+
+/* stunt detail (built-in + custom share the head/blurb chrome) */
+.sd-head { display: flex; align-items: center; gap: 10px; margin-bottom: 8px; }
+.sd-title { font-family: 'Permanent Marker', cursive; font-size: 20px; }
+.sd-lock { font-size: 13px; opacity: .7; cursor: help; }
+.stunt-name {
+  font: 400 22px 'Permanent Marker', cursive; color: #23211c; min-width: 0; flex: 0 1 auto;
+  border: none; border-bottom: 2px dashed #b0a88e; background: transparent; outline: none; padding: 1px 3px;
+}
+.stunt-name:focus { border-bottom-color: #2a4b8d; }
+.sd-time { font-family: 'Caveat', cursive; font-size: 16px; color: #6f6a5c; }
+.sd-err { color: #b03030; font-family: 'Caveat', cursive; font-size: 16px; margin-top: 2px; }
+.try-btn {
+  font: inherit; font-size: 15px; padding: 3px 15px; border: 2.5px solid #23211c;
+  border-radius: 10px 14px 10px 14px; background: #ffd23f; cursor: pointer; box-shadow: 2px 3px 0 rgba(35, 33, 28, .25);
+}
+.try-btn:hover { background: #ffda5c; }
+.ghost-btn {
+  font: inherit; font-size: 14px; padding: 3px 12px; border: 2px solid #23211c;
+  border-radius: 9px 12px 9px 12px; background: #fff; cursor: pointer;
+}
+.ghost-btn:hover { background: #fdf3cf; }
+.sd-blurb { margin: 4px 0 12px; font-family: 'Patrick Hand', cursive; font-size: 16px; line-height: 1.45; color: #3a362d; }
+.sd-aside {
+  font-family: 'Caveat', cursive; font-size: 16px; color: #6f6a5c;
+  background: rgba(255, 210, 63, .18); border-left: 3px solid #ffd23f; border-radius: 0 8px 8px 0; padding: 5px 12px;
+}
+.sd-aside b { color: #23211c; }
+.sd-note { margin-top: 12px; font-family: 'Caveat', cursive; font-size: 15px; color: #9a937f; line-height: 1.35; }
+.sd-seclbl { font-family: 'Caveat', cursive; font-size: 16px; color: #6f6a5c; margin: 16px 0 6px; }
+.sd-emptysteps { font-family: 'Caveat', cursive; font-size: 16px; color: #9a937f; }
+
+/* numbered-sentence step rows */
+.stunt-step {
+  display: flex; gap: 8px; align-items: flex-start; border: 2px dashed #c9c1a8;
+  border-radius: 10px; padding: 7px 10px; margin: 6px 0; background: #fffdf6;
+}
+.stunt-step.hot { border-style: solid; border-color: #23211c; box-shadow: 2px 3px 0 rgba(35, 33, 28, .15); }
+.ss-num { font-family: 'Permanent Marker', cursive; font-size: 18px; color: #23211c; line-height: 1.5; flex: none; min-width: 18px; }
+.ss-body { flex: 1; min-width: 0; }
+.ss-top { display: flex; align-items: center; gap: 6px; }
+.ss-kind {
+  font-family: 'Caveat', cursive; font-size: 18px; color: #2a4b8d; border: none;
+  border-bottom: 2px dashed #b0a88e; background: transparent; outline: none; cursor: pointer; padding: 0 2px;
+}
+.ss-op { font: inherit; font-size: 12px; padding: 0 6px; border: 1.5px solid #c9c1a8; border-radius: 5px; background: #fff; cursor: pointer; color: #6f6a5c; }
+.ss-op:hover:not(:disabled) { border-color: #23211c; color: #23211c; }
+.ss-op:disabled { opacity: .3; cursor: not-allowed; }
+.ss-add { display: flex; align-items: center; gap: 8px; margin-top: 8px; }
+.ss-add > select {
+  font-family: 'Caveat', cursive; font-size: 16px; color: #2a4b8d; border: none;
+  border-bottom: 2px dashed #b0a88e; background: transparent; outline: none; cursor: pointer; padding: 0 2px;
+}
+
+/* dashed-underline field skin for the typed step fields inside the Dojo */
+.dojo-screen .field { margin: 4px 0; }
+.dojo-screen .field > label { width: 62px; font-family: 'Caveat', cursive; font-size: 14px; color: #6f6a5c; }
+.dojo-screen .field input, .dojo-screen .field textarea {
+  border: none; border-bottom: 2px dashed #b0a88e; border-radius: 0; background: transparent; padding: 1px 3px; color: #23211c;
+}
+.dojo-screen .field input:focus, .dojo-screen .field textarea:focus { border-bottom-color: #2a4b8d; }
+.dojo-screen .field input[type='number'] { width: 56px; }
+.dojo-screen .field select {
+  font-family: 'Caveat', cursive; font-size: 15px; color: #2a4b8d;
+  border: none; border-bottom: 2px dashed #b0a88e; border-radius: 0; background: transparent; cursor: pointer;
+}
+.dojo-screen .field select:focus { border-bottom-color: #2a4b8d; }
+.dojo-screen .when-box { border: 2px dashed #c9c1a8; border-radius: 10px; padding: 5px 10px; margin-bottom: 12px; background: #fffdf6; }
+.dojo-screen .when-box > summary { font-family: 'Caveat', cursive; font-size: 16px; color: #6f6a5c; cursor: pointer; }
+.dojo-screen .cue-strip { background: #fffdf6; border: 2px dashed #c9c1a8; border-radius: 10px; }
 
 /* ── generic buttons kept for the Actions editor ─────────────────────────── */
 .btn { font: inherit; padding: 3px 10px; border: 1.5px solid #1a1a1a; border-radius: 6px; background: #fff; cursor: pointer; line-height: 1.3; }
@@ -278,28 +387,7 @@
 .chip.on { background: rgba(255, 210, 63, .5); border-color: #1a1a1a; }
 .chip input { margin: 0; }
 
-/* ── Actions editor ──────────────────────────────────────────────────────── */
-.action-editor { flex: 1; display: flex; min-height: 0; }
-.action-list { width: 190px; flex-shrink: 0; border-right: 1px solid #cbc3ae; background: #f6f2e6; overflow: auto; }
-.action-detail { flex: 1; overflow: auto; padding: 10px 14px; background: #fff; }
-.rail-sec { display: flex; align-items: center; padding: 7px 8px 3px; font-size: 11px; font-weight: 700; letter-spacing: .6px; text-transform: uppercase; color: #8a8272; }
-.pitem { display: flex; align-items: center; gap: 3px; padding: 3px 8px; cursor: pointer; }
-.pitem:hover { background: #efe9d6; }
-.pitem.active { background: rgba(255, 210, 63, .5); }
-.pitem .nm { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.detail-head { display: flex; align-items: center; gap: 8px; margin-bottom: 6px; }
-.name-input { font: 600 15px 'Patrick Hand', cursive; border: 1px solid #bbb3a0; border-radius: 5px; padding: 2px 7px; background: #fff; }
-.when-box { border: 1px solid #ddd5c0; border-radius: 6px; padding: 4px 8px; margin-bottom: 10px; background: #fbf8ee; }
-.when-box > summary { cursor: pointer; font-weight: 600; color: #6a6458; }
-.step-row { border: 1px solid #ddd5c0; border-radius: 6px; padding: 6px 8px; margin: 5px 0; background: #fff; }
-.step-row.hot { border-color: #1a1a1a; box-shadow: 0 0 0 2px rgba(255, 210, 63, .55); }
-.lock { font-size: 11px; opacity: .8; }
-.builtin-title { font: 600 16px 'Patrick Hand', cursive; }
-.builtin-blurb { margin: 4px 0 10px; color: #4a463c; font-size: 13px; max-width: 46em; }
-.gates-chip { display: inline-block; font: 12px ui-monospace, monospace; background: #eef3e0; border: 1px solid #cbd3b4; border-radius: 10px; padding: 3px 10px; color: #4a5a30; }
-.gates-chip b { color: #6a7a44; font-weight: 700; margin-right: 4px; text-transform: uppercase; font-size: 10px; letter-spacing: .5px; }
-
-/* cue timeline */
+/* ── cue timeline (used by the Dojo's stunt detail) ──────────────────────── */
 .cue-strip { border: 1px solid #ddd5c0; border-radius: 6px; background: #fbf8ee; padding: 6px 8px 4px; margin-top: 4px; }
 .cue-ruler { position: relative; height: 12px; border-bottom: 1px solid #d8d0bc; }
 .cue-tick { position: absolute; top: 0; bottom: 0; width: 1px; background: #d8d0bc; }

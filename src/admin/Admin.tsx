@@ -137,6 +137,15 @@ export default function Admin() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [doc])
 
+  // Esc closes the DASH DOJO overlay (capture phase, before the preview's own
+  // window handlers see the key — matches the keydown shield's precedence).
+  useEffect(() => {
+    if (!dojoOpen) return
+    const h = (e: KeyboardEvent) => { if (e.key === 'Escape') { e.stopPropagation(); setDojoOpen(false) } }
+    window.addEventListener('keydown', h, true)
+    return () => window.removeEventListener('keydown', h, true)
+  }, [dojoOpen])
+
   // Notebook (mounted by Preview) registers global arrow/space/a/s keydown
   // handlers on window. Swallow keys that target form fields (capture phase) so
   // typing in the editor isn't hijacked by the preview's controls.
@@ -389,25 +398,23 @@ export default function Admin() {
       </div>
 
       {dojoOpen && (
-        <div className="dojo-overlay" onClick={() => setDojoOpen(false)}>
-          <div className="dojo-modal" onClick={(e) => e.stopPropagation()}>
+        <div className="dojo-overlay">
+          <div className="dojo-screen">
             <div className="dojo-head">
               <span className="dojo-title">THE DASH DOJO</span>
               <span className="dojo-sub">where Dash learns new stunts — no code, just sentences</span>
               <span className="grow" />
-              <div className="dojo-x" onClick={() => setDojoOpen(false)}>✕</div>
+              <div className="dojo-x" onClick={() => setDojoOpen(false)} title="close (Esc)">✕</div>
             </div>
-            <div className="dojo-editor">
-              <ActionEditor
-                actions={doc.actions ?? {}}
-                selected={actionSel}
-                onSelect={setActionSel}
-                updateActions={(fn) => update((d) => ({ ...d, actions: fn(d.actions ?? {}) }))}
-                contextPanel={contextPanel}
-                onTest={testAction}
-                onTestBuiltin={testBuiltin}
-              />
-            </div>
+            <ActionEditor
+              actions={doc.actions ?? {}}
+              selected={actionSel}
+              onSelect={setActionSel}
+              updateActions={(fn) => update((d) => ({ ...d, actions: fn(d.actions ?? {}) }))}
+              contextPanel={contextPanel}
+              onTest={testAction}
+              onTestBuiltin={testBuiltin}
+            />
           </div>
         </div>
       )}

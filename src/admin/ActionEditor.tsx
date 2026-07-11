@@ -87,31 +87,37 @@ export default function ActionEditor({ actions, selected, onSelect, updateAction
   }
 
   return (
-    <div className="action-editor">
-      <div className="action-list">
-        <div className="rail-sec">built-in <span className="lock">🔒</span></div>
-        {BUILTIN_MODES.map((mode) => (
-          <div key={mode} className={`pitem${builtinSel === mode ? ' active' : ''}`} onClick={() => pickBuiltin(mode)}>
-            <span className="nm">{BUILTIN_INFO[mode].label}</span>
-          </div>
-        ))}
+    <div className="dojo-ae">
+      <div className="dojo-moves">
+        <div className="moves-h">moves he already knows</div>
+        <div className="stunt-chips">
+          {BUILTIN_MODES.map((mode) => (
+            <div key={mode} className={`stunt-chip${builtinSel === mode ? ' on' : ''}`} onClick={() => pickBuiltin(mode)}>
+              {BUILTIN_INFO[mode].label}
+            </div>
+          ))}
+        </div>
 
-        <div className="rail-sec">custom<span className="grow" /><button className="btn mini" onClick={addAction}>+ new</button></div>
-        {names.length === 0 && <div className="empty">no custom actions yet</div>}
-        {names.map((name) => (
-          <div key={name} className={`pitem${sel === name ? ' active' : ''}`} onClick={() => pickCustom(name)}>
-            <span className="nm">{name}</span>
-            <button className="btn mini" onClick={(e) => { e.stopPropagation(); duplicate(name) }} title="duplicate">⧉</button>
-            <button className="btn mini" onClick={(e) => { e.stopPropagation(); remove(name) }} title="delete">✕</button>
-          </div>
-        ))}
+        <div className="moves-h2">stunts you taught him</div>
+        <div className="stunt-chips">
+          {names.length === 0 && <div className="moves-none">none yet — teach him one below.</div>}
+          {names.map((name) => (
+            <div key={name} className={`stunt-chip custom${sel === name ? ' on' : ''}`} onClick={() => pickCustom(name)}>
+              <span className="sc-nm">{name}</span>
+              <button className="sc-op" onClick={(e) => { e.stopPropagation(); duplicate(name) }} title="make a copy">⧉</button>
+              <button className="sc-op" onClick={(e) => { e.stopPropagation(); remove(name) }} title="forget it">✕</button>
+            </div>
+          ))}
+        </div>
+
+        <button className="teach-btn" onClick={addAction}>+ teach a new stunt</button>
       </div>
 
-      <div className="action-detail">
+      <div className="dojo-detail">
         {builtinSel ? (
           <BuiltinDetail mode={builtinSel} onTest={onTestBuiltin} onFork={fork} />
         ) : !sel ? (
-          <div className="empty">select a built-in, or create/pick a custom action</div>
+          <div className="dojo-blank">tap a move to see it, fork it, and make it yours.</div>
         ) : (
           <ActionDetail
             key={sel}
@@ -135,18 +141,19 @@ function BuiltinDetail({ mode, onTest, onFork }: {
 }) {
   const info = BUILTIN_INFO[mode]
   return (
-    <div>
-      <div className="detail-head">
-        <span className="builtin-title">{info.label} <span className="lock">🔒</span></span>
+    <div className="stunt-detail">
+      <div className="sd-head">
+        <span className="sd-title">{info.label}</span>
+        <span className="sd-lock" title="a move Dash was born knowing — you can look but not change it">🔒</span>
         <span className="grow" />
-        <button className="btn" onClick={() => onFork(mode)} title="deep-clone this choreography into an editable custom action">Fork → custom</button>
-        <button className="btn primary" onClick={() => onTest(mode)}>▶ Test</button>
+        <button className="ghost-btn" onClick={() => onFork(mode)} title="deep-clone this choreography into an editable custom stunt">fork it &amp; make it yours</button>
+        <button className="try-btn" onClick={() => onTest(mode)}>▶ try it</button>
       </div>
-      <p className="builtin-blurb">{info.blurb}</p>
-      <div className="gates-chip" title="when travel() may pick this mode"><b>gates</b> {info.gates}</div>
-      <div className="muted" style={{ marginTop: 12, fontSize: 12 }}>
-        Built-ins are read-only. Fork to get an editable copy of an approximation of this
-        choreography — the tuned original lives in the engine.
+      <p className="sd-blurb">{info.blurb}</p>
+      <div className="sd-aside" title="when travel() may pick this move"><b>when he uses it</b> — {info.gates}</div>
+      <div className="sd-note">
+        This is one of Dash's built-in moves, so it's locked. Fork it to get an editable copy
+        you can tinker with — the real, hand-tuned one stays safe in the engine.
       </div>
     </div>
   )
@@ -199,24 +206,24 @@ function ActionDetail({ name, def, contextPanel, onRename, onTest, update }: {
 
   const w = def.when ?? {}
   return (
-    <div>
-      <div className="detail-head">
+    <div className="stunt-detail">
+      <div className="sd-head">
         <input
-          className="name-input"
+          className="stunt-name"
           value={nameDraft}
           onChange={(e) => setNameDraft(e.target.value)}
           onBlur={() => { if (nameDraft !== name) onRename(name, nameDraft) }}
           onKeyDown={(e) => { if (e.key === 'Enter') (e.target as HTMLInputElement).blur() }}
         />
         <span className="grow" />
-        <span className={'err' in summary ? 'err-line' : 'muted'}>
-          {'err' in summary ? '⚠ ' + summary.err : `~${(summary.ms / 1000).toFixed(1)}s, ${summary.cues} cues`}
+        <span className={'err' in summary ? 'sd-err' : 'sd-time'}>
+          {'err' in summary ? '⚠ ' + summary.err : `~${(summary.ms / 1000).toFixed(1)}s · ${summary.cues} beats`}
         </span>
-        <button className="btn primary" onClick={() => onTest(name)}>▶ Test</button>
+        <button className="try-btn" onClick={() => onTest(name)}>▶ try it</button>
       </div>
 
       <details className="when-box">
-        <summary>when (gate)</summary>
+        <summary>when can he use it?</summary>
         <div className="row">
           <NumField label="minDist" value={w.minDist} onChange={(v) => setWhen({ minDist: v })} />
           <NumField label="maxDist" value={w.maxDist} onChange={(v) => setWhen({ maxDist: v })} />
@@ -237,31 +244,35 @@ function ActionDetail({ name, def, contextPanel, onRename, onTest, update }: {
         />
       </details>
 
-      <div className="rail-sec">Steps ({def.steps.length})</div>
+      <div className="sd-seclbl">a stunt is just numbered sentences:</div>
+      {def.steps.length === 0 && <div className="sd-emptysteps">no steps yet — add his first move below.</div>}
       {def.steps.map((step, i) => (
-        <div key={i} id={'astep-' + i} className={`step-row${openStep === i ? ' hot' : ''}`}>
-          <div className="row" style={{ alignItems: 'center' }}>
-            <select value={step.do} onChange={(e) => setStep(i, () => STEP_DEFAULTS[e.target.value as StepKind]())}>
-              {STEP_KINDS.map((k) => <option key={k} value={k}>{k}</option>)}
-            </select>
-            <span className="grow" />
-            <button className="btn mini" onClick={() => moveStep(i, -1)} disabled={i === 0}>▲</button>
-            <button className="btn mini" onClick={() => moveStep(i, 1)} disabled={i === def.steps.length - 1}>▼</button>
-            <button className="btn mini" onClick={() => removeStep(i)}>✕</button>
+        <div key={i} id={'astep-' + i} className={`stunt-step${openStep === i ? ' hot' : ''}`}>
+          <div className="ss-num">{i + 1}.</div>
+          <div className="ss-body">
+            <div className="ss-top">
+              <select className="ss-kind" value={step.do} onChange={(e) => setStep(i, () => STEP_DEFAULTS[e.target.value as StepKind]())}>
+                {STEP_KINDS.map((k) => <option key={k} value={k}>{k}</option>)}
+              </select>
+              <span className="grow" />
+              <button className="ss-op" onClick={() => moveStep(i, -1)} disabled={i === 0} title="earlier">▲</button>
+              <button className="ss-op" onClick={() => moveStep(i, 1)} disabled={i === def.steps.length - 1} title="later">▼</button>
+              <button className="ss-op" onClick={() => removeStep(i)} title="drop this step">✕</button>
+            </div>
+            <StepForm step={step} onChange={(fn) => setStep(i, fn)} />
           </div>
-          <StepForm step={step} onChange={(fn) => setStep(i, fn)} />
         </div>
       ))}
-      <div className="row" style={{ marginTop: 6 }}>
+      <div className="ss-add">
         <select value={addKind} onChange={(e) => setAddKind(e.target.value as StepKind)}>
           {STEP_KINDS.map((k) => <option key={k} value={k}>{k}</option>)}
         </select>
-        <button className="btn" onClick={addStep}>+ step</button>
+        <button className="ghost-btn" onClick={addStep}>+ add a step</button>
       </div>
 
-      <div className="rail-sec">Timeline</div>
+      <div className="sd-seclbl">how it plays out</div>
       {'error' in compiled
-        ? <div className="err-line">⚠ {compiled.error}</div>
+        ? <div className="sd-err">⚠ {compiled.error}</div>
         : <CueTimeline cues={compiled.cues} total={compiled.total} openStep={openStep} onOpen={openStepRow} />}
     </div>
   )
