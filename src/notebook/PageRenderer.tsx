@@ -121,7 +121,7 @@ function ArtBoxR({ box }: { box: ArtBox }) {
   return <div style={frame}><Component props={box.props} /></div>
 }
 
-function renderBox(box: BoxDoc, flags: Record<string, boolean>) {
+export function renderBox(box: BoxDoc, flags: Record<string, boolean>) {
   if (box.showIfFlag && !flags[box.showIfFlag]) return null
   if (box.kind === 'text') return <TextBoxR box={box} />
   if (box.kind === 'draw') return <DrawBoxR box={box} />

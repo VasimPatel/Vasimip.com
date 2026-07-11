@@ -1,11 +1,13 @@
-// Dev-only WYSIWYG admin shell. Loads notebook.json over the dev middleware into
-// a single immutable draft; every edit flows through one `update(fn)` that also
-// flags the doc dirty and re-validates. Save POSTs back to the middleware.
+// Dev-only WYSIWYG admin shell — "DASH'S NOTEBOOK". Loads notebook.json over the
+// dev middleware into a single immutable draft; every edit flows through one
+// `update(fn)` that also flags the doc dirty and re-validates. Save POSTs back to
+// the middleware. The UI is a whiteboard editor: a page rail, a scaled 920×660
+// stage of draggable panels/boxes, and a right-hand context editor. The Actions
+// editor lives behind the DASH DOJO door.
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import './admin.css'
 import { tryValidateDoc, type NotebookDoc } from '../notebook/doc/validate'
-import type { BuiltinMode, CoverDoc, PageDoc, PanelDoc } from '../notebook/doc/docTypes'
-import { REGISTRY } from '../notebook/registry'
+import type { BoxDoc, BuiltinMode, CoverDoc, PageDoc, PanelDoc } from '../notebook/doc/docTypes'
 import { allFlagsOn, toGeom } from './shared'
 import PageCanvas from './PageCanvas'
 import Inspector from './Inspector'
@@ -13,9 +15,9 @@ import ActionEditor from './ActionEditor'
 import Preview from './Preview'
 
 type Sel = { kind: 'cover' } | { kind: 'page'; page: number }
-type Tab = 'pages' | 'actions'
 
-const NEW_PANEL: PanelDoc = { x: 60, y: 90, w: 240, h: 180, anchor: { dx: 120, dy: 0 }, boxes: [{ kind: 'text', x: 16, y: 16, w: 200, h: 26, text: 'PANEL', fam: 'marker', size: 20 }] }
+const seedTextBox = (w: number): BoxDoc => ({ kind: 'text', x: 18, y: 24, w: Math.min(200, w - 36), h: 30, text: 'PANEL', fam: 'marker', size: 20 })
+const NEW_PANEL: PanelDoc = { x: 340, y: 240, w: 240, h: 180, anchor: { dx: 120, dy: 0 }, sketch: 'b', boxes: [seedTextBox(240)] }
 
 export default function Admin() {
   const [doc, setDoc] = useState<NotebookDoc | null>(null)
@@ -30,12 +32,15 @@ export default function Admin() {
   const [histTick, setHistTick] = useState(0) // force re-render when stacks change
   const [loadErr, setLoadErr] = useState<string | null>(null)
   const [saveErrs, setSaveErrs] = useState<string[] | null>(null)
-  const [showErrs, setShowErrs] = useState(true)
-  const [tab, setTab] = useState<Tab>('pages')
+  const [showErrs, setShowErrs] = useState(false)
   const [sel, setSel] = useState<Sel>({ kind: 'page', page: 0 })
   const [panelSel, setPanelSel] = useState<number | null>(0)
+  const [boxSel, setBoxSel] = useState<number | null>(null)
   const [actionSel, setActionSel] = useState<string | null>(null)
   const [previewOpen, setPreviewOpen] = useState(false)
+  const [mode, setMode] = useState<'move' | 'draw'>('move')
+  const [gridOn, setGridOn] = useState(true)
+  const [dojoOpen, setDojoOpen] = useState(false)
   const fileRef = useRef<HTMLInputElement>(null)
 
   useEffect(() => {
@@ -116,16 +121,17 @@ export default function Admin() {
   }, [undo, redo])
 
   // After any doc swap (edit / undo / redo / import) clamp the selection so a
-  // removed page / panel / action can't strand the UI on a stale index.
+  // removed page / panel / box / action can't strand the UI on a stale index.
   useEffect(() => {
     if (!doc) return
     setSel((s) => (s.kind === 'page' && s.page > doc.pages.length - 1) ? { kind: 'page', page: doc.pages.length - 1 } : s)
-    setPanelSel((ps) => {
-      if (ps == null) return ps
-      const s = docRef.current!
-      const pg = s.pages[Math.min(ps < 0 ? 0 : ps, s.pages.length - 1)]
-      const cur = sel.kind === 'page' ? s.pages[Math.min(sel.page, s.pages.length - 1)] : pg
-      return cur && ps > cur.panels.length - 1 ? Math.max(0, cur.panels.length - 1) : ps
+    const s = docRef.current!
+    const pg = sel.kind === 'page' ? s.pages[Math.min(sel.page, s.pages.length - 1)] : null
+    setPanelSel((ps) => (ps == null || !pg) ? ps : (ps > pg.panels.length - 1 ? Math.max(0, pg.panels.length - 1) : ps))
+    setBoxSel((bs) => {
+      if (bs == null || !pg || panelSel == null) return bs
+      const pn = pg.panels[Math.min(panelSel, pg.panels.length - 1)]
+      return pn && bs > pn.boxes.length - 1 ? null : bs
     })
     setActionSel((as) => (as && !(doc.actions ?? {})[as]) ? null : as)
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -133,7 +139,7 @@ export default function Admin() {
 
   // Notebook (mounted by Preview) registers global arrow/space/a/s keydown
   // handlers on window. Swallow keys that target form fields (capture phase) so
-  // typing in the inspector isn't hijacked by the preview's controls.
+  // typing in the editor isn't hijacked by the preview's controls.
   useEffect(() => {
     const h = (e: KeyboardEvent) => {
       const t = e.target as HTMLElement | null
@@ -179,7 +185,7 @@ export default function Admin() {
   }
 
   if (loadErr) return <div className="admin"><div className="errs">failed to load /__notebook — is the dev server running?<br />{loadErr}</div></div>
-  if (!doc) return <div className="admin"><div className="empty" style={{ margin: 'auto' }}>loading document…</div></div>
+  if (!doc) return <div className="admin"><div className="ce-empty" style={{ margin: 'auto' }}>loading the notebook…</div></div>
 
   // ── doc mutators bound to the current selection ────────────────────────────
   const curPage = sel.kind === 'page' ? sel.page : null
@@ -189,34 +195,56 @@ export default function Admin() {
     if (curPage == null) return
     updatePage(curPage, (p) => ({ ...p, panels: p.panels.map((pn, idx) => (idx === pi ? fn(pn) : pn)) }))
   }
+  const updateBox = (fn: (b: BoxDoc) => BoxDoc) => {
+    if (panelSel == null || boxSel == null) return
+    updatePanel(panelSel, (pn) => ({ ...pn, boxes: pn.boxes.map((b, j) => (j === boxSel ? fn(b) : b)) }))
+  }
 
   const page = curPage != null ? doc.pages[curPage] : null
   const flags = allFlagsOn(doc)
   const errs: string[] = (validation && !validation.ok ? validation.errors : []).concat(saveErrs ?? [])
-  const contextPanel = toGeom(doc.pages[curPage ?? 0].panels[0])
   const selectedPanel = panelSel != null && page ? page.panels[panelSel] ?? null : null
+  const selectedBox = selectedPanel && boxSel != null ? selectedPanel.boxes[boxSel] ?? null : null
+  const contextPanel = toGeom(page?.panels[panelSel ?? 0] ?? doc.pages[0].panels[0])
 
-  const selectPage = (i: number) => { setSel({ kind: 'page', page: i }); setPanelSel(0) }
+  const selectPage = (i: number) => { setSel({ kind: 'page', page: i }); setPanelSel(0); setBoxSel(null) }
+  const selectCover = () => { setSel({ kind: 'cover' }); setPanelSel(null); setBoxSel(null) }
 
   // ── page-list operations ───────────────────────────────────────────────────
   const addPage = () => {
-    update((d) => ({ ...d, pages: [...d.pages, { name: 'PAGE ' + (d.pages.length + 1), snark: '', panels: [{ ...NEW_PANEL, boxes: [{ kind: 'text', x: 16, y: 16, w: 200, h: 26, text: 'PANEL', fam: 'marker', size: 20 }] }] }] }))
+    update((d) => ({ ...d, pages: [...d.pages, { name: 'PAGE ' + (d.pages.length + 1), snark: '', panels: [{ ...NEW_PANEL, boxes: [seedTextBox(240)] }] }] }))
     setSel({ kind: 'page', page: doc.pages.length })
-    setPanelSel(0)
+    setPanelSel(0); setBoxSel(null)
   }
-  const renamePage = (i: number, name: string) => updatePage(i, (p) => ({ ...p, name: name || p.name }))
-  const movePage = (i: number, dir: -1 | 1) => {
-    const j = i + dir
-    if (j < 0 || j >= doc.pages.length) return
-    update((d) => { const pages = d.pages.slice(); [pages[i], pages[j]] = [pages[j], pages[i]]; return { ...d, pages } })
-    setSel({ kind: 'page', page: j })
+
+  // ── canvas plumbing ─────────────────────────────────────────────────────────
+  const addPanel = (pnl: PanelDoc) => {
+    if (curPage == null || !page) return
+    updatePage(curPage, (pg) => ({ ...pg, panels: [...pg.panels, pnl] }))
+    setPanelSel(page.panels.length); setBoxSel(null)
   }
-  const deletePage = (i: number) => {
-    if (doc.pages.length <= 1) { window.alert('a notebook needs at least one page'); return }
-    if (!window.confirm('Delete page "' + doc.pages[i].name + '"?')) return
-    update((d) => ({ ...d, pages: d.pages.filter((_, idx) => idx !== i) }))
-    setSel({ kind: 'page', page: Math.max(0, i - 1) })
-    setPanelSel(0)
+  const addPanelDefault = () => addPanel({ ...NEW_PANEL, boxes: [seedTextBox(240)] })
+  const deletePanel = () => {
+    if (curPage == null || !page || page.panels.length <= 1 || panelSel == null) { if (page && page.panels.length <= 1) window.alert('a page needs at least one panel'); return }
+    updatePage(curPage, (pg) => ({ ...pg, panels: pg.panels.filter((_, idx) => idx !== panelSel) }))
+    setPanelSel(0); setBoxSel(null)
+  }
+  const addBox = (kind: 'text' | 'draw') => {
+    if (!page) return
+    const pi = panelSel ?? 0
+    const pn = page.panels[pi]
+    if (!pn) return
+    const box: BoxDoc = kind === 'text'
+      ? { kind: 'text', x: 18, y: Math.max(8, Math.min(40, pn.h - 60)), w: Math.min(190, pn.w - 36), h: 44, text: 'new words', fam: 'hand', size: 20 }
+      : { kind: 'draw', x: 18, y: Math.max(8, Math.min(64, pn.h - 120)), w: Math.min(220, pn.w - 36), h: Math.min(130, pn.h - 80), strokes: [], strokeColor: '#1a1a1a', strokeW: 3.5 }
+    updatePanel(pi, (p) => ({ ...p, boxes: [...p.boxes, box] }))
+    setPanelSel(pi); setBoxSel(pn.boxes.length)
+    if (kind === 'draw') setMode('draw')
+  }
+  const deleteBox = () => {
+    if (panelSel == null || boxSel == null) return
+    updatePanel(panelSel, (p) => ({ ...p, boxes: p.boxes.filter((_, j) => j !== boxSel) }))
+    setBoxSel(null)
   }
 
   const testAction = (name: string) => {
@@ -259,126 +287,132 @@ export default function Admin() {
     setTimeout(run, 400)
   }
 
+  const statusClass = errs.length > 0 ? 'bad' : dirty ? 'warn' : 'ok'
+  const statusText = errs.length > 0 ? `⚠ ${errs.length} problem${errs.length === 1 ? '' : 's'}` : dirty ? 'unsaved scribbles' : '✓ saved'
+  const seg = (m: 'move' | 'draw') => `seg${mode === m ? ' on' : ''}`
+
   return (
     <div className="admin">
-      <header className="hdr">
-        <h1>notebook admin</h1>
-        <span className={`status ${valid ? 'ok' : 'bad'}`}>{valid ? '✓ valid' : `✕ ${errs.length} issue${errs.length === 1 ? '' : 's'}`}</span>
+      <header className="topbar">
+        <div className="brand">DASH'S NOTEBOOK <span>· the whiteboard</span></div>
+        <div className={`statuschip ${statusClass}`} onClick={() => setShowErrs((v) => !v)} title="click to see problems">{statusText}</div>
         <span className="grow" />
-        <button className="btn mini" onClick={undo} disabled={undoRef.current.length === 0} title="Undo (⌘Z)">↩</button>
-        <button className="btn mini" onClick={redo} disabled={redoRef.current.length === 0} title="Redo (⇧⌘Z)">↪</button>
-        <button className="btn" onClick={exportDoc}>Export</button>
-        <button className="btn" onClick={() => fileRef.current?.click()}>Import</button>
+        <button className="qbtn" onClick={undo} disabled={undoRef.current.length === 0} title="Undo (⌘Z)">↩</button>
+        <button className="qbtn" onClick={redo} disabled={redoRef.current.length === 0} title="Redo (⇧⌘Z)">↪</button>
+        <button className="qbtn" onClick={exportDoc}>export</button>
+        <button className="qbtn" onClick={() => fileRef.current?.click()}>import</button>
         <input ref={fileRef} type="file" accept="application/json" style={{ display: 'none' }} onChange={(e) => { const f = e.target.files?.[0]; if (f) importDoc(f); e.target.value = '' }} />
-        <button className="btn primary" data-testid="save-btn" disabled={!valid} onClick={save}>
-          Save{dirty && <span className="dot" />}
-        </button>
+        <button className="savebtn" data-testid="save-btn" disabled={!valid} onClick={save}>{dirty ? 'save the page' : 'saved ✓'}</button>
       </header>
 
       {errs.length > 0 && showErrs && (
         <div className="errs">
-          <div className="errs-head"><b>{errs.length} issue{errs.length === 1 ? '' : 's'}</b><button className="btn mini" onClick={() => setShowErrs(false)}>hide</button></div>
+          <div className="errs-head"><b>{errs.length} problem{errs.length === 1 ? '' : 's'}</b><button className="qbtn" onClick={() => setShowErrs(false)}>hide</button></div>
           {errs.slice(0, 40).map((e, i) => <div key={i}>• {e}</div>)}
         </div>
       )}
 
-      <div className="body">
-        <aside className="rail">
-          <div className="tabsw">
-            <button className={`btn${tab === 'pages' ? ' primary' : ''}`} onClick={() => setTab('pages')}>Pages</button>
-            <button className={`btn${tab === 'actions' ? ' primary' : ''}`} onClick={() => setTab('actions')}>Actions</button>
-          </div>
-          <div className="rail-sec">Pages<span className="grow" /><button className="btn mini" onClick={addPage}>+ page</button></div>
-          <div className={`pitem${sel.kind === 'cover' ? ' active' : ''}`} onClick={() => { setSel({ kind: 'cover' }); setPanelSel(null) }}>
-            <span className="nm">◈ Cover</span>
-          </div>
-          {doc.pages.map((p, i) => (
-            <PageRow
-              key={i}
-              name={p.name}
-              active={sel.kind === 'page' && sel.page === i}
-              onSelect={() => selectPage(i)}
-              onRename={(n) => renamePage(i, n)}
-              onUp={() => movePage(i, -1)}
-              onDown={() => movePage(i, 1)}
-              onDelete={() => deletePage(i)}
-            />
-          ))}
-        </aside>
-
-        <main className="center">
-          {tab === 'pages' ? (
-            <PageCanvas
-              page={page}
-              cover={doc.cover}
-              flags={flags}
-              selected={panelSel}
-              onSelect={setPanelSel}
-              updatePanel={updatePanel}
-              addPanel={(pnl) => { if (curPage != null) { updatePage(curPage, (pg) => ({ ...pg, panels: [...pg.panels, pnl] })); setPanelSel(page ? page.panels.length : 0) } }}
-              deletePanel={(pi) => { if (curPage != null && page && page.panels.length > 1) { updatePage(curPage, (pg) => ({ ...pg, panels: pg.panels.filter((_, idx) => idx !== pi) })); setPanelSel(0) } }}
-            />
-          ) : (
-            <ActionEditor
-              actions={doc.actions ?? {}}
-              selected={actionSel}
-              onSelect={setActionSel}
-              updateActions={(fn) => update((d) => ({ ...d, actions: fn(d.actions ?? {}) }))}
-              contextPanel={contextPanel}
-              onTest={testAction}
-              onTestBuiltin={testBuiltin}
-            />
-          )}
-        </main>
-
-        {tab === 'pages' && (
-          <aside className="inspector">
-            <Inspector
-              kind={sel.kind}
-              cover={doc.cover}
-              panel={selectedPanel}
-              actionNames={Object.keys(doc.actions ?? {})}
-              registryKeys={Object.keys(REGISTRY)}
-              updateCover={(fn: (c: CoverDoc) => CoverDoc) => update((d) => ({ ...d, cover: fn(d.cover) }))}
-              updatePanel={(fn: (p: PanelDoc) => PanelDoc) => { if (panelSel != null) updatePanel(panelSel, fn) }}
-            />
-          </aside>
-        )}
+      <div className="deck">
+        <div className="seg-group">
+          <div className={seg('move')} onClick={() => setMode('move')}>✋ move</div>
+          <div className={seg('draw')} onClick={() => setMode('draw')}>✏️ draw</div>
+        </div>
+        <div className="tbtn" onClick={() => addBox('text')}>+ text box</div>
+        <div className="tbtn" onClick={() => addBox('draw')}>+ drawing</div>
+        <div className="tbtn" onClick={addPanelDefault}>+ new panel</div>
+        <div className="seg-group">
+          <div className={`seg${undoRef.current.length ? '' : ' dim'}`} onClick={undo}>↶ undo</div>
+          <div className={`seg${redoRef.current.length ? '' : ' dim'}`} onClick={redo}>redo ↷</div>
+        </div>
+        <span className="deck-hint">drag boxes to arrange · ✏️ draw to scribble inside a drawing box · rename any P· tag · ⌘Z to undo</span>
       </div>
 
-      <Preview doc={doc} open={previewOpen} onToggle={() => setPreviewOpen((o) => !o)} />
-    </div>
-  )
-}
+      <div className="board">
+        <aside className="rail">
+          {doc.pages.map((p, i) => (
+            <div
+              key={i}
+              className={`pagecard${sel.kind === 'page' && sel.page === i ? ' active' : ''}`}
+              style={{ transform: `rotate(${i % 2 === 0 ? -0.7 : 0.8}deg)` }}
+              onClick={() => selectPage(i)}
+            >
+              <div className="pc-name">{p.name}</div>
+              <div className="pc-snark">{p.snark}</div>
+            </div>
+          ))}
+          <div className="tear" onClick={addPage}>+ tear in a new page</div>
+          <div className={`covercard${sel.kind === 'cover' ? ' active' : ''}`} onClick={selectCover}>◈ Cover</div>
+          <span className="grow" />
+          <div className="dojodoor" onClick={() => setDojoOpen(true)}>
+            <div className="dd-title">DASH DOJO →</div>
+            <div className="dd-sub">teach Dash brand-new stunts (the advanced stuff)</div>
+          </div>
+        </aside>
 
-function PageRow({ name, active, onSelect, onRename, onUp, onDown, onDelete }: {
-  name: string
-  active: boolean
-  onSelect: () => void
-  onRename: (n: string) => void
-  onUp: () => void
-  onDown: () => void
-  onDelete: () => void
-}) {
-  const [editing, setEditing] = useState(false)
-  const [draft, setDraft] = useState(name)
-  return (
-    <div className={`pitem${active ? ' active' : ''}`} onClick={onSelect}>
-      {editing ? (
-        <input
-          autoFocus
-          value={draft}
-          onChange={(e) => setDraft(e.target.value)}
-          onBlur={() => { setEditing(false); onRename(draft) }}
-          onKeyDown={(e) => { if (e.key === 'Enter') (e.target as HTMLInputElement).blur() }}
-          onClick={(e) => e.stopPropagation()}
-        />
-      ) : (
-        <span className="nm" onDoubleClick={(e) => { e.stopPropagation(); setDraft(name); setEditing(true) }}>{name}</span>
+        <main className="stagewrap">
+          <PageCanvas
+            page={page}
+            cover={doc.cover}
+            flags={flags}
+            mode={mode}
+            gridOn={gridOn}
+            selPanel={panelSel}
+            selBox={boxSel}
+            onSelectPanel={(i) => { setPanelSel(i); setBoxSel(null) }}
+            onSelectBox={(pi, bi) => { setPanelSel(pi); setBoxSel(bi) }}
+            onClear={() => { setPanelSel(null); setBoxSel(null) }}
+            updatePanel={updatePanel}
+            addPanel={addPanel}
+            deletePanel={() => { if (panelSel != null) deletePanel() }}
+          />
+          <div className="grid-toggle" onClick={() => setGridOn((v) => !v)}>{gridOn ? '▦ grid on' : '▦ grid off'}</div>
+        </main>
+
+        <aside className="context">
+          <Inspector
+            selKind={sel.kind === 'cover' ? 'cover' : panelSel != null ? 'panel' : 'none'}
+            cover={doc.cover}
+            panel={selectedPanel}
+            panelIndex={panelSel}
+            box={selectedBox}
+            boxIndex={boxSel}
+            actionNames={Object.keys(doc.actions ?? {})}
+            updateCover={(fn: (c: CoverDoc) => CoverDoc) => update((d) => ({ ...d, cover: fn(d.cover) }))}
+            updatePanel={(fn: (p: PanelDoc) => PanelDoc) => { if (panelSel != null) updatePanel(panelSel, fn) }}
+            updateBox={updateBox}
+            addBox={addBox}
+            deleteBox={deleteBox}
+            deletePanel={deletePanel}
+            selectBox={(bi) => setBoxSel(bi)}
+          />
+        </aside>
+      </div>
+
+      {dojoOpen && (
+        <div className="dojo-overlay" onClick={() => setDojoOpen(false)}>
+          <div className="dojo-modal" onClick={(e) => e.stopPropagation()}>
+            <div className="dojo-head">
+              <span className="dojo-title">THE DASH DOJO</span>
+              <span className="dojo-sub">where Dash learns new stunts — no code, just sentences</span>
+              <span className="grow" />
+              <div className="dojo-x" onClick={() => setDojoOpen(false)}>✕</div>
+            </div>
+            <div className="dojo-editor">
+              <ActionEditor
+                actions={doc.actions ?? {}}
+                selected={actionSel}
+                onSelect={setActionSel}
+                updateActions={(fn) => update((d) => ({ ...d, actions: fn(d.actions ?? {}) }))}
+                contextPanel={contextPanel}
+                onTest={testAction}
+                onTestBuiltin={testBuiltin}
+              />
+            </div>
+          </div>
+        </div>
       )}
-      <button className="btn mini" onClick={(e) => { e.stopPropagation(); onUp() }}>▲</button>
-      <button className="btn mini" onClick={(e) => { e.stopPropagation(); onDown() }}>▼</button>
-      <button className="btn mini" onClick={(e) => { e.stopPropagation(); onDelete() }}>✕</button>
+
+      <Preview doc={doc} open={previewOpen} onToggle={() => setPreviewOpen((o) => !o)} />
     </div>
   )
 }
