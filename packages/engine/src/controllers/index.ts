@@ -13,4 +13,4 @@ export { lookAt } from './look-at'
 export type { LookAtController, LookAtOptions, HeadFrame } from './look-at'
 
 export { createControllerSet } from './set'
-export type { ControllerSet, ControllerSetOptions } from './set'
+export type { ControllerSet, ControllerSetOptions, ControllerSetState } from './set'

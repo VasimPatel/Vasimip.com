@@ -47,6 +47,7 @@ export type {
   LookAtOptions,
   HeadFrame,
   ControllerSet,
+  ControllerSetState,
   ControllerSetOptions,
 } from './controllers'
 
@@ -128,3 +129,21 @@ export type { RuleTable, RuleEntity, RuleEventCtx, DispatchAction, DispatchResul
 
 export { createProjectileSim } from './world/projectile'
 export type { ProjectileSim, ProjectileSpec, ProjectileState, ProjectileSimState, ProjectileSimOptions } from './world/projectile'
+
+// ── Phase 7a: locomotion solver + intent executor + character runtime (L4 + L6) ──
+export { createLocomotion, solveBallistic, LOCO_EVENTS, LOCO_GRAVITY, LAUNCH_MARKER } from './locomotion'
+export type {
+  Locomotion,
+  LocomotionDeps,
+  LocomotionState,
+  LocoStatus,
+  LocoMode,
+  CharacterTransform,
+  BallisticSolution,
+} from './locomotion'
+
+export { createBehaviorExecutor, STRIKE_HOLD_MS } from './behavior'
+export type { BehaviorExecutor, BehaviorDeps, BehaviorState, BehaviorStatus } from './behavior'
+
+export { createCharacterRuntime } from './character'
+export type { CharacterRuntime, CharacterRuntimeOptions, CharacterState } from './character'

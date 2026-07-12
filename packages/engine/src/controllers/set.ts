@@ -58,11 +58,22 @@ export interface ControllerSet {
   update(tick: number): FaceAux
   /** Feed the post-additive FK so the NEXT tick's look-at has a head frame. */
   feedSolved(solved: SolvedSkeleton): void
-  /** Snapshot the blink schedule (the set's only non-rng internal state). */
+  /** Snapshot the blink schedule (back-compat; prefer getState). */
   getBlinkState(): BlinkState
   setBlinkState(s: BlinkState): void
+  /** FULL controller-set snapshot: blink schedule + the one-frame-lagged head frame
+   * the look-at reads (null until the first feedSolved). Restoring only the blink
+   * state loses the head frame and makes the first post-restore gaze tick diverge. */
+  getState(): ControllerSetState
+  setState(s: ControllerSetState): void
   /** Unregister every additive this set added to the blender. */
   dispose(): void
+}
+
+/** Plain-JSON snapshot of the set (see getState). */
+export interface ControllerSetState {
+  blink: BlinkState
+  head: HeadFrame | null
 }
 
 export function createControllerSet(
@@ -112,6 +123,12 @@ export function createControllerSet(
 
     getBlinkState: () => blinker.getState(),
     setBlinkState: (s) => blinker.setState(s),
+
+    getState: () => ({ blink: blinker.getState(), head: lastHead ? { ...lastHead } : null }),
+    setState(s: ControllerSetState): void {
+      blinker.setState(s.blink)
+      lastHead = s.head ? { ...s.head } : null
+    },
 
     dispose(): void {
       for (const id of additiveIds) blender.removeAdditive(id)

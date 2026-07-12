@@ -95,7 +95,8 @@ const goodChar = {
   rig: 'dash',
   style: { color: '#1a1a1a', width: 5, linecap: 'round' },
   personality: { energy: 0.8, bounciness: 0.85, confidence: 0.8, sloppiness: 0.3 },
-  locomotion: { modes: ['walk', 'hop', 'fly'], maxJumpHeight: 120 },
+  // Coherent caps (P7a hardening): 'hop' requires both jump caps; 'fly' requires flySpeed.
+  locomotion: { modes: ['walk', 'hop', 'fly'], maxJumpHeight: 120, maxJumpDistance: 180, flySpeed: 220 },
 }
 
 test('a well-formed character validates', () => {

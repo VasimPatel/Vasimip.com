@@ -79,6 +79,10 @@ export interface Blender {
   setSource(source: Pose | Clip, opts?: { durationMs?: number }): void
   /** Advance one fixed tick; returns the POST-ADDITIVE pose + markers crossed. */
   tick(): BlenderTick
+  /** Cheap identity of the CURRENT base source ({kind, id}) — lets a caller waiting
+   * on a clip's markers (the P7 launch-marker binding) detect a mid-wait source
+   * replacement without the cost of getState(). */
+  currentSource(): { kind: 'pose' | 'clip'; id: string }
   addAdditive(id: string, fn: AdditiveFn): void
   removeAdditive(id: string): void
   getState(): BlenderState
@@ -191,6 +195,12 @@ export function createBlender(rig: RigTemplate, opts?: BlenderOptions): Blender 
       return { pose: { angles, root: outRoot }, markers }
     },
 
+    currentSource() {
+      return source.kind === 'clip'
+        ? { kind: 'clip' as const, id: source.clip.id }
+        : { kind: 'pose' as const, id: source.pose.id }
+    },
+
     addAdditive(id, fn) {
       additives.set(id, fn)
     },
@@ -198,13 +208,16 @@ export function createBlender(rig: RigTemplate, opts?: BlenderOptions): Blender 
       additives.delete(id)
     },
 
+    // Snapshots DEEP-COPY the source doc (structuredClone): a snapshot must be
+    // immutable plain JSON, never an alias into a live clip/pose object that a
+    // caller might mutate between snapshot and restore.
     getState(): BlenderState {
       const j: Record<string, JointState> = {}
       for (const [id, s] of joints) j[id] = { angle: s.angle, vel: s.vel }
       const src: Source =
         source.kind === 'clip'
-          ? { kind: 'clip', clip: source.clip, timeMs: source.timeMs }
-          : { kind: 'pose', pose: source.pose }
+          ? { kind: 'clip', clip: structuredClone(source.clip), timeMs: source.timeMs }
+          : { kind: 'pose', pose: structuredClone(source.pose) }
       return { joints: j, root: { ...root }, smoothTime, decayTau, tick: tickCount, source: src }
     },
 
@@ -224,8 +237,8 @@ export function createBlender(rig: RigTemplate, opts?: BlenderOptions): Blender 
       tickCount = state.tick
       source =
         state.source.kind === 'clip'
-          ? { kind: 'clip', clip: state.source.clip, timeMs: state.source.timeMs }
-          : { kind: 'pose', pose: state.source.pose }
+          ? { kind: 'clip', clip: structuredClone(state.source.clip), timeMs: state.source.timeMs }
+          : { kind: 'pose', pose: structuredClone(state.source.pose) }
       // Additives are behavior, not state — the caller re-registers them.
     },
   }

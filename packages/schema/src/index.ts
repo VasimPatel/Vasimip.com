@@ -57,3 +57,29 @@ export type {
 // ── Phase 3: clips (L1b) ─────────────────────────────────────────────────────
 export { tryValidateClip, validateClipAgainstRig, clipWarnings, clipDuration, EASE_PRESETS } from './clip'
 export type { Clip, ClipKey, ClipTrack, ClipRootKey, ClipRootTrack, ClipMarker, EasePreset } from './clip'
+
+// ── Phase 7a: behaviors + intents + target refs (L6 authoring surface) ───────
+export {
+  tryValidateBehavior,
+  validateBehaviorAgainstWorld,
+  parseTargetRef,
+  evalGate,
+  INTENT_VERBS,
+  MOVEMENT_VERBS,
+  REACTION_TRIGGERS,
+  MILESTONES,
+} from './behavior'
+export type {
+  BehaviorDoc,
+  Intent,
+  IntentVerb,
+  MovementVerb,
+  MoveIntent,
+  TargetRef,
+  EntityRef,
+  ParsedTarget,
+  ReactionTrigger,
+  Milestone,
+  Cue,
+  GateExpr,
+} from './behavior'
