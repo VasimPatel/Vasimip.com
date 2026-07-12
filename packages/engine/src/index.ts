@@ -36,10 +36,28 @@ export type { Blender, BlenderState, BlenderTick, BlenderOptions, AdditiveFn } f
 export { solveTwoBone, solveChainToLocal } from './ik'
 export type { TwoBoneResult, ChainLocalAngles } from './ik'
 
-export { breathing, weightShift, blink, lookAt, createControllerSet, NEUTRAL_FACE } from './controllers'
+export {
+  breathing,
+  weightShift,
+  blink,
+  lookAt,
+  createControllerSet,
+  createExpression,
+  createSquashFlourish,
+  NEUTRAL_FACE,
+  RESTING_FACE,
+} from './controllers'
+export { createAccessoryChain } from './accessory'
+export type { AccessoryChain, AccessoryChainOptions } from './accessory'
 export type {
   FaceAux,
   FaceFn,
+  BrowState,
+  MouthState,
+  ExpressionController,
+  ExpressionState,
+  SquashFlourish,
+  FlourishKind,
   Controller,
   BlinkController,
   BlinkState,

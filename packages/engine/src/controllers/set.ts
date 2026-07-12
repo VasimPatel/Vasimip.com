@@ -32,12 +32,14 @@
 
 import type { CharacterDoc, PersonalityParams, RigTemplate } from '@dash/schema'
 import type { Blender } from '../blender'
+import type { EventBus } from '../events'
 import type { SolvedSkeleton } from '../fk'
 import type { Rng } from '../rng'
 import { breathing } from './breathing'
 import { weightShift } from './weight-shift'
 import { blink, type BlinkState } from './blink'
 import { lookAt, type HeadFrame, type LookAtOptions } from './look-at'
+import { createExpression, type ExpressionController, type ExpressionState } from './expression'
 import { NEUTRAL_FACE, type FaceAux } from './face'
 
 const HEAD_JOINT_ID = 'head'
@@ -49,6 +51,10 @@ export interface ControllerSetOptions {
   /** Override the character's personality (defaults to character.personality). */
   personality?: PersonalityParams
   lookAt?: LookAtOptions
+  /** Event bus to derive facial EXPRESSION from (charm checkpoint) — pass the
+   * character's bus and brows/mouth act out launches, landings, bonks, and says.
+   * Omitted → the face stays at Dash's resting look. */
+  events?: EventBus
 }
 
 export interface ControllerSet {
@@ -56,6 +62,8 @@ export interface ControllerSet {
   readonly additiveIds: readonly string[]
   /** Advance the face contributors and return this tick's aux channel. */
   update(tick: number): FaceAux
+  /** Heading hint (+1 right / −1 left) for the 3/4-view eye placement. */
+  setFacing(facing: 1 | -1): void
   /** Feed the post-additive FK so the NEXT tick's look-at has a head frame. */
   feedSolved(solved: SolvedSkeleton): void
   /** Snapshot the blink schedule (back-compat; prefer getState). */
@@ -74,6 +82,8 @@ export interface ControllerSet {
 export interface ControllerSetState {
   blink: BlinkState
   head: HeadFrame | null
+  /** Present when the set has an expression controller (events wired). */
+  expression?: ExpressionState
 }
 
 export function createControllerSet(
@@ -93,6 +103,7 @@ export function createControllerSet(
   const gaze = opts.getTarget
     ? lookAt(opts.getTarget, () => lastHead, opts.lookAt)
     : null
+  const expression: ExpressionController | null = opts.events ? createExpression(opts.events) : null
 
   blender.addAdditive(breathe.id, breathe.fn)
   blender.addAdditive(sway.id, sway.fn)
@@ -112,7 +123,15 @@ export function createControllerSet(
         if (g.pupilDx !== undefined) face.pupilDx = g.pupilDx
         if (g.pupilDy !== undefined) face.pupilDy = g.pupilDy
       }
+      if (expression) {
+        expression.step()
+        Object.assign(face, expression.face(tick))
+      }
       return face
+    },
+
+    setFacing(facing: 1 | -1): void {
+      expression?.setFacing(facing)
     },
 
     feedSolved(solved: SolvedSkeleton): void {
@@ -124,14 +143,20 @@ export function createControllerSet(
     getBlinkState: () => blinker.getState(),
     setBlinkState: (s) => blinker.setState(s),
 
-    getState: () => ({ blink: blinker.getState(), head: lastHead ? { ...lastHead } : null }),
+    getState: () => ({
+      blink: blinker.getState(),
+      head: lastHead ? { ...lastHead } : null,
+      ...(expression ? { expression: expression.getState() } : {}),
+    }),
     setState(s: ControllerSetState): void {
       blinker.setState(s.blink)
       lastHead = s.head ? { ...s.head } : null
+      if (expression && s.expression) expression.setState(s.expression)
     },
 
     dispose(): void {
       for (const id of additiveIds) blender.removeAdditive(id)
+      expression?.dispose()
     },
   }
 }

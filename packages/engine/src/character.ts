@@ -23,6 +23,8 @@ import { solveFk, type SolvedSkeleton } from './fk'
 import { createBlender, type Blender, type BlenderState } from './blender'
 import { createControllerSet, type ControllerSet, type ControllerSetState } from './controllers/set'
 import type { FaceAux } from './controllers/face'
+import { createSquashFlourish } from './controllers/squash'
+import { createAccessoryChain, type AccessoryChain } from './accessory'
 import { createSecondary, type Secondary } from './secondary'
 import type { VerletWorld } from './verlet'
 import type { Rng } from './rng'
@@ -91,6 +93,8 @@ export interface CharacterRuntimeOptions {
    * can never wedge without any external ticking); `maxBehaviorMs` overrides the
    * executor's computed per-run budget (mainly for tests / hard site caps). */
   watchdog?: { maxBehaviorMs?: number }
+  /** Build accessory ribbons from CharacterDoc.accessoryPoints (default true). */
+  accessories?: boolean
   /** Behavior registry (id → doc, immutable). Needed to RESTORE a snapshot taken
    * mid-behavior onto a fresh runtime — see BehaviorDeps.behaviors (P8 contract).
    * Docs passed to runBehavior() are auto-registered. */
@@ -111,6 +115,8 @@ export interface CharacterState {
   recoilVx: number
   /** The runtime-owned watchdog's window (latch + elapsed), so restore keeps it coherent. */
   watchdog: WatchdogState
+  /** Squash/stretch flourish spring (charm) — optional for pre-charm snapshots. */
+  squash?: { sx: number; sy: number; vx: number; vy: number }
 }
 
 export interface CharacterRuntime {
@@ -131,6 +137,10 @@ export interface CharacterRuntime {
   running(): boolean
   /** The current speech bubble (or null) — the renderer draws it (7b). */
   speech(): Speech | null
+  /** This tick's squash/stretch scales (charm) — renderer group transform. */
+  flourish(): { sx: number; sy: number }
+  /** Accessory ribbons (charm; e.g. the bandana) — renderer draws points(). */
+  readonly accessories: readonly AccessoryChain[]
   /** Monotonic per-run id (the watchdog's per-run latch key). */
   runId(): number
   /** Current run's total time bound (ms) — the watchdog's default budget. */
@@ -197,7 +207,33 @@ export function createCharacterRuntime(opts: CharacterRuntimeOptions): Character
   const controllerSet: ControllerSet = createControllerSet(blender, rig, character, {
     rng,
     getTarget: opts.getLookTarget,
+    events, // expression controller: brows/mouth act out this character's events
   })
+
+  // Squash & stretch flourish (charm) — kicked by this character's own motion
+  // events, read by the renderer as a group transform. Pure + tick-driven.
+  // Unsubscribers retained for dispose() (review finding: no listener leaks).
+  const flourish = createSquashFlourish()
+  const flourishOffs = [
+    events.on('jump:launch', () => flourish.trigger('launch')),
+    events.on('jump:land', () => flourish.trigger('land')),
+    events.on('intent:blocked', () => flourish.trigger('poke')),
+    events.on('expression:poke', () => flourish.trigger('poke')),
+  ]
+  let lastFlourish = { sx: 1, sy: 1 }
+
+  // Accessory chains (charm) — one verlet ribbon per CharacterDoc.accessoryPoints
+  // entry that names a rig joint (Dash: the neck bandana). Same shared solver.
+  // OPT-IN (accessories: true): they are presentation, and headless tests often
+  // stub the verlet world with less than addBody/setPinTarget.
+  const accessories: AccessoryChain[] = []
+  if (opts.accessories === true) {
+    for (const anchor of character.accessoryPoints ?? []) {
+      if (rig.joints.some((j) => j.id === anchor)) {
+        accessories.push(createAccessoryChain(verlet, rig, character.id, { anchorJoint: anchor }))
+      }
+    }
+  }
   const secondary: Secondary = createSecondary(rig, verlet, {
     proportions: character.proportions,
     id: opts.secondaryId ?? `secondary:${character.id}`,
@@ -322,10 +358,15 @@ export function createCharacterRuntime(opts: CharacterRuntimeOptions): Character
         rootTransform: { x: transform.x, y: transform.y + (pose.root.y - baselineRootY), rot: transform.rot },
       },
     )
-    // 7. frame for NEXT tick's look-at.
+    // 7. frame for NEXT tick's look-at; heading for the 3/4-view eyes.
     controllerSet.feedSolved(lastSolved)
-    // 8. secondary follow-through TARGETS (caller steps the shared verlet once).
+    controllerSet.setFacing(transform.facing)
+    // 8. secondary follow-through TARGETS (caller steps the shared verlet once);
+    //    accessory ribbons re-pin to their anchors in the same pass.
     secondary.step(lastSolved)
+    for (const acc of accessories) acc.step(lastSolved, tickCount, transform.facing)
+    // 8b. squash/stretch spring toward rest.
+    lastFlourish = flourish.tick()
     // 9. watchdog — ticked HERE, unconditionally: no caller wiring can forget it.
     watchdog.tick()
   }
@@ -347,6 +388,7 @@ export function createCharacterRuntime(opts: CharacterRuntimeOptions): Character
         tick: tickCount,
         recoilVx,
         watchdog: watchdog.getState(),
+        squash: flourish.getState(),
       }
     },
     setState(s: CharacterState): void {
@@ -361,6 +403,12 @@ export function createCharacterRuntime(opts: CharacterRuntimeOptions): Character
       tickCount = s.tick
       recoilVx = s.recoilVx
       watchdog.setState(s.watchdog)
+      // Absent squash state (pre-charm snapshot) resets to rest — a stale spring
+      // must not survive a restore. The renderer-facing cache updates immediately
+      // so a render before the next tick shows the restored value, not the old one.
+      const sq = s.squash ?? { sx: 1, sy: 1, vx: 0, vy: 0 }
+      flourish.setState(sq)
+      lastFlourish = { sx: sq.sx, sy: sq.sy }
       // Additives are behavior, re-registered by construction (the set stays live).
     },
     get transform() {
@@ -372,6 +420,8 @@ export function createCharacterRuntime(opts: CharacterRuntimeOptions): Character
     overrides: () => secondary.overrides(),
     running: () => behavior.running(),
     speech: () => behavior.speech(),
+    flourish: () => lastFlourish,
+    accessories,
     runId: () => behavior.runId(),
     budgetMs: () => behavior.budgetMs(),
     forceRelease,
@@ -380,6 +430,8 @@ export function createCharacterRuntime(opts: CharacterRuntimeOptions): Character
     dispose(): void {
       controllerSet.dispose()
       behavior.dispose()
+      for (const off of flourishOffs) off()
+      for (const acc of accessories) acc.dispose()
     },
   }
 }

@@ -5,7 +5,22 @@
   "style": {
     "color": "#1a1a1a",
     "width": 5,
-    "linecap": "round"
+    "linecap": "round",
+    "widths": {
+      "pelvis": 5.5,
+      "neck": 5.5,
+      "head": 4,
+      "thighR": 5,
+      "shinR": 5,
+      "footR": 5,
+      "thighL": 5,
+      "shinL": 5,
+      "footL": 5,
+      "upperArmR": 4.5,
+      "foreArmR": 4.5,
+      "upperArmL": 4.5,
+      "foreArmL": 4.5
+    }
   },
   "palette": {
     "head": "#fffdf6",

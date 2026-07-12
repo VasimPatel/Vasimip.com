@@ -58,6 +58,10 @@ export function solveChainToLocal(
   targetX: number,
   targetY: number,
   proportions?: Record<string, number>,
+  /** Override the rig's bendHint (gait: a walking knee bends along the direction
+   * of travel — the rig's static hints splay the knees for the STAND art and read
+   * as a backwards knee mid-stride). */
+  bendOverride?: 1 | -1,
 ): ChainLocalAngles {
   const rootId = chain.jointIds[0]
   const midId = chain.jointIds[1]
@@ -65,7 +69,7 @@ export function solveChainToLocal(
   const midJoint = rig.joints.find((joint) => joint.id === midId)!
   const len1 = rootJoint.length * (proportions?.[rootId] ?? 1)
   const len2 = midJoint.length * (proportions?.[midId] ?? 1)
-  const bendHint = rootJoint.bendHint ?? 1
+  const bendHint = bendOverride ?? rootJoint.bendHint ?? 1
 
   const r = solveTwoBone(hipX, hipY, targetX, targetY, len1, len2, bendHint)
   return {

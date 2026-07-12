@@ -11,6 +11,9 @@ export interface StrokeStyle {
   color: string
   width: number
   linecap?: 'round' | 'butt'
+  /** Per-joint stroke-width overrides (charm: the legacy weight hierarchy — torso
+   * 5.5 / legs 5 / arms 4.5 / head outline 4). Joints not listed use `width`. */
+  widths?: Record<string, number>
 }
 
 export interface PersonalityParams {
@@ -117,6 +120,13 @@ const characterChecks: readonly Check[] = [
         if (!isNum(d.style.width) || d.style.width <= 0) issues.push('style.width: required positive number')
         if (d.style.linecap !== undefined && d.style.linecap !== 'round' && d.style.linecap !== 'butt') {
           issues.push("style.linecap: must be 'round' or 'butt'")
+        }
+        if (d.style.widths !== undefined) {
+          if (!isRecord(d.style.widths)) issues.push('style.widths: must be an object (jointId → positive number)')
+          else
+            for (const [k, v] of Object.entries(d.style.widths)) {
+              if (!isNum(v) || v <= 0) issues.push(`style.widths.${k}: must be a positive number`)
+            }
         }
       }
     }
