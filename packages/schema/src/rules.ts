@@ -16,12 +16,17 @@
 
 import { tryValidate, isRecord, isNum, isStr, isArr, type ValidateResult, type Issues } from './validate'
 import { COMPONENT_NAMES, type ComponentName, type HoleEdge, type HolePersistScope } from './world'
+import { checkIntentValue, type Intent } from './behavior'
 
 /** Rule rows key on component KINDS (the closed component set, §2). */
 export type ComponentKind = ComponentName
 
-/** The CLOSED world-layer response set (see the deviation note above). */
-export const WORLD_RESPONSE_KINDS = ['cut', 'impulse', 'support', 'emitEvent'] as const
+/** The response set. `cut | impulse | support | emitEvent` are the closed WORLD-LAYER
+ * effects (6b). Phase 7b adds `intent` — a FULL behavior intent targeted at the
+ * involved character (the §5 sketch's `responses: Intent[]`, realized now that the
+ * L6 dispatcher exists). This is the sanctioned extension the 6b deviation note
+ * promised: a WorldResponse is one intent kind among many. */
+export const WORLD_RESPONSE_KINDS = ['cut', 'impulse', 'support', 'emitEvent', 'intent'] as const
 export type WorldResponseKind = (typeof WORLD_RESPONSE_KINDS)[number]
 
 export type WorldResponse =
@@ -35,6 +40,10 @@ export type WorldResponse =
   | { kind: 'support' }
   /** Emit a named event on the bus (e.g. the character×wall→`blocked` row). */
   | { kind: 'emitEvent'; event: string }
+  /** Run a full behavior intent on the involved (non-surface) character — the L6
+   * dispatch extension (§7b #4). The engine dispatcher emits a `rule:intent` action
+   * the character runtime picks up as a one-shot reaction. */
+  | { kind: 'intent'; do: Intent }
 
 export interface RuleRow {
   a: ComponentKind
@@ -66,6 +75,7 @@ const RESPONSE_KEYS: Record<WorldResponseKind, readonly string[]> = {
   impulse: ['kind', 'vec', 'scale'],
   support: ['kind'],
   emitEvent: ['kind', 'event'],
+  intent: ['kind', 'do'],
 }
 
 function checkResponse(r: unknown, path: string, issues: Issues): void {
@@ -87,6 +97,8 @@ function checkResponse(r: unknown, path: string, issues: Issues): void {
     if (r.scale !== undefined && !isNum(r.scale)) issues.push(`${path}.scale: must be a finite number when present`)
   } else if (r.kind === 'emitEvent') {
     if (!isStr(r.event) || r.event.length === 0) issues.push(`${path}.event: required non-empty string`)
+  } else if (r.kind === 'intent') {
+    checkIntentValue(r.do, `${path}.do`, issues)
   }
   // 'support' carries no fields beyond `kind`.
 }

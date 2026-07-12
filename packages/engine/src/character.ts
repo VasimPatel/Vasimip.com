@@ -28,14 +28,16 @@ import type { VerletWorld } from './verlet'
 import type { Rng } from './rng'
 import type { EventBus } from './events'
 import type { MutableWorld } from './world/holes'
-import type { Capsule } from './world/collision'
+import { sweptCapsuleVsSegments, stopAt, type Capsule } from './world/collision'
+import { STEP_MS } from './loop'
 import {
   createLocomotion,
   type Locomotion,
   type LocomotionState,
   type CharacterTransform,
 } from './locomotion'
-import { createBehaviorExecutor, type BehaviorExecutor, type BehaviorState } from './behavior'
+import { createBehaviorExecutor, type BehaviorExecutor, type BehaviorState, type Speech } from './behavior'
+import { createWatchdog, type Watchdog, type WatchdogState } from './watchdog'
 
 export type { CharacterTransform } from './locomotion'
 
@@ -45,6 +47,16 @@ const DEFAULT_HIP_HEIGHT = 30
 const CAP_RADIUS_FRAC = 0.42
 const CAP_RADIUS_MIN = 6
 const CAP_RADIUS_MAX = 34
+
+// ── root recoil (impulse self → REAL knockback on the transform) ──────────────────
+/** Per-tick multiplicative decay of the recoil velocity (≈300ms to rest at 120 Hz). */
+const RECOIL_DECAY = 0.88
+/** Below this speed (px/s) the recoil snaps to zero (halt-stable, never a slow drift). */
+const RECOIL_STOP = 4
+/** Collision skin so a recoiling capsule rests just outside a wall (no penetration). */
+const RECOIL_SKIN = 0.5
+/** Force-release settle probe: how far below the character we search for a support. */
+const SETTLE_PROBE_PX = 2000
 
 export interface CharacterRuntimeOptions {
   rig: RigTemplate
@@ -69,8 +81,16 @@ export interface CharacterRuntimeOptions {
   getLookTarget?: () => { x: number; y: number } | null
   /** Secondary verlet body id (distinct per character). */
   secondaryId?: string
-  /** Resolve an impulse target (entity id) to a verlet body id. */
+  /** Resolve an impulse target (entity id) to a verlet body id. A bare `'self'` maps
+   * to this character's own secondary body by default (so `impulse self backward`
+   * works out of the box); an explicit resolver overrides. */
   resolveVerletBody?: (entityRef: string) => string | undefined
+  /** Conventional pose/clip names for the default give-up (shrug-and-sit). */
+  giveUp?: { shrug?: string; sit?: string }
+  /** Watchdog tuning. The runtime OWNS and TICKS its watchdog (production behaviors
+   * can never wedge without any external ticking); `maxBehaviorMs` overrides the
+   * executor's computed per-run budget (mainly for tests / hard site caps). */
+  watchdog?: { maxBehaviorMs?: number }
   /** Behavior registry (id → doc, immutable). Needed to RESTORE a snapshot taken
    * mid-behavior onto a fresh runtime — see BehaviorDeps.behaviors (P8 contract).
    * Docs passed to runBehavior() are auto-registered. */
@@ -87,6 +107,10 @@ export interface CharacterState {
   /** The runtime's own tick counter — drives the controller phase (blink/breathing
    * read it); restoring without it would desync every timer from the snapshot. */
   tick: number
+  /** In-flight root recoil velocity (px/s, horizontal — see applyRootImpulse). */
+  recoilVx: number
+  /** The runtime-owned watchdog's window (latch + elapsed), so restore keeps it coherent. */
+  watchdog: WatchdogState
 }
 
 export interface CharacterRuntime {
@@ -105,6 +129,16 @@ export interface CharacterRuntime {
   overrides(): Record<string, { ex: number; ey: number }>
   /** A behavior is in progress. 7b's watchdog force-release wraps this. */
   running(): boolean
+  /** The current speech bubble (or null) — the renderer draws it (7b). */
+  speech(): Speech | null
+  /** Monotonic per-run id (the watchdog's per-run latch key). */
+  runId(): number
+  /** Current run's total time bound (ms) — the watchdog's default budget. */
+  budgetMs(): number
+  /** Force the behavior to safe idle NOW (the watchdog's force-release). Also settles
+   * the transform onto the nearest support below (a mid-air release never leaves the
+   * character floating). The runtime OWNS a watchdog that calls this automatically. */
+  forceRelease(): void
   readonly locomotion: Locomotion
   readonly behavior: BehaviorExecutor
   dispose(): void
@@ -184,6 +218,22 @@ export function createCharacterRuntime(opts: CharacterRuntimeOptions): Character
     hipHeight,
   })
 
+  const secondaryBodyId = opts.secondaryId ?? `secondary:${character.id}`
+  const resolveVerletBody =
+    opts.resolveVerletBody ?? ((ref: string) => (ref === 'self' ? secondaryBodyId : undefined))
+
+  // ── root recoil (impulse self) ────────────────────────────────────────────────
+  // A REAL knockback on the character transform: a decaying horizontal velocity,
+  // integrated each tick with a swept-capsule collision check (a recoil can never
+  // tunnel through the wall behind). POLICY (documented): only the HORIZONTAL
+  // component displaces the root — a decay-only vertical would leave the character
+  // hovering (no gravity outside jump ballistics); the vertical component still
+  // reads visually through the verlet secondary follow-through.
+  let recoilVx = 0
+  function applyRootImpulse(vx: number, _vy: number): void {
+    recoilVx += vx
+  }
+
   const behavior: BehaviorExecutor = createBehaviorExecutor({
     locomotion,
     blender,
@@ -194,9 +244,43 @@ export function createCharacterRuntime(opts: CharacterRuntimeOptions): Character
     clips,
     poses,
     names: { idle: opts.names?.idle },
-    resolveVerletBody: opts.resolveVerletBody,
+    characterReactions: character.reactions,
+    giveUp: opts.giveUp,
+    resolveVerletBody,
+    applyRootImpulse,
     behaviors: opts.behaviors,
   })
+
+  // ── watchdog (OWNED + TICKED here — production behaviors can never wedge) ────────
+  // Force-release must leave the character in a PHYSICALLY safe pose, not just a
+  // logically idle one: a release mid-jump would otherwise strand the transform in
+  // the air forever (nothing outside jump ballistics applies gravity). So after the
+  // executor releases, settle: probe straight down and snap onto the first support.
+  function settleToSupport(): void {
+    const hit = sweptCapsuleVsSegments(capsule(), 0, SETTLE_PROBE_PX, world.collision().segments)
+    if (hit) {
+      const p = stopAt(transform.x, transform.y, transform.x, transform.y + SETTLE_PROBE_PX, hit.t, RECOIL_SKIN)
+      transform.y = p.y
+    }
+    // No support below (a fully cut-away world): leave the transform — the release
+    // is still logically complete and the position bounded (documented limitation).
+  }
+
+  function forceRelease(): void {
+    behavior.forceRelease()
+    recoilVx = 0
+    settleToSupport()
+  }
+
+  const watchdog: Watchdog = createWatchdog(
+    {
+      running: () => behavior.running(),
+      runId: () => behavior.runId(),
+      budgetMs: () => behavior.budgetMs(),
+      forceRelease,
+    },
+    { maxBehaviorMs: opts.watchdog?.maxBehaviorMs, events, characterId: character.id },
+  )
 
   let lastSolved: SolvedSkeleton = restSolved
   let lastFace: FaceAux = { pupilDx: 0, pupilDy: 0, blink: 0 }
@@ -215,6 +299,20 @@ export function createCharacterRuntime(opts: CharacterRuntimeOptions): Character
     const { pose, markers } = blender.tick()
     // 5. jump launch (marker-synced) + ballistic integration + landing.
     locomotion.postBlend(markers)
+    // 5b. root recoil (impulse self): decaying horizontal knockback, swept vs walls.
+    if (recoilVx !== 0) {
+      const dx = recoilVx * (STEP_MS / 1000)
+      const hit = sweptCapsuleVsSegments(capsule(), dx, 0, world.collision().segments)
+      if (hit) {
+        const p = stopAt(transform.x, transform.y, transform.x + dx, transform.y, hit.t, RECOIL_SKIN)
+        transform.x = p.x
+        recoilVx = 0 // absorbed by the wall — no bounce (inelastic, like the props)
+      } else {
+        transform.x += dx
+        recoilVx *= RECOIL_DECAY
+        if (Math.abs(recoilVx) < RECOIL_STOP) recoilVx = 0
+      }
+    }
     // 6. POST-ADDITIVE FK at the world transform (breathing bob = blender root Y).
     lastSolved = solveFk(
       rig,
@@ -228,6 +326,8 @@ export function createCharacterRuntime(opts: CharacterRuntimeOptions): Character
     controllerSet.feedSolved(lastSolved)
     // 8. secondary follow-through TARGETS (caller steps the shared verlet once).
     secondary.step(lastSolved)
+    // 9. watchdog — ticked HERE, unconditionally: no caller wiring can forget it.
+    watchdog.tick()
   }
 
   function runBehavior(doc: BehaviorDoc): void {
@@ -245,6 +345,8 @@ export function createCharacterRuntime(opts: CharacterRuntimeOptions): Character
         blender: blender.getState(),
         controllers: controllerSet.getState(),
         tick: tickCount,
+        recoilVx,
+        watchdog: watchdog.getState(),
       }
     },
     setState(s: CharacterState): void {
@@ -257,6 +359,8 @@ export function createCharacterRuntime(opts: CharacterRuntimeOptions): Character
       blender.setState(s.blender)
       controllerSet.setState(s.controllers)
       tickCount = s.tick
+      recoilVx = s.recoilVx
+      watchdog.setState(s.watchdog)
       // Additives are behavior, re-registered by construction (the set stays live).
     },
     get transform() {
@@ -267,10 +371,15 @@ export function createCharacterRuntime(opts: CharacterRuntimeOptions): Character
     capsule,
     overrides: () => secondary.overrides(),
     running: () => behavior.running(),
+    speech: () => behavior.speech(),
+    runId: () => behavior.runId(),
+    budgetMs: () => behavior.budgetMs(),
+    forceRelease,
     locomotion,
     behavior,
     dispose(): void {
       controllerSet.dispose()
+      behavior.dispose()
     },
   }
 }

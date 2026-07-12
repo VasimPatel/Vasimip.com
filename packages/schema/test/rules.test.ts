@@ -72,3 +72,22 @@ test('damageable component: negative healAfterMs is rejected', () => {
   expect(tryValidateWorldV2(wrapDamageable({ healAfterMs: -100 })).ok).toBe(false)
   expect(tryValidateWorldV2(wrapDamageable({ healAfterMs: 0 })).ok).toBe(true)
 })
+
+// ── Phase 7b: the `intent` response (RuleRow responses may be full intents) ────────
+test('7b: an `intent` response carrying a valid intent is accepted', () => {
+  const r = tryValidateRuleTable({
+    rows: [{ a: 'locomotion', b: 'surface', event: 'blocked', responses: [{ kind: 'intent', do: { verb: 'say', text: 'ow' } }] }],
+  })
+  expect(r.ok).toBe(true)
+})
+
+test('7b: an `intent` response with an invalid inner intent is rejected', () => {
+  const bad = tryValidateRuleTable({
+    rows: [{ a: 'locomotion', b: 'surface', event: 'blocked', responses: [{ kind: 'intent', do: { verb: 'teleport' } }] }],
+  })
+  expect(bad.ok).toBe(false)
+  const badField = tryValidateRuleTable({
+    rows: [{ a: 'locomotion', b: 'surface', event: 'blocked', responses: [{ kind: 'intent', do: { verb: 'say', text: 'x', bogus: 1 } }] }],
+  })
+  expect(badField.ok).toBe(false)
+})

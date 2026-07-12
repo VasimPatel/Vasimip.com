@@ -26,6 +26,7 @@ export const poses = {
   'squash-land': loadPose('squash-land', rig),
   stand: loadPose('stand', rig),
   cheer: loadPose('cheer', rig),
+  think: loadPose('think', rig),
 }
 export const names = { idle: 'idle-shuffle', walk: 'walk-cycle', jump: 'jump', tuck: 'jump-tuck', jumpLand: 'squash-land' }
 
@@ -35,7 +36,7 @@ export const STEP = 1000 / 120
 /** The real committed notebook (5 pages); worldFromNotebook(notebook.pages). */
 export const notebook = JSON.parse(readFileSync(new URL('../../../src/notebook/notebook.json', import.meta.url), 'utf8'))
 
-type RuntimeExtra = Partial<Pick<CharacterRuntimeOptions, 'resolveVerletBody' | 'secondaryId' | 'behaviors'>>
+type RuntimeExtra = Partial<Pick<CharacterRuntimeOptions, 'resolveVerletBody' | 'secondaryId' | 'behaviors' | 'watchdog' | 'giveUp'>>
 
 export interface Runtime {
   ctx: ReturnType<typeof createContext>

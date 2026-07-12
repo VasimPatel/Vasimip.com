@@ -142,8 +142,22 @@ export type {
   BallisticSolution,
 } from './locomotion'
 
-export { createBehaviorExecutor, STRIKE_HOLD_MS } from './behavior'
-export type { BehaviorExecutor, BehaviorDeps, BehaviorState, BehaviorStatus } from './behavior'
+export {
+  createBehaviorExecutor,
+  STRIKE_HOLD_MS,
+  DEFAULT_MOVEMENT_TIMEOUT_MS,
+  TIMEOUT_SLACK_MS,
+  SAY_DURATION_MS,
+  REACTION_ALLOWANCE_MS,
+} from './behavior'
+export type { BehaviorExecutor, BehaviorDeps, BehaviorState, BehaviorStatus, BehaviorFrame, Speech } from './behavior'
+
+// ── Phase 7b: performance cues + watchdog (L6) ───────────────────────────────────
+export { createCueScheduler, MILESTONE_EVENTS } from './cues'
+export type { CueScheduler, CueSchedulerDeps } from './cues'
+
+export { createWatchdog } from './watchdog'
+export type { Watchdog, WatchdogTarget, WatchdogOptions, WatchdogState } from './watchdog'
 
 export { createCharacterRuntime } from './character'
 export type { CharacterRuntime, CharacterRuntimeOptions, CharacterState } from './character'

@@ -5,6 +5,7 @@
 // graph). REAL Phase 2 schema (ENGINE_V2 §5); not folded into WorldDocV2 yet (P6).
 
 import { tryValidate, isRecord, isNum, isStr, isArr, inRange, type ValidateResult, type Issues, type Check } from './validate'
+import { checkReactions, type ReactionTrigger, type Intent } from './behavior'
 
 export interface StrokeStyle {
   color: string
@@ -39,6 +40,11 @@ export interface CharacterDoc {
   personality: PersonalityParams
   locomotion: LocomotionCaps
   accessoryPoints?: string[]
+  /** SCHEMA DELTA (Phase 7b): character-level DEFAULT reactions. Consulted by the
+   * behavior runtime when the running behavior has no reaction for a trigger —
+   * behavior-level reactions always win (§7b authoring contract). Same closed
+   * trigger set + intent verb set as BehaviorDoc.reactions. */
+  reactions?: Partial<Record<ReactionTrigger, Intent[]>>
 }
 
 const PERSONALITY_KEYS = ['energy', 'bounciness', 'confidence', 'sloppiness'] as const
@@ -124,6 +130,8 @@ const characterChecks: readonly Check[] = [
       if (!isArr(d.accessoryPoints)) issues.push('accessoryPoints: must be an array of strings')
       else d.accessoryPoints.forEach((a, i) => { if (!isStr(a)) issues.push(`accessoryPoints[${i}]: must be a string`) })
     }
+
+    if (d.reactions !== undefined) checkReactions(d.reactions, 'reactions', issues)
 
     checkPersonality(d.personality, issues)
     checkLocomotion(d.locomotion, issues)

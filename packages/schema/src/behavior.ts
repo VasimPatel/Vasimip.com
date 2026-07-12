@@ -145,6 +145,15 @@ export type ReactionTrigger = (typeof REACTION_TRIGGERS)[number]
 export const MILESTONES = ['onLaunch', 'onLand', 'onArrive', 'onBlocked'] as const
 export type Milestone = (typeof MILESTONES)[number]
 
+/** The CLOSED performance subset a cue's `do` may use (§7b). Cues run CONCURRENTLY
+ * with the ongoing movement, so only performance beats are allowed: a movement verb
+ * would re-task the solver mid-move, and a state verb (setFlag / impulse / emit /
+ * branchOnFlag / wait / …) would mutate sim state or sequence time from a decorative
+ * layer. Validation enforces exactly the set the engine executes — no cue verb is
+ * ever accepted-then-silently-ignored. */
+export const CUE_VERBS = ['say', 'sfx', 'camera', 'strikePose', 'playClip'] as const
+export type CueVerb = (typeof CUE_VERBS)[number]
+
 export interface Cue {
   at: Milestone
   do: Intent
@@ -182,6 +191,8 @@ export function evalGate(expr: GateExpr, flags: Record<string, boolean>): boolea
 const VERB_SET: ReadonlySet<string> = new Set(INTENT_VERBS)
 const TRIGGER_SET: ReadonlySet<string> = new Set(REACTION_TRIGGERS)
 const MILESTONE_SET: ReadonlySet<string> = new Set(MILESTONES)
+const MOVEMENT_SET: ReadonlySet<string> = new Set(MOVEMENT_VERBS)
+const CUE_VERB_SET: ReadonlySet<string> = new Set(CUE_VERBS)
 
 function rejectUnknownKeys(o: Record<string, unknown>, allowed: readonly string[], path: string, issues: Issues): void {
   const set = new Set(allowed)
@@ -297,6 +308,24 @@ function checkIntent(intent: unknown, path: string, issues: Issues): void {
   }
 }
 
+/** Validate a single intent (the closed verb set + per-verb keys). Exported so the
+ * CharacterDoc default-reactions and the RuleRow `intent` response validate intents
+ * with the SAME rules as behavior steps (one source of truth for the verb set). */
+export function checkIntentValue(intent: unknown, path: string, issues: Issues): void {
+  checkIntent(intent, path, issues)
+}
+
+/** Validate a `Partial<Record<ReactionTrigger, Intent[]>>` block (behavior- or
+ * character-level). Shared by BehaviorDoc.reactions and CharacterDoc.reactions. */
+export function checkReactions(reactions: unknown, base: string, issues: Issues): void {
+  if (!isRecord(reactions)) return void issues.push(`${base}: must be an object`)
+  for (const [trig, list] of Object.entries(reactions)) {
+    if (!TRIGGER_SET.has(trig)) issues.push(`${base}.${trig}: unknown trigger (closed set: ${REACTION_TRIGGERS.join(', ')})`)
+    if (!isArr(list)) issues.push(`${base}.${trig}: must be an array of intents`)
+    else list.forEach((s, i) => checkIntent(s, `${base}.${trig}[${i}]`, issues))
+  }
+}
+
 const GATE_KEYS = ['flag', 'not', 'and', 'or'] as const
 function checkGate(g: unknown, path: string, issues: Issues): void {
   if (!isRecord(g)) return void issues.push(`${path}: must be an object`)
@@ -331,15 +360,7 @@ export function tryValidateBehavior(doc: unknown): ValidateResult<BehaviorDoc> {
       if (!isArr(d.steps)) issues.push('steps: required array')
       else d.steps.forEach((s, i) => checkIntent(s, `steps[${i}]`, issues))
 
-      if (d.reactions !== undefined) {
-        if (!isRecord(d.reactions)) issues.push('reactions: must be an object')
-        else
-          for (const [trig, list] of Object.entries(d.reactions)) {
-            if (!TRIGGER_SET.has(trig)) issues.push(`reactions.${trig}: unknown trigger (closed set: ${REACTION_TRIGGERS.join(', ')})`)
-            if (!isArr(list)) issues.push(`reactions.${trig}: must be an array of intents`)
-            else list.forEach((s, i) => checkIntent(s, `reactions.${trig}[${i}]`, issues))
-          }
-      }
+      if (d.reactions !== undefined) checkReactions(d.reactions, 'reactions', issues)
 
       if (d.cues !== undefined) {
         if (!isArr(d.cues)) issues.push('cues: must be an array')
@@ -350,6 +371,17 @@ export function tryValidateBehavior(doc: unknown): ValidateResult<BehaviorDoc> {
             rejectUnknownKeys(c, ['at', 'do'], path, issues)
             if (!isStr(c.at) || !MILESTONE_SET.has(c.at)) issues.push(`${path}.at: must be one of ${MILESTONES.join(', ')}`)
             checkIntent(c.do, `${path}.do`, issues)
+            // A cue is a PERFORMANCE beat run CONCURRENTLY with the movement (§7b):
+            // its verb must come from the closed performance subset. Movement verbs
+            // get the specific message (the most likely authoring mistake); any other
+            // non-performance verb (setFlag/impulse/…) is rejected as well — the
+            // engine executes exactly CUE_VERBS, never accept-then-ignore.
+            if (isRecord(c.do) && isStr(c.do.verb) && VERB_SET.has(c.do.verb) && !CUE_VERB_SET.has(c.do.verb)) {
+              if (MOVEMENT_SET.has(c.do.verb))
+                issues.push(`${path}.do: a cue may not be a movement verb (${MOVEMENT_VERBS.join(', ')}) — cues run concurrently with movement`)
+              else
+                issues.push(`${path}.do: cue verb must be a performance verb (${CUE_VERBS.join(', ')})`)
+            }
           })
       }
 

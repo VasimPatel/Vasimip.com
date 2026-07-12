@@ -1,0 +1,13 @@
+{
+  "schemaVersion": 2,
+  "id": "tightrope",
+  "steps": [
+    { "verb": "strikePose", "ref": "think", "holdMs": 400 },
+    { "verb": "say", "text": "steady…" },
+    { "verb": "moveTo", "target": "entity:goal", "timeoutMs": 12000 }
+  ],
+  "cues": [
+    { "at": "onArrive", "do": { "verb": "say", "text": "phew — made it" } },
+    { "at": "onBlocked", "do": { "verb": "say", "text": "whoa!" } }
+  ]
+}
