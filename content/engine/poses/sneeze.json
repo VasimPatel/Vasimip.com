@@ -1,19 +1,19 @@
 {
   "id": "sneeze",
   "angles": {
-    "pelvis": -1.508378,
-    "neck": 0.079478,
-    "head": 0,
-    "upperArmR": 0.833637,
-    "foreArmR": -1.359703,
-    "upperArmL": -1.133868,
-    "foreArmL": 1.565391,
-    "thighR": 2.426327,
-    "shinR": 0.535738,
-    "footR": -1.273834,
-    "thighL": -2.655462,
-    "shinL": -0.424194,
-    "footL": 1.249046
+    "pelvis": -1.15,
+    "neck": 0.45,
+    "head": 0.35,
+    "upperArmR": 1.45,
+    "foreArmR": -2.5,
+    "upperArmL": 2.35,
+    "foreArmL": -1.05,
+    "thighR": 2.55,
+    "shinR": 0.55,
+    "footR": -1.4,
+    "thighL": -2.8,
+    "shinL": -0.35,
+    "footL": 1.35
   },
   "root": {
     "x": -2,

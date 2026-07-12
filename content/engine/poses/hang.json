@@ -1,19 +1,19 @@
 {
   "id": "hang",
   "angles": {
-    "pelvis": -1.45592,
+    "pelvis": -1.5,
     "neck": 0.009478,
     "head": 0,
-    "upperArmR": 0.050272,
-    "foreArmR": -0.082007,
-    "upperArmL": -0.247428,
-    "foreArmL": 0.215693,
-    "thighR": 2.614306,
-    "shinR": 0.279859,
-    "footR": -1.240849,
-    "thighL": -2.865862,
-    "shinL": -0.390607,
-    "footL": 1.352127
+    "upperArmR": 0.62,
+    "foreArmR": -0.2,
+    "upperArmL": -0.62,
+    "foreArmL": 0.2,
+    "thighR": 2.6,
+    "shinR": 0.7,
+    "footR": -1.1,
+    "thighL": -2.75,
+    "shinL": -0.6,
+    "footL": 1.05
   },
   "root": {
     "x": -2,

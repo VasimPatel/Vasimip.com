@@ -1,13 +1,13 @@
 {
   "id": "wave",
   "angles": {
-    "pelvis": -1.508378,
+    "pelvis": -1.49,
     "neck": 0.079478,
     "head": 0,
-    "upperArmR": 0.722979,
-    "foreArmR": 0,
-    "upperArmL": -2.288911,
-    "foreArmL": -1.633931,
+    "upperArmR": 0.75,
+    "foreArmR": -0.55,
+    "upperArmL": -2.359253,
+    "foreArmL": -1.14047,
     "thighR": 2.426327,
     "shinR": 0.535738,
     "footR": -1.273834,

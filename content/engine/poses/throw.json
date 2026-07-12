@@ -1,19 +1,19 @@
 {
   "id": "throw",
   "angles": {
-    "pelvis": -1.508378,
+    "pelvis": -1.38,
     "neck": 0.079478,
     "head": 0,
-    "upperArmR": -0.429593,
-    "foreArmR": 0,
-    "upperArmL": -2.065623,
-    "foreArmL": 0,
-    "thighR": 2.426327,
-    "shinR": 0.535738,
-    "footR": -1.273834,
-    "thighL": -2.655462,
-    "shinL": -0.424194,
-    "footL": 1.249046
+    "upperArmR": -0.55,
+    "foreArmR": -1.25,
+    "upperArmL": 1.95,
+    "foreArmL": 0.35,
+    "thighR": 2.5,
+    "shinR": 0.5,
+    "footR": -1.3,
+    "thighL": -2.35,
+    "shinL": -0.45,
+    "footL": 1.25
   },
   "root": {
     "x": -2,

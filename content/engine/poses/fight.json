@@ -1,19 +1,19 @@
 {
   "id": "fight",
   "angles": {
-    "pelvis": -1.420425,
-    "neck": -0.150371,
+    "pelvis": -1.4,
+    "neck": -0.12,
     "head": 0,
-    "upperArmR": 1.193626,
-    "foreArmR": 0,
-    "upperArmL": -2.220514,
-    "foreArmL": 1.284745,
-    "thighR": 1.910382,
-    "shinR": 1.030881,
-    "footR": -1.340984,
-    "thighL": -2.466587,
-    "shinL": -0.594286,
-    "footL": 1.121037
+    "upperArmR": 2.25,
+    "foreArmR": -2.3,
+    "upperArmL": 2.6,
+    "foreArmL": -1.9,
+    "thighR": 2.2,
+    "shinR": 0.85,
+    "footR": -1.35,
+    "thighL": -2.55,
+    "shinL": -0.75,
+    "footL": 1.3
   },
   "root": {
     "x": -3,
