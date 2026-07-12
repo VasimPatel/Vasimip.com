@@ -1,0 +1,23 @@
+{
+  "id": "trip",
+  "angles": {
+    "pelvis": -1.4158,
+    "neck": -0.002347,
+    "head": 0,
+    "upperArmR": 1.1375,
+    "foreArmR": 0.953041,
+    "upperArmL": -1.293385,
+    "foreArmL": -1.217806,
+    "thighR": 1.947524,
+    "shinR": 0.253674,
+    "footR": -1.107149,
+    "thighL": -2.548211,
+    "shinL": 0.03702,
+    "footL": 0.09066
+  },
+  "root": {
+    "x": -3,
+    "y": 16,
+    "rot": 0
+  }
+}

@@ -1,0 +1,23 @@
+{
+  "id": "wave",
+  "angles": {
+    "pelvis": -1.508378,
+    "neck": 0.079478,
+    "head": 0,
+    "upperArmR": 0.722979,
+    "foreArmR": 0,
+    "upperArmL": -2.288911,
+    "foreArmL": -1.633931,
+    "thighR": 2.426327,
+    "shinR": 0.535738,
+    "footR": -1.273834,
+    "thighL": -2.655462,
+    "shinL": -0.424194,
+    "footL": 1.249046
+  },
+  "root": {
+    "x": -2,
+    "y": 16,
+    "rot": 0
+  }
+}

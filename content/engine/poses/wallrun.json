@@ -1,0 +1,17 @@
+{
+  "id": "wallrun",
+  "angles": {
+    "pelvis": -1.508378,
+    "neck": 0.079478,
+    "head": 0,
+    "upperArmR": 1.940785,
+    "foreArmR": 1.48716,
+    "upperArmL": -1.266041,
+    "foreArmL": 1.66727
+  },
+  "root": {
+    "x": -2,
+    "y": 16,
+    "rot": 0
+  }
+}

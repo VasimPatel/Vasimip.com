@@ -1,0 +1,23 @@
+{
+  "id": "surf",
+  "angles": {
+    "pelvis": -1.373401,
+    "neck": -0.055499,
+    "head": 0,
+    "upperArmR": 1.002509,
+    "foreArmR": -0.092756,
+    "upperArmL": -2.208034,
+    "foreArmL": -0.234898,
+    "thighR": 1.961403,
+    "shinR": 0.883125,
+    "footR": -1.291274,
+    "thighL": -2.55359,
+    "shinL": -0.674741,
+    "footL": 1.262744
+  },
+  "root": {
+    "x": -6,
+    "y": 14,
+    "rot": 0
+  }
+}

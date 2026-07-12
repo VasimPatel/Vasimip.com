@@ -1,0 +1,23 @@
+{
+  "id": "fight",
+  "angles": {
+    "pelvis": -1.420425,
+    "neck": -0.150371,
+    "head": 0,
+    "upperArmR": 1.193626,
+    "foreArmR": 0,
+    "upperArmL": -2.220514,
+    "foreArmL": 1.284745,
+    "thighR": 1.910382,
+    "shinR": 1.030881,
+    "footR": -1.340984,
+    "thighL": -2.466587,
+    "shinL": -0.594286,
+    "footL": 1.121037
+  },
+  "root": {
+    "x": -3,
+    "y": 16,
+    "rot": 0
+  }
+}

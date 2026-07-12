@@ -1,0 +1,23 @@
+{
+  "id": "shove",
+  "angles": {
+    "pelvis": -1.05165,
+    "neck": -0.197396,
+    "head": 0,
+    "upperArmR": 1.168759,
+    "foreArmR": 0.04804,
+    "upperArmL": 1.296629,
+    "foreArmL": 0,
+    "thighR": 2.063847,
+    "shinR": 0.434244,
+    "footR": -1.266588,
+    "thighL": -2.648542,
+    "shinL": -0.814801,
+    "footL": 1.081944
+  },
+  "root": {
+    "x": -8,
+    "y": 18,
+    "rot": 0
+  }
+}

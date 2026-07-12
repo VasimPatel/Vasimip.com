@@ -1,0 +1,23 @@
+{
+  "id": "punch",
+  "angles": {
+    "pelvis": -1.47732,
+    "neck": 0.04842,
+    "head": 0,
+    "upperArmR": 1.335422,
+    "foreArmR": 0.009346,
+    "upperArmL": -2.192348,
+    "foreArmL": -1.904892,
+    "thighR": 1.967277,
+    "shinR": 1.030881,
+    "footR": -1.340984,
+    "thighL": -2.409693,
+    "shinL": -0.594286,
+    "footL": 1.121037
+  },
+  "root": {
+    "x": -3,
+    "y": 16,
+    "rot": 0
+  }
+}
