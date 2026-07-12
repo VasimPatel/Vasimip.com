@@ -65,6 +65,9 @@ export class EngineLayer extends Component<EngineLayerProps> {
   private look: { x: number; y: number } | null = null
   private pendingArrival: string | null = null
   private currentPanel = 0
+  /** Destination of the in-flight travel run — poof-recovery lands here if the
+   * picked behavior blocks/fails (the legacy poof teleport, driver-owned). */
+  private travelDest: number | null = null
 
   componentDidMount(): void {
     this.enterPage(this.props.page)
@@ -146,13 +149,25 @@ export class EngineLayer extends Component<EngineLayerProps> {
     void first
 
     const offs = [
+      ...(import.meta.env.DEV
+        ? [
+            ctx.events.on('intent:failed', (p) => console.info('[engine] intent:failed ' + JSON.stringify(p))),
+            ctx.events.on('intent:blocked', (p) => console.info('[engine] intent:blocked ' + JSON.stringify(p))),
+            ctx.events.on('behavior:start', (p) => console.info('[engine] behavior:start ' + JSON.stringify(p))),
+            ctx.events.on('watchdog:forced-release', (p) => console.info('[engine] watchdog', p)),
+          ]
+        : []),
       ctx.events.on('intent:setFlag', (p) => {
         const { flag, value } = p as { flag: string; value?: boolean }
         this.props.onFlag(flag, value ?? true)
       }),
       ctx.events.on('intent:sfx', (p) => this.props.sfx((p as { kind: string }).kind)),
-      ctx.events.on('behavior:complete', () => this.chainArrival()),
-      ctx.events.on('behavior:ended', () => this.chainArrival()),
+      ctx.events.on('behavior:complete', () => {
+        this.travelDest = null
+        this.chainArrival()
+      }),
+      ctx.events.on('behavior:ended', () => this.recoverOrArrive()),
+      ctx.events.on('behavior:halted', () => this.recoverOrArrive()),
     ]
 
     this.scene = { ctx, verlet, mw, rt, pageIdx, offs }
@@ -175,8 +190,29 @@ export class EngineLayer extends Component<EngineLayerProps> {
     const doc = this.pickTravel(pageIdx, panelIdx)
     this.pendingArrival = this.arrivalId(pageIdx, panelIdx)
     this.currentPanel = panelIdx
+    this.travelDest = panelIdx
     this.props.onHeading?.(panelIdx)
     s.rt.runBehavior(doc, { travel: { from: fromId, to: toId } })
+  }
+
+  /** A travel run blocked/failed → the legacy escape hatch: POOF. Smoke, teleport
+   * to the destination spot (driver-owned placement, like enterPage), arrival. */
+  private recoverOrArrive(): void {
+    const s = this.scene
+    if (!s) return
+    const dest = this.travelDest
+    this.travelDest = null
+    if (dest != null) {
+      const spot = this.panelSpot(s.pageIdx, dest)
+      if (spot) {
+        this.props.sfx('fx:smoke')
+        s.rt.transform.x = spot.x
+        const cap = s.rt.capsule()
+        s.rt.transform.y += spot.y - (cap.y1 + cap.r)
+        this.props.sfx('poof')
+      }
+    }
+    this.chainArrival()
   }
 
   poke(): void {
@@ -214,14 +250,28 @@ export class EngineLayer extends Component<EngineLayerProps> {
     return { x: pn.x + pn.anchor.dx, y: pn.y + pn.anchor.dy }
   }
 
+  /** Behaviors whose movement is a jump (can cross gaps/heights ground can't). */
+  private static JUMPY = new Set(['builtin:hop', 'builtin:roll', 'builtin:vault', 'builtin:swing', 'builtin:smash', 'builtin:poof', 'builtin:combo'])
+
   private pickTravel(pageIdx: number, destIdx: number): BehaviorDoc {
     const s = this.scene!
+    // Geometry heuristics (the legacy travel() logic, which lived in CODE and was
+    // not migratable data): a trip with real height/width needs a jump-capable
+    // behavior; a flat stroll can use anything.
+    const from = this.panelSpot(pageIdx, this.currentPanel)
+    const to = this.panelSpot(pageIdx, destIdx)
+    const needsAir = !!from && !!to && (Math.abs(to.y - from.y) > 24 || Math.abs(to.x - from.x) > 200)
     // v1 semantics: the DESTINATION panel's (merged) pool governs the trip.
-    const pool = docV2.pages[pageIdx]?.panels[destIdx]?.travel?.pool
-    const fallback = docV2.behaviors['builtin:walk']
+    let pool = docV2.pages[pageIdx]?.panels[destIdx]?.travel?.pool
+    const fallback = docV2.behaviors['builtin:hop'] ?? docV2.behaviors['builtin:walk']
+    if (pool && needsAir) {
+      const airy = pool.filter((e) => EngineLayer.JUMPY.has(e.behaviorId))
+      if (airy.length > 0) pool = airy
+    }
     if (!pool || pool.length === 0) {
-      // No authored pool → the classic default: the full builtin set.
-      const ids = Object.keys(docV2.behaviors).filter((id) => id.startsWith('builtin:'))
+      // No authored pool → the classic default: the full builtin set (air-filtered).
+      let ids = Object.keys(docV2.behaviors).filter((id) => id.startsWith('builtin:'))
+      if (needsAir) ids = ids.filter((id) => EngineLayer.JUMPY.has(id))
       const id = ids[s.ctx.rng.int(0, ids.length)]
       return docV2.behaviors[id] ?? fallback
     }
