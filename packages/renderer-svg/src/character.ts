@@ -65,9 +65,13 @@ interface Chain {
 
 /** Group bones into limb chains: walk up from each leaf to (not including) the
  * first branch point; branch joints become single-bone chains. The head is drawn
- * as a circle, never in a chain. Order: torso-ish chains first (drawn under). */
-function buildChains(rig: RigTemplate): string[][] {
+ * as a circle, never in a chain. A chain also BREAKS (review findings) where the
+ * child attaches at its parent's ORIGIN (the polyline would otherwise draw a bogus
+ * parent-end→child-end segment) and where the stroke width changes (one <path> has
+ * one width). Order: trunk chains first (drawn under). */
+function buildChains(rig: RigTemplate, widths?: Record<string, number>): string[][] {
   const children = new Map<string, string[]>()
+  const byId = new Map(rig.joints.map((j) => [j.id, j]))
   for (const j of rig.joints) {
     if (j.parentId) {
       const kids = children.get(j.parentId) ?? []
@@ -84,16 +88,20 @@ function buildChains(rig: RigTemplate): string[][] {
     const chain: string[] = []
     let cur: string | null = j.id
     while (cur && !claimed.has(cur)) {
-      const joint = rig.joints.find((x) => x.id === cur)!
+      const joint: RigTemplate['joints'][number] = byId.get(cur)!
       chain.unshift(cur)
       claimed.add(cur)
       const parent: string | null = joint.parentId
       if (!parent || nonHeadKids(parent).length > 1) break
+      // Break across origin-attachments and width changes.
+      if (joint.attach === 'origin') break
+      if ((widths?.[parent] ?? -1) !== (widths?.[cur] ?? -1)) break
       cur = parent
     }
     chains.push(chain)
   }
-  // Unclaimed branch joints (pelvis) become single-bone chains, drawn FIRST.
+  // Unclaimed joints (branch points like the pelvis) become single-bone chains,
+  // drawn FIRST so limbs paint over the trunk.
   const trunks: string[][] = []
   for (const j of rig.joints) {
     if (!claimed.has(j.id)) trunks.push([j.id])
@@ -137,7 +145,7 @@ export function createCharacterRenderer(
   }
 
   // ── limb chains ────────────────────────────────────────────────────────────────
-  const chainDefs = buildChains(rig)
+  const chainDefs = buildChains(rig, widths)
   const chains: Chain[] = []
   for (const jointIds of chainDefs) {
     const path = document.createElementNS(SVG_NS, 'path')
@@ -146,7 +154,7 @@ export function createCharacterRenderer(
     path.setAttribute('fill', 'none')
     path.setAttribute('stroke', color)
     path.setAttribute('stroke-width', String(w))
-    path.setAttribute('stroke-linecap', 'round')
+    path.setAttribute('stroke-linecap', character.style?.linecap ?? 'round')
     path.setAttribute('stroke-linejoin', 'round')
     group.appendChild(path)
     const chain: Chain = { jointIds, path }
@@ -174,7 +182,7 @@ export function createCharacterRenderer(
     headEl.setAttribute('r', String(headR))
     headEl.setAttribute('fill', headFill)
     headEl.setAttribute('stroke', color)
-    headEl.setAttribute('stroke-width', String(widths?.[HEAD_JOINT_ID] ?? 4))
+    headEl.setAttribute('stroke-width', String(widths?.[HEAD_JOINT_ID] ?? baseWidth))
     group.appendChild(headEl)
 
     faceGroup = document.createElementNS(SVG_NS, 'g') as SVGGElement
@@ -254,8 +262,8 @@ export function createCharacterRenderer(
 
   function elbowBend(solved: SolvedSkeleton, jointIds: string[]): number {
     if (jointIds.length < 2) return 0
-    const upper = solved.bones.find((b) => b.id === jointIds[jointIds.length - 2])
-    const fore = solved.bones.find((b) => b.id === jointIds[jointIds.length - 1])
+    const upper = bone(solved, jointIds[jointIds.length - 2])
+    const fore = bone(solved, jointIds[jointIds.length - 1])
     if (!upper || !fore) return 0
     let d = fore.worldAngle - upper.worldAngle
     while (d > Math.PI) d -= 2 * Math.PI
@@ -294,19 +302,23 @@ export function createCharacterRenderer(
     return `M${up.join(' L')} L${notch} L${down.join(' L')} Z`
   }
 
+  // solveFk emits bones in rig-joint order — index once, no per-render Map.
+  const boneIndex = new Map<string, number>()
+  rig.joints.forEach((j, i) => boneIndex.set(j.id, i))
+  const rootIndex = Math.max(0, rig.joints.findIndex((j) => j.parentId === null))
+  const bone = (solved: SolvedSkeleton, id: string) => {
+    const i = boneIndex.get(id)
+    return i === undefined ? undefined : solved.bones[i]
+  }
+
   return {
     render(solved, face: FaceAux = NEUTRAL_FACE, overrides?, extras?): void {
-      const byId = new Map(solved.bones.map((b) => [b.id, b]))
 
       // Squash pivot: the figure's ground point (root x, lowest extent).
       let groundY = -Infinity
-      let rootX = 0
-      for (const b of solved.bones) {
-        if (b.ey > groundY) groundY = b.ey
-        if (!byId.has(b.id)) continue
-      }
-      const pelvis = solved.bones[0]
-      if (pelvis) rootX = pelvis.ox
+      for (const b of solved.bones) if (b.ey > groundY) groundY = b.ey
+      const root = solved.bones[rootIndex]
+      const rootX = root ? root.ox : 0
       const fl = extras?.flourish
       if (fl && (Math.abs(fl.sx - 1) > 0.004 || Math.abs(fl.sy - 1) > 0.004)) {
         group.style.transform = `translate(${rootX}px, ${groundY}px) scale(${fl.sx}, ${fl.sy}) translate(${-rootX}px, ${-groundY}px)`
@@ -321,17 +333,17 @@ export function createCharacterRenderer(
 
       // Limb chains: continuous polylines; overrides replace bone ENDS.
       for (const chain of chains) {
-        const first = byId.get(chain.jointIds[0])
+        const first = bone(solved, chain.jointIds[0])
         if (!first) continue
         let d = `M${first.ox},${first.oy}`
         let lastX = first.ox
         let lastY = first.oy
         for (const id of chain.jointIds) {
-          const bone = byId.get(id)
-          if (!bone) continue
+          const bn = bone(solved, id)
+          if (!bn) continue
           const ov = overrides?.[id]
-          lastX = ov ? ov.ex : bone.ex
-          lastY = ov ? ov.ey : bone.ey
+          lastX = ov ? ov.ex : bn.ex
+          lastY = ov ? ov.ey : bn.ey
           d += ` L${lastX},${lastY}`
         }
         chain.path.setAttribute('d', d)
@@ -347,7 +359,7 @@ export function createCharacterRenderer(
       }
 
       // Head + face.
-      const head = byId.get(HEAD_JOINT_ID)
+      const head = bone(solved, HEAD_JOINT_ID)
       if (head && headEl && faceGroup) {
         const hx = overrides?.[HEAD_JOINT_ID]?.ex ?? head.ex
         const hy = overrides?.[HEAD_JOINT_ID]?.ey ?? head.ey

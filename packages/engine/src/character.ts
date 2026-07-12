@@ -212,11 +212,14 @@ export function createCharacterRuntime(opts: CharacterRuntimeOptions): Character
 
   // Squash & stretch flourish (charm) — kicked by this character's own motion
   // events, read by the renderer as a group transform. Pure + tick-driven.
+  // Unsubscribers retained for dispose() (review finding: no listener leaks).
   const flourish = createSquashFlourish()
-  events.on('jump:launch', () => flourish.trigger('launch'))
-  events.on('jump:land', () => flourish.trigger('land'))
-  events.on('intent:blocked', () => flourish.trigger('poke'))
-  events.on('expression:poke', () => flourish.trigger('poke'))
+  const flourishOffs = [
+    events.on('jump:launch', () => flourish.trigger('launch')),
+    events.on('jump:land', () => flourish.trigger('land')),
+    events.on('intent:blocked', () => flourish.trigger('poke')),
+    events.on('expression:poke', () => flourish.trigger('poke')),
+  ]
   let lastFlourish = { sx: 1, sy: 1 }
 
   // Accessory chains (charm) — one verlet ribbon per CharacterDoc.accessoryPoints
@@ -400,7 +403,12 @@ export function createCharacterRuntime(opts: CharacterRuntimeOptions): Character
       tickCount = s.tick
       recoilVx = s.recoilVx
       watchdog.setState(s.watchdog)
-      if (s.squash) flourish.setState(s.squash)
+      // Absent squash state (pre-charm snapshot) resets to rest — a stale spring
+      // must not survive a restore. The renderer-facing cache updates immediately
+      // so a render before the next tick shows the restored value, not the old one.
+      const sq = s.squash ?? { sx: 1, sy: 1, vx: 0, vy: 0 }
+      flourish.setState(sq)
+      lastFlourish = { sx: sq.sx, sy: sq.sy }
       // Additives are behavior, re-registered by construction (the set stays live).
     },
     get transform() {
@@ -422,6 +430,8 @@ export function createCharacterRuntime(opts: CharacterRuntimeOptions): Character
     dispose(): void {
       controllerSet.dispose()
       behavior.dispose()
+      for (const off of flourishOffs) off()
+      for (const acc of accessories) acc.dispose()
     },
   }
 }
