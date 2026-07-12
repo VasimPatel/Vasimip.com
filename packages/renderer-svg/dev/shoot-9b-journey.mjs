@@ -10,7 +10,7 @@ p.on('console', m => {
   else if (t.startsWith('[engine]') && !t.includes('migration notes')) engineLogs.push(t.slice(9, 150))
 })
 p.on('pageerror', e => errs.push('page: ' + e.message.slice(0, 160)))
-await p.goto('http://localhost:5173/?engine=1', { waitUntil: 'networkidle2' })
+await p.goto('http://localhost:5173/', { waitUntil: 'networkidle2' })
 await new Promise(r => setTimeout(r, 1000))
 const shot = (n) => p.screenshot({ path: `${SP}/j-${n}.png` })
 // full ride: keep pressing ArrowRight through every panel + page flip

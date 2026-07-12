@@ -21,6 +21,7 @@ import {
   createContext,
   createMutableWorld,
   createVerletWorld,
+  sweptCapsuleVsSegments,
   STEP_MS,
   type CharacterRuntime,
   type EngineContext,
@@ -47,6 +48,9 @@ export interface EngineLayerProps {
   /** Camera follow: Dash's live position while traveling; null = travel done
    * (the Notebook returns the camera to panel focus). */
   onDashCam?(p: { x: number; y: number } | null): void
+  /** Quips for the end of a drag (the legacy DROPS list) — spoken via the
+   * engine's own bubble so positioning always tracks the figure. */
+  dropLines?: string[]
 }
 
 interface Scene {
@@ -88,6 +92,9 @@ export class EngineLayer extends Component<EngineLayerProps> {
   private rolling = false
   private airborne = false
   private spin = 0
+  private dragging = false
+  private dragMoved = false
+  private onDragUp: ((e: MouseEvent) => void) | null = null
 
   componentDidMount(): void {
     this.enterPage(this.props.page)
@@ -119,6 +126,18 @@ export class EngineLayer extends Component<EngineLayerProps> {
         this.props.onDashCam?.({ x: s.rt.transform.x, y: s.rt.transform.y })
       }
       this.drawBubble()
+      // DRAG: while grabbed, the transform follows the cursor (page coords from
+      // the Notebook's look feed) with a light ease; the verlet secondary and
+      // bandana trail it for free — the legacy grab, reborn on physics.
+      if (this.dragging && this.look) {
+        const t = s.rt.transform
+        const ease = 0.45
+        const nx = t.x + (this.look.x - t.x) * ease
+        const ny = t.y + (this.look.y - 24 - t.y) * ease
+        if (Math.abs(nx - t.x) + Math.abs(ny - t.y) > 0.8) this.dragMoved = true
+        t.x = nx
+        t.y = ny
+      }
       // Poke hitbox tracks the figure (the wrapper must NOT catch page-wide
       // clicks — review finding: it swallowed the cover's open handler).
       if (this.pokeBox) {
@@ -141,6 +160,9 @@ export class EngineLayer extends Component<EngineLayerProps> {
   }
 
   private teardown(): void {
+    if (this.onDragUp) window.removeEventListener('mouseup', this.onDragUp)
+    this.onDragUp = null
+    this.dragging = false
     for (const off of this.scene?.offs ?? []) off()
     this.scene?.rt.dispose()
     this.renderer?.destroy()
@@ -265,6 +287,41 @@ export class EngineLayer extends Component<EngineLayerProps> {
     this.chainArrival()
   }
 
+  /** Back-nav spectacle (legacy bombBack/poofBack): play a quick beat, then
+   * `done()` (the Notebook flips the page). Never wedges: done is also called on
+   * ended/halted, and a 1.4s timer is the belt-and-braces. */
+  backNav(kind: 'bomb' | 'poof', done: () => void): void {
+    const s = this.scene
+    if (!s) {
+      done()
+      return
+    }
+    let called = false
+    const fire = (): void => {
+      if (called) return
+      called = true
+      offA()
+      offB()
+      done()
+    }
+    const offA = s.ctx.events.on('behavior:complete', fire)
+    const offB = s.ctx.events.on('behavior:ended', fire)
+    const timer = window.setTimeout(fire, 1400)
+    void timer
+    const doc =
+      kind === 'bomb'
+        ? ({ schemaVersion: 2, id: '__backnav:bomb', steps: [
+            { verb: 'strikePose', ref: 'throw', holdMs: 380 },
+            { verb: 'sfx', kind: 'boom' },
+          ] } as never)
+        : ({ schemaVersion: 2, id: '__backnav:poof', steps: [
+            { verb: 'sfx', kind: 'fx:smoke' },
+            { verb: 'strikePose', ref: 'sneeze', holdMs: 240 },
+            { verb: 'sfx', kind: 'poof' },
+          ] } as never)
+    s.rt.runBehavior(doc)
+  }
+
   poke(): void {
     const s = this.scene
     if (!s) return
@@ -275,6 +332,51 @@ export class EngineLayer extends Component<EngineLayerProps> {
 
   setLook(x: number, y: number): void {
     this.look = { x, y }
+  }
+
+  private beginDrag(): void {
+    const s = this.scene
+    if (!s || this.dragging) return
+    this.dragging = true
+    this.dragMoved = false
+    // A grab interrupts whatever he was doing — safely (bounded, settles later).
+    if (s.rt.running()) s.rt.forceRelease()
+    s.ctx.events.emit('expression:poke', { characterId: this.dash.id })
+    this.onDragUp = () => this.endDrag()
+    window.addEventListener('mouseup', this.onDragUp)
+  }
+
+  private endDrag(): void {
+    if (this.onDragUp) window.removeEventListener('mouseup', this.onDragUp)
+    this.onDragUp = null
+    if (!this.dragging) return
+    this.dragging = false
+    const s = this.scene
+    if (!s) return
+    // Settle to the nearest support below. forceRelease() early-returns when no
+    // behavior is running (the grab already released it), so the layer probes
+    // for itself; a drop into the void poofs home to the current panel.
+    const cap = s.rt.capsule()
+    const PROBE = 2200
+    const hit = sweptCapsuleVsSegments(cap, 0, PROBE, s.mw.collision().segments)
+    if (hit) {
+      s.rt.transform.y += hit.t * PROBE - 0.5
+    } else {
+      const spot = this.panelSpot(s.pageIdx, this.currentPanel)
+      if (spot) {
+        this.props.sfx('fx:smoke')
+        s.rt.transform.x = spot.x
+        const c2 = s.rt.capsule()
+        s.rt.transform.y += spot.y - (c2.y1 + c2.r)
+      }
+    }
+    s.ctx.events.emit('jump:land', { characterId: this.dash.id }) // squash flourish
+    this.props.sfx('thud')
+    const lines = this.props.dropLines
+    if (this.dragMoved && lines && lines.length > 0 && s.ctx.rng.float() < 0.6) {
+      const line = lines[s.ctx.rng.int(0, lines.length)]
+      s.rt.runBehavior({ schemaVersion: 2, id: '__drop:quip', steps: [{ verb: 'say', text: line }] } as never)
+    }
   }
 
   // ── internals ────────────────────────────────────────────────────────────────
@@ -394,8 +496,13 @@ export class EngineLayer extends Component<EngineLayerProps> {
         />
         <div
           ref={(r) => { this.pokeBox = r }}
-          onClick={() => { this.props.onPoke?.(); this.poke() }}
-          style={{ position: 'absolute', left: 0, top: 0, width: 92, height: 130, pointerEvents: 'auto', cursor: 'pointer' }}
+          onMouseDown={(e) => { e.preventDefault(); this.beginDrag() }}
+          onClick={() => {
+            if (this.dragMoved) { this.dragMoved = false; return } // a drag, not a poke
+            this.props.onPoke?.()
+            this.poke()
+          }}
+          style={{ position: 'absolute', left: 0, top: 0, width: 92, height: 130, pointerEvents: 'auto', cursor: 'grab' }}
         />
       </div>
     )

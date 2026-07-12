@@ -811,7 +811,12 @@ export default class Notebook extends React.Component<NotebookProps, State> {
     if (s.busy || s.dragging || s.page === 0) return
     if (s.panel > 0) this.travel(s.panel - 1)
     else if (s.page === 1) this.flipTo(0)
-    else if (this.engineMode) this.flipTo(s.page - 1) // bomb/poof spectacle: 9c
+    else if (this.engineMode) {
+      const kind = Math.random() < 0.55 ? 'bomb' : 'poof'
+      this.ensureAC()
+      if (this.engineRef) this.engineRef.backNav(kind, () => this.flipTo(this.state.page - 1))
+      else this.flipTo(s.page - 1)
+    }
     else if (Math.random() < .55) this.bombBack()
     else this.poofBack()
   }
@@ -1127,6 +1132,7 @@ export default class Notebook extends React.Component<NotebookProps, State> {
                     sfx={(kind) => this.engineSfx(kind)}
                     onPoke={() => { this.ensureAC(); this.sfx('hop') }}
                     onDashCam={(p) => this.setState({ camo: p ? { cx: p.x, cy: p.y, mult: 0.92, fast: false } : null })}
+                    dropLines={DROPS}
                   />
                 </div>
               )
