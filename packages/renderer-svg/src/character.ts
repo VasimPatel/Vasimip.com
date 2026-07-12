@@ -273,11 +273,11 @@ export function createCharacterRenderer(
 
   function ribbonD(pts: ReadonlyArray<{ x: number; y: number }>): string {
     if (pts.length < 2) return 'M0,0'
-    // Tapered ribbon: offset each point perpendicular to the local direction,
-    // width easing from rootW to tipW; polygon = up-side then back down. Widths
-    // read as the legacy cape's flag silhouette, not a string.
-    const rootW = 10.5
-    const tipW = 5
+    // Tapered ribbon — a FLAG, so it's narrow at the knot and WIDEST at the fly
+    // end (owner feedback: the root-wide taper read long and thin), then the
+    // swallow-tail notch cuts the wide end.
+    const rootW = 5
+    const tipW = 11.5
     const up: string[] = []
     const down: string[] = []
     for (let i = 0; i < pts.length; i++) {

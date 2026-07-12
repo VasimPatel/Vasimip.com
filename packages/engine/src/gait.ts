@@ -28,6 +28,7 @@
 
 import type { CharacterDoc, Pose, RigTemplate, RootOffset } from '@dash/schema'
 import { solveChainToLocal } from './ik'
+import { wrapPi } from './math'
 
 const TWO_PI = Math.PI * 2
 const PHI = 1.618033988749895
@@ -103,13 +104,41 @@ export function createGait(rig: RigTemplate, character: CharacterDoc, opts: Gait
   const { energy, bounciness, confidence, sloppiness } = character.personality
   const base = opts.basePose ?? DEFAULT_BASE
   const props = character.proportions
-  const hipHeight = opts.hipHeight ?? DEFAULT_HIP_HEIGHT
   const rootRot = opts.rootRot ?? 0
   const speed = opts.speed
   const dir = opts.direction ?? (speed < 0 ? -1 : 1)
 
-  const cadence = BASE_CADENCE * (0.7 + 0.6 * energy) // cycles/sec
-  const stride = cadence !== 0 ? speed / cadence : 0 // world px per cycle
+  // Cadence sets a NATURAL stride from speed — then the stride is CAPPED at a
+  // leg-proportional maximum and cadence re-derived (quicker steps, not lunges;
+  // owner charm feedback: uncapped stride hit ~94px on a 37px leg). The invariant
+  // stride × cadence = |speed| is preserved either way (foot-lock depends on it).
+  const naturalCadence = BASE_CADENCE * (0.7 + 0.6 * energy) // cycles/sec
+
+  // WALK CROUCH (owner charm feedback — the "dragged body" walk): the STANDING hip
+  // height can equal the full leg length, making side plants at ±stride/2
+  // geometrically UNREACHABLE — the IK clamps at full extension and the feet float
+  // toward plants they can never touch. A walker bends the knees: cap the walking
+  // hip so the farthest plant stays reachable with a margin of knee bend.
+  const legChainForLen = rig.chains.find((c) => c.id === 'legR') ?? rig.chains.find((c) => c.id === 'legL')
+  let legLen = 37
+  if (legChainForLen) {
+    const j0 = rig.joints.find((j) => j.id === legChainForLen.jointIds[0])
+    const j1 = rig.joints.find((j) => j.id === legChainForLen.jointIds[1])
+    if (j0 && j1) {
+      legLen =
+        j0.length * (props?.[j0.id] ?? 1) +
+        j1.length * (props?.[j1.id] ?? 1)
+    }
+  }
+  const STRIDE_MAX = legLen * 1.1
+  const naturalStride = naturalCadence !== 0 ? Math.abs(speed) / naturalCadence : 0
+  const strideMag = Math.min(naturalStride, STRIDE_MAX)
+  const stride = (speed < 0 ? -1 : 1) * strideMag
+  const cadence = strideMag > 0 ? Math.abs(speed) / strideMag : naturalCadence
+
+  const halfStride = strideMag / 2
+  const reachableHip = Math.sqrt(Math.max(1, legLen * legLen - halfStride * halfStride)) * 0.97
+  const hipHeight = Math.min(opts.hipHeight ?? DEFAULT_HIP_HEIGHT, reachableHip)
   const lift = BASE_LIFT * (0.5 + bounciness)
   const speedNorm = Math.min(1, Math.abs(speed) / REF_SPEED)
   const bob = BASE_BOB * (0.4 + 0.8 * bounciness) * speedNorm
@@ -171,8 +200,14 @@ export function createGait(rig: RigTemplate, character: CharacterDoc, opts: Gait
     const local = solveChainToLocal(rig, chain, rootX, hipY, pelvisWorld, ankleX, ankleY, props, kneeBend)
     out[chain.jointIds[0]] = local.root
     out[chain.jointIds[1]] = local.mid
-    // Foot bone kept at its baseline local (cosmetic on a flat floor).
-    out[chain.jointIds[2]] = base.angles[chain.jointIds[2]] ?? 0
+    // FOOT: solved, not cosmetic (owner charm feedback — a baseline-local foot
+    // rotates rigidly with the shin, windmilling and piercing the floor). Stance:
+    // flat on the ground, toes forward. Swing: slight plantar tilt. World-angle
+    // targeted, converted to local against the solved shin.
+    const shinWorld = pelvisWorld + local.root + local.mid
+    const tilt = planted ? 0 : 0.35
+    const footWorld = kneeBend > 0 ? tilt : Math.PI - tilt
+    out[chain.jointIds[2]] = wrapPi(footWorld - shinWorld)
 
     return planted ? { footId, x: ankleX, y: ankleY } : null
   }

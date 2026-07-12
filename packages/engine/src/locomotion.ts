@@ -54,6 +54,8 @@ export const LOCO_GRAVITY = 1600
 const BASE_WALK_SPEED = 90
 /** Arrival tolerance for ground/leg completion (px). */
 const ARRIVE_TOL_PX = 4
+/** Max floor-height difference a single ground leg may span (walk-crouch + bob slack). */
+const GROUND_STEP_TOL = 12
 /** Fly arrival: begin slowing within this radius (flyTo only), complete within tol. */
 const FLY_SLOW_RADIUS = 60
 const FLY_ARRIVE_TOL = 6
@@ -582,6 +584,23 @@ export function createLocomotion(deps: LocomotionDeps): Locomotion {
   }
 
   function startGround(to: { x: number; y: number }): void {
+    // A ground leg ADOPTS the target's floor line (the authoring convention: place
+    // a character loosely, the engine stands it on the line it walks). Adoption is
+    // a real vertical motion, so it is SWEPT: stepping down/up onto a line that
+    // requires passing through geometry (e.g. a panel between here and a floor
+    // 300px below) blocks loudly instead of riding fantasy edges. Pre-charm this
+    // sweep existed only by accident inside the first gait tick; now it is the
+    // deliberate leg-start contract. Feet = the physical capsule bottom.
+    const cap = deps.capsule()
+    const feetY = cap.y1 + cap.r
+    const adoptDy = to.y - feetY
+    if (Math.abs(adoptDy) > GROUND_STEP_TOL) {
+      const hit = sweptCapsuleVsSegments(cap, 0, adoptDy, allSegs())
+      if (hit && adoptDy * hit.ny < -INTO_WALL_EPS) {
+        blockAt(t.x, t.y, hit, { reason: 'ground-unreachable' })
+        return
+      }
+    }
     gFloorY = to.y
     gHipHeight = deps.hipHeight
     gStartX = t.x
@@ -835,11 +854,15 @@ export function createLocomotion(deps: LocomotionDeps): Locomotion {
     const nextX = frame.pose.root.x
     const nextY = frame.pose.root.y
     const dx = nextX - before
-    const dy = nextY - t.y
-    // swept capsule for this step; block only on motion INTO a wall.
-    const hit = sweptCapsuleVsSegments(deps.capsule(), dx, dy, allSegs())
-    if (hit && dx * hit.nx + dy * hit.ny < -INTO_WALL_EPS) {
-      const p = stopAt(before, t.y, before + dx, t.y + dy, hit.t, CAP_SKIN)
+    // Swept capsule for this step; block only on motion INTO a wall. HORIZONTAL
+    // component only: ground gait follows the support's floorY by construction
+    // (including the walk-crouch easing the hip down), and sweeping that vertical
+    // follow reads the character's OWN support as a wall — the tick-one self-block
+    // the charm round uncovered. Vertical hazards (drop-offs, healed floors) are
+    // the leg re-validation's job, not the wall sweep's.
+    const hit = sweptCapsuleVsSegments(deps.capsule(), dx, 0, allSegs())
+    if (hit && dx * hit.nx < -INTO_WALL_EPS) {
+      const p = stopAt(before, t.y, before + dx, t.y, hit.t, CAP_SKIN)
       blockAt(p.x, p.y, hit)
       return
     }

@@ -55,7 +55,7 @@ export function createAccessoryChain(
   // trailing stream direction comes from the pin leading the chain as the
   // character moves and from the flutter's slight upward bias at idle.
   const segments = opts.segments ?? 3
-  const segLen = opts.segmentLen ?? 13.5
+  const segLen = opts.segmentLen ?? 11.5
   const damping = opts.damping ?? 0.88
   const gravityScale = opts.gravityScale ?? 0.3
   const flutterAmp = opts.flutterAmp ?? 2.6
