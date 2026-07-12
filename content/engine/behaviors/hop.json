@@ -1,0 +1,13 @@
+{
+  "schemaVersion": 2,
+  "id": "hop",
+  "steps": [
+    { "verb": "jumpTo", "target": "entity:goal", "timeoutMs": 4000 }
+  ],
+  "reactions": {
+    "onBlocked": [
+      { "verb": "sfx", "kind": "bonk" },
+      { "verb": "say", "text": "oof!" }
+    ]
+  }
+}

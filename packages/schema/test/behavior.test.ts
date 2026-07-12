@@ -147,3 +147,65 @@ test('validateBehaviorAgainstWorld passes when the target entity exists', () => 
   const r = validateBehaviorAgainstWorld(doc, { entityIds: new Set(['pip']) })
   expect(r.ok).toBe(true)
 })
+
+// ── Phase 7b schema deltas ────────────────────────────────────────────────────────
+test('7b: a cue with a MOVEMENT verb is rejected (cues run concurrently with movement)', () => {
+  const r = tryValidateBehavior({
+    schemaVersion: 2,
+    id: 'badcue',
+    steps: [],
+    cues: [{ at: 'onLaunch', do: { verb: 'moveTo', target: 'entity:x' } }],
+  })
+  expect(r.ok).toBe(false)
+  if (!r.ok) expect(r.errors.some((e) => /cue may not be a movement verb/.test(e))).toBe(true)
+})
+
+test('7b: a non-movement cue (say/sfx/strikePose) is accepted', () => {
+  const r = tryValidateBehavior({
+    schemaVersion: 2,
+    id: 'okcue',
+    steps: [],
+    cues: [
+      { at: 'onLaunch', do: { verb: 'strikePose', ref: 'cheer' } },
+      { at: 'onLand', do: { verb: 'sfx', kind: 'thud' } },
+      { at: 'onArrive', do: { verb: 'say', text: 'hi' } },
+    ],
+  })
+  expect(r.ok).toBe(true)
+})
+
+test('7b review fix: cue verbs are restricted to the EXECUTED performance subset — state verbs rejected', () => {
+  // setFlag would mutate sim state from the decorative cue layer → rejected.
+  const setFlagCue = tryValidateBehavior({
+    schemaVersion: 2,
+    id: 'x',
+    steps: [],
+    cues: [{ at: 'onLand', do: { verb: 'setFlag', flag: 'f' } }],
+  })
+  expect(setFlagCue.ok).toBe(false)
+  if (!setFlagCue.ok) expect(setFlagCue.errors.some((e) => /performance verb/.test(e))).toBe(true)
+  // impulse / emit / wait / branchOnFlag — all outside the performance subset.
+  for (const bad of [
+    { verb: 'impulse', target: 'self', vec: [1, 0] },
+    { verb: 'emit', emitter: 'spark' },
+    { verb: 'wait', ms: 100 },
+    { verb: 'branchOnFlag', flag: 'f', then: [] },
+  ]) {
+    const r = tryValidateBehavior({ schemaVersion: 2, id: 'x', steps: [], cues: [{ at: 'onLand', do: bad }] })
+    expect(r.ok).toBe(false)
+  }
+  // the full executed subset is accepted: say / sfx / camera / strikePose / playClip.
+  const ok = tryValidateBehavior({
+    schemaVersion: 2,
+    id: 'ok',
+    steps: [],
+    cues: [
+      { at: 'onLaunch', do: { verb: 'say', text: 'hup' } },
+      { at: 'onLaunch', do: { verb: 'sfx', kind: 'whoosh' } },
+      { at: 'onLand', do: { verb: 'camera', to: 'entity:x', ms: 200 } },
+      { at: 'onLand', do: { verb: 'strikePose', ref: 'cheer' } },
+      { at: 'onArrive', do: { verb: 'playClip', ref: 'walk-cycle' } },
+    ],
+  })
+  expect(ok.ok).toBe(true)
+})

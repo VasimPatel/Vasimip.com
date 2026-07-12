@@ -68,6 +68,9 @@ export {
   MOVEMENT_VERBS,
   REACTION_TRIGGERS,
   MILESTONES,
+  CUE_VERBS,
+  checkIntentValue,
+  checkReactions,
 } from './behavior'
 export type {
   BehaviorDoc,
@@ -81,5 +84,6 @@ export type {
   ReactionTrigger,
   Milestone,
   Cue,
+  CueVerb,
   GateExpr,
 } from './behavior'

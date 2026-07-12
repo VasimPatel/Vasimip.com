@@ -71,3 +71,22 @@ test("rejects modes ['hop'] missing maxJumpDistance", () => {
   expect(r.ok).toBe(false)
   if (!r.ok) expect(r.errors.some((e) => e.includes('maxJumpHeight') || e.includes('maxJumpDistance'))).toBe(true)
 })
+
+// ── Phase 7b: CharacterDoc default reactions ───────────────────────────────────────
+test('7b: character-level default reactions validate; a bad trigger/intent is rejected', () => {
+  const ok = tryValidateCharacter({
+    id: 'c', rig: 'dash', personality: { energy: 0.5, bounciness: 0.5, confidence: 0.5, sloppiness: 0.5 },
+    locomotion: { modes: ['walk'] }, reactions: { onBlocked: [{ verb: 'say', text: 'ow' }], onTimeout: [{ verb: 'strikePose', ref: 'think' }] },
+  })
+  expect(ok.ok).toBe(true)
+  const badTrigger = tryValidateCharacter({
+    id: 'c', rig: 'dash', personality: { energy: 0.5, bounciness: 0.5, confidence: 0.5, sloppiness: 0.5 },
+    locomotion: { modes: ['walk'] }, reactions: { onBogus: [{ verb: 'say', text: 'x' }] },
+  })
+  expect(badTrigger.ok).toBe(false)
+  const badIntent = tryValidateCharacter({
+    id: 'c', rig: 'dash', personality: { energy: 0.5, bounciness: 0.5, confidence: 0.5, sloppiness: 0.5 },
+    locomotion: { modes: ['walk'] }, reactions: { onBlocked: [{ verb: 'teleport' }] },
+  })
+  expect(badIntent.ok).toBe(false)
+})

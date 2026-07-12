@@ -16,7 +16,7 @@
 // content/engine/rules.json yet — a file adds no capability now, and "rules are data"
 // is proven by the swap test that clones + edits a row and observes changed behavior).
 
-import type { RuleRow, WorldResponse, ComponentKind, Box, HoleEdge, Segment } from '@dash/schema'
+import type { RuleRow, WorldResponse, ComponentKind, Box, HoleEdge, Segment, Intent } from '@dash/schema'
 import type { MutableWorld, HoleSpec } from './holes'
 import type { VerletWorld } from '../verlet'
 import { stopAt, type PanelCollision } from './collision'
@@ -58,6 +58,7 @@ export type DispatchAction =
   | { kind: 'impulse'; entity: string; vx: number; vy: number; applied: boolean }
   | { kind: 'support'; entity: string; x: number; y: number }
   | { kind: 'emitEvent'; event: string }
+  | { kind: 'intent'; entity: string; intent: Intent }
 
 export interface DispatchResult {
   matchedRows: number
@@ -196,6 +197,15 @@ function mover(ctx: RuleEventCtx): RuleEntity {
   return ctx.a.kind === 'surface' ? ctx.b : ctx.a
 }
 
+/** The involved CHARACTER of a pair — the target of an `intent` response (§7b #4):
+ * prefer the entity carrying a `locomotion` component, else the first non-surface /
+ * non-projectile party, else `a`. */
+function involvedCharacter(ctx: RuleEventCtx): RuleEntity {
+  for (const e of [ctx.a, ctx.b]) if (e.kind === 'locomotion') return e
+  for (const e of [ctx.a, ctx.b]) if (e.kind !== 'surface' && e.kind !== 'projectile') return e
+  return ctx.a
+}
+
 export function dispatch(ctx: RuleEventCtx, table: RuleTable, mutable: MutableWorld, verlet?: VerletWorld): DispatchResult {
   const rows = table.match(ctx.a.kind, ctx.b.kind, ctx.event)
   const actions: DispatchAction[] = []
@@ -284,6 +294,15 @@ function execute(r: WorldResponse, ctx: RuleEventCtx, mutable: MutableWorld, ver
     case 'emitEvent': {
       mutable.events.emit(r.event, { a: ctx.a.entity, b: ctx.b.entity, point: ctx.point })
       actions.push({ kind: 'emitEvent', event: r.event })
+      return
+    }
+    case 'intent': {
+      // §7b #4: a rule row runs a full behavior intent on the involved character. The
+      // world layer can't execute L6 intents itself, so it emits `rule:intent` — the
+      // character runtime picks it up (entity === self) as a one-shot reaction.
+      const c = involvedCharacter(ctx)
+      mutable.events.emit('rule:intent', { entity: c.entity, intent: r.do, point: ctx.point })
+      actions.push({ kind: 'intent', entity: c.entity, intent: r.do })
       return
     }
   }

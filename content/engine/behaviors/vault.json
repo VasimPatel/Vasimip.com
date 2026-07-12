@@ -1,0 +1,12 @@
+{
+  "schemaVersion": 2,
+  "id": "vault",
+  "steps": [
+    { "verb": "jumpTo", "target": "entity:goal", "timeoutMs": 4000 }
+  ],
+  "cues": [
+    { "at": "onLaunch", "do": { "verb": "strikePose", "ref": "cheer" } },
+    { "at": "onLaunch", "do": { "verb": "sfx", "kind": "whoosh" } },
+    { "at": "onLand", "do": { "verb": "sfx", "kind": "thud" } }
+  ]
+}

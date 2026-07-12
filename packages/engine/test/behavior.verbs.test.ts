@@ -114,10 +114,32 @@ test('the stub verbs each emit their single trace event and complete', () => {
   }
 })
 
-test('branchOnFlag at runtime fails with the 7b-deferred reason and halts', () => {
-  const r = runVerb({ verb: 'branchOnFlag', flag: 'x', then: [{ verb: 'idle' }] })
-  const failed = eventsOf(r, 'intent:failed')
-  expect(failed).toHaveLength(1)
-  expect((failed[0].payload as { reason: string }).reason).toBe('branchOnFlag-deferred-7b')
-  expect(r.rt.behavior.status).toBe('halted')
+test('branchOnFlag EXECUTES in 7b: flag unset → else (empty) → completes, no failure', () => {
+  const r = runVerb({ verb: 'branchOnFlag', flag: 'x', then: [{ verb: 'setFlag', flag: 'inThen' }] })
+  // flag x is unset → the (absent) else branch runs → nothing → completes cleanly.
+  expect(eventsOf(r, 'intent:failed')).toHaveLength(0)
+  const branch = eventsOf(r, 'intent:branch')
+  expect(branch).toHaveLength(1)
+  expect((branch[0].payload as { taken: boolean }).taken).toBe(false)
+  expect(r.rt.behavior.flags.inThen).toBeUndefined()
+  expect(r.rt.behavior.status).toBe('complete')
+})
+
+test('branchOnFlag EXECUTES in 7b: flag set → then sub-list runs', () => {
+  const r = newRuntime(floorWorld(), { x: 200, y: 0 })
+  snapFeet(r.rt, FLOOR_Y)
+  r.rt.runBehavior({
+    schemaVersion: 2,
+    id: 'br',
+    steps: [
+      { verb: 'setFlag', flag: 'x' },
+      { verb: 'branchOnFlag', flag: 'x', then: [{ verb: 'setFlag', flag: 'inThen' }], else: [{ verb: 'setFlag', flag: 'inElse' }] },
+    ] as never,
+  })
+  const branch = eventsOf(r, 'intent:branch')
+  expect(branch).toHaveLength(1)
+  expect((branch[0].payload as { taken: boolean }).taken).toBe(true)
+  expect(r.rt.behavior.flags.inThen).toBe(true)
+  expect(r.rt.behavior.flags.inElse).toBeUndefined()
+  expect(r.rt.behavior.status).toBe('complete')
 })
