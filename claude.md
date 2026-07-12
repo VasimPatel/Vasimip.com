@@ -2,92 +2,49 @@ Commit often to maintain versioning between changes and testing
 Make things modular and reusable when you can
 Do not overly abstract things
 
-# Orchestrator mode (this repo)
+# Execution model (this repo) — owner directive, 2026-07-11
 
-The main session runs on whichever model it is now and acts as the **orchestrator**, not the
-worker. Focus on judgment, not typing. Its job,
-in order of how much of it there should be:
+**Fable implements everything directly.** The main session (Fable) writes the code,
+the content, the tests, and the docs itself. Do NOT delegate implementation to any
+subagent or external model — no implementer/opus/sonnet agents, no codex authoring.
 
-- **Plan (most of the time)** — decompose the task, make the architectural and taste
-  calls, decide what gets delegated to whom, and synthesize what comes back. 
-- **Review** — read the diffs and plans delegates return, accept/reject, and
-  course-correct. For a real second opinion, route it to a *different* model than
-  wrote the code (see `reviewer` / `codex-delegate` below).
-- **Edit (occasionally)** — only when delegating would cost more than doing it: a
-  one-line fix, a taste-critical snippet, or wiring a delegate's output together. If
-  you notice yourself making more than a few edits in a row, stop and delegate.
+**Why (owner's words, after reviewing the Engine v2 playground):** delegated phases
+passed their correctness gates but the result read as charmless — "the animations are
+not good… dash looks worse, far less charming and fun… motion and physics are really
+half baked." Gates measure correctness; charm doesn't survive delegation. One set of
+hands, one aesthetic memory.
 
-Anything that looks like execution — well-specified implementation, bulk/mechanical
-edits, migrations, whole-codebase reads, verification — belongs on a worker, not the
-orchestrator. 
+What remains allowed:
+- **Read-only exploration** (built-in Explore agent) for broad searches — it writes
+  nothing.
+- **Codex as a read-only, independent REVIEWER only** (`codex exec -s read-only
+  "<prompt>" < /dev/null` — the `< /dev/null` is mandatory, codex hangs on open
+  stdin). It has caught real blockers in every engine phase. It must never author or
+  edit a line. If the owner later says otherwise, this narrows further.
+- Background Bash for long-running checks/measurements.
 
-## Who to delegate to
+Everything else — implementation, migrations, content authoring, tuning, wiring,
+user-facing writing — is Fable's, in the main session.
 
-| the work in front of you                                   | send it to           | how                                   |
-|------------------------------------------------------------|----------------------|---------------------------------------|
-| Well-specified Claude-family coding / refactor / wiring    | **implementer**      | Agent `subagent_type: implementer` (sonnet; pass `model: opus` when it needs taste) |
-| Taste-critical review of a diff/plan/design                | **reviewer**         | Agent `subagent_type: reviewer` (opus) |
-| Independent second opinion on Claude-authored code         | **codex-delegate**   | Agent `subagent_type: codex-delegate` (gpt-5.5 — different family) |
-| Bulk / mechanical / token-hungry / migration / analysis    | **codex-delegate**   | Agent `subagent_type: codex-delegate` (gpt-5.5) |
-| Design an implementation plan                              | built-in **Plan**    | Agent `subagent_type: Plan`           |
-| Broad read-only search across many files                   | built-in **Explore** | Agent `subagent_type: Explore`        |
+## Verification discipline (keep — this part worked)
 
-Delegate independent work in parallel (multiple Agent calls in one message). Keep the
-final decision, the synthesis, and the user-facing writing on fable.
+- Every increment lands with its gates: typecheck, determinism lint, `bun run
+  test:engine`, `bun run build` (site dist byte-identical until P9 flips it), and
+  screenshot review of anything visual. State gate evidence in commits/PRs.
+- Motion/visual work is judged by looking at it (screenshot strips, live harness),
+  never by numeric gates alone. Numeric gates get negative controls.
+- Independent codex review (read-only) before merging engine-math or server-touching
+  work.
 
-# Model routing for workflows & subagents
+# Engine v2 project
 
-These are **defaults, not hard limits**. Standing rule: judge the *output*, not the
-price tag. If a cheaper model's result doesn't clear the bar, redo it on a smarter
-one without asking. Escalating costs less than shipping mediocre work.
+The plan of record is `docs/ENGINE_V2.md`. One phase per PR into master; the live
+site keeps running the legacy engine untouched until Phase 9 flips it. Closed verb/
+component/milestone sets — additions require explicit owner sign-off. THE WALL TEST
+and the BIRD TEST are the north-star acceptance gates.
 
-## The roster
-
-Higher = better on every axis. "Cost" is how well the model scores on
-affordability *given my plan* (generous OpenAI limits make gpt-5.5 cheap for me),
-not list price. Tune these numbers to your own economics.
-
-| model     | cost | intelligence | taste | reach it via                          |
-|-----------|------|--------------|-------|---------------------------------------|
-| gpt-5.5   | 9    | 8            | 5     | `codex-delegate` agent (Codex CLI)    |
-| sonnet-5  | 5    | 5            | 7     | `implementer` agent / Agent `model`   |
-| opus-4.8  | 4    | 7            | 8     | `reviewer` agent / Agent `model`      |
-
-## Routing rules
-
-- Axes conflict? Resolve **intelligence > taste > cost**. Cost only breaks ties.
-- **Bulk / mechanical work** — clear-spec implementation, migrations, refactors,
-  data crunching: **gpt-5.5** via `codex-delegate`. Cheap, fast, extremely steerable.
-- **Well-specified Claude-family coding** — needs a bit more taste than codex is
-  trusted with but not the orchestrator itself: **`implementer`** (sonnet; escalate
-  to opus with `model: opus` when the task warrants it).
-- **User-facing surfaces** — UI, API design, copy, anything a human reads directly:
-  needs **taste >= 8**, so keep it on the main orhcestrator, or use `reviewer`/opus. Never gpt-5.5.
-- **Plan / diff review**: get a second opinion from a *different* model than wrote
-  the code — `reviewer` (opus) for taste, or `codex-delegate` (gpt-5.5) for a truly
-  independent read of Claude-authored work.
-- **Token-hungry side quests** — computer use, whole-codebase analysis, UI/UX
-  verification: push to `codex-delegate` and have it report back a summary. Never
-  burn orchestrator context on them.
-- Keep the main session as the **orchestrator**. Delegate execution;
-  reserve the main session for decisions, taste calls, and synthesis.
-
-## Mechanics
-
-- **Claude-family models** (opus-4.8, sonnet-5) run through the Agent
-  tool's `model` parameter or a subagent's `model:` frontmatter.
-- **gpt-5.5 lives behind the Codex CLI** and is *not* selectable via the Agent
-  `model` parameter (that only accepts Claude models). Reach it with `codex exec`:
-  - Analysis / review (no writes): `codex exec -s read-only "<prompt>"`
-  - Implementation (writes files): `codex exec --sandbox workspace-write --ask-for-approval never "<prompt>"`
-  - Model defaults to gpt-5.5 from `~/.codex/config.toml`; add `-m gpt-5.5` to pin it.
-
-## Calling gpt-5.5 from inside a workflow or subagent
-
-Don't try to spawn gpt-5.5 through the Agent `model` param — it won't take it.
-Delegate to the **codex-delegate** subagent (a thin `sonnet` / low-effort wrapper).
-Its job: gather just enough context to make a self-contained Codex prompt, run
-`codex exec`, and hand back a short summary — so Codex's verbose transcript never
-touches this session's context. 
-
-
+**Charm is the open risk** (owner-confirmed after P8): the legacy Dash's appeal is
+bespoke per-pose hand-drawn art — expressive eyes/brows, the bandana, baked-in squash
+and stretch, hand-tuned easing. Silhouette parity is not charm parity. Before any
+bulk content migration (P9), the renderer/motion must pass an owner-reviewed
+side-by-side charm checkpoint against the legacy site.
