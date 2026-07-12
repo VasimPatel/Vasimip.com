@@ -6,6 +6,7 @@
       "name": "dash-notebook",
       "dependencies": {
         "@better-auth/passkey": "^1.6.23",
+        "@dash/headless": "workspace:*",
         "better-auth": "^1.6.23",
         "drizzle-orm": "^0.44.0",
         "hono": "^4.6.0",

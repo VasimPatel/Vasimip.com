@@ -321,6 +321,10 @@ export function tryValidateWorldV2(doc: unknown): ValidateResult<WorldDocV2> {
       }
       if (!isNum(d.seed)) issues.push('seed: required finite number')
       checkEntities(d.entities, issues)
+      // Top-level closure (P8 review): a world doc is EXACTLY {schemaVersion, seed,
+      // entities}. Without this, a doc carrying another kind's discriminant (e.g.
+      // steps[]) could pass as a world and defeat shape dispatch.
+      rejectUnknownKeys(d, ['schemaVersion', 'seed', 'entities'], 'doc', issues)
     },
   ])
 }
