@@ -67,8 +67,11 @@ test('INTRO page: a cross-panel moveTo routes multi-leg (walk + hop) to arrival'
 
   expect(routes.length).toBe(1)
   expect(legs.length).toBeGreaterThanOrEqual(2) // multi-leg
+  // Route composition follows the graph (platform semantics + support filters
+  // re-shape it); the INVARIANTS are: multi-leg, includes a ground leg, includes
+  // an airborne leg, and never rides fly edges.
   expect(legTypes).toContain('walk')
-  expect(legTypes).toContain('hop')
+  expect(legTypes.some((t) => t === 'hop' || t === 'jump')).toBe(true)
   expect(legTypes).not.toContain('fly') // ground verb never rides fly edges
   expect(rt.locomotion.status).toBe('arrived')
   // Graph nodes are SURFACE (feet) points; the transform is the hip — compare feet.

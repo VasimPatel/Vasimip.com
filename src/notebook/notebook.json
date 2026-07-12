@@ -11,8 +11,8 @@
       "snark": "oh no. he made a website.",
       "panels": [
         {
-          "x": 64,
-          "y": 40,
+          "x": 16,
+          "y": 56,
           "w": 360,
           "h": 392,
           "anchor": {
@@ -65,15 +65,37 @@
               "fam": "hand",
               "size": 16,
               "color": "#8a8378"
+            },
+            {
+              "kind": "draw",
+              "x": 18,
+              "y": 64,
+              "w": 220,
+              "h": 130,
+              "strokes": [],
+              "strokeColor": "#1a1a1a",
+              "strokeW": 6
+            },
+            {
+              "kind": "draw",
+              "x": 18,
+              "y": 64,
+              "w": 220,
+              "h": 130,
+              "strokes": [],
+              "strokeColor": "#1a1a1a",
+              "strokeW": 3.5
             }
           ],
           "arrival": {
-            "say": "HELLO THERE"
+            "say": "HELLO THERE",
+            "face": -1,
+            "revertMs": 15
           }
         },
         {
-          "x": 464,
-          "y": 80,
+          "x": 504,
+          "y": 64,
           "w": 403,
           "h": 169,
           "anchor": {
@@ -97,7 +119,7 @@
             {
               "kind": "art",
               "x": 0,
-              "y": 22,
+              "y": 0,
               "w": 372,
               "h": 247,
               "component": "pipFigure",
@@ -109,7 +131,20 @@
           ],
           "arrival": {
             "say": "Hello Friends",
-            "pose": "cheer"
+            "pose": "cheer",
+            "once": true,
+            "revertMs": 100,
+            "face": -1,
+            "setFlag": "no",
+            "flourish": true
+          },
+          "travel": {
+            "builtins": [
+              "hop",
+              "poof",
+              "vault",
+              "wallrun"
+            ]
           }
         },
         {
@@ -145,10 +180,10 @@
           ]
         },
         {
-          "x": 432,
-          "y": 448,
-          "w": 200,
-          "h": 160,
+          "x": 592,
+          "y": 272,
+          "w": 180,
+          "h": 120,
           "anchor": {
             "dx": 100,
             "dy": 0
@@ -164,7 +199,15 @@
               "fam": "marker",
               "size": 20
             }
-          ]
+          ],
+          "rotate": -6,
+          "arrival": {
+            "pose": "cheer",
+            "face": -1,
+            "once": true,
+            "revertMs": 10,
+            "setFlag": "No"
+          }
         },
         {
           "x": 680,
@@ -730,6 +773,9 @@
           "do": "camClear"
         }
       ]
+    },
+    "action": {
+      "steps": []
     }
   }
 }

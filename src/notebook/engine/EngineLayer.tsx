@@ -44,6 +44,9 @@ export interface EngineLayerProps {
   onHeading?(panelIdx: number): void
   /** The poke hitbox was clicked (the Notebook plays its sfx/AC ensure). */
   onPoke?(): void
+  /** Camera follow: Dash's live position while traveling; null = travel done
+   * (the Notebook returns the camera to panel focus). */
+  onDashCam?(p: { x: number; y: number } | null): void
 }
 
 interface Scene {
@@ -80,6 +83,11 @@ export class EngineLayer extends Component<EngineLayerProps> {
   /** Destination of the in-flight travel run — poof-recovery lands here if the
    * picked behavior blocks/fails (the legacy poof teleport, driver-owned). */
   private travelDest: number | null = null
+  /** Camera-follow throttle + airborne-roll state (render-layer charm). */
+  private camTick = 0
+  private rolling = false
+  private airborne = false
+  private spin = 0
 
   componentDidMount(): void {
     this.enterPage(this.props.page)
@@ -97,10 +105,19 @@ export class EngineLayer extends Component<EngineLayerProps> {
         s.verlet.step()
         s.mw.stepMutations()
       }
+      // The legacy roll: spin the tuck through the arc (~1 turn / 600ms),
+      // render-layer only, active while a rolly travel behavior is airborne.
+      if (this.rolling && this.airborne) this.spin += (Math.PI * 2 * STEP_MS) / 600
       this.renderer.render(s.rt.solved(), s.rt.face(), s.rt.overrides(), {
         flourish: s.rt.flourish(),
+        spin: this.rolling && this.airborne ? this.spin : 0,
         accessories: s.rt.accessories.map((a) => a.points()),
       })
+      // Camera follows Dash while a travel is in flight (throttled ~9 ticks; the
+      // Notebook's CSS cam transition glides between updates).
+      if (this.travelDest != null && ++this.camTick % 9 === 0) {
+        this.props.onDashCam?.({ x: s.rt.transform.x, y: s.rt.transform.y })
+      }
       this.drawBubble()
       // Poke hitbox tracks the figure (the wrapper must NOT catch page-wide
       // clicks — review finding: it swallowed the cover's open handler).
@@ -184,8 +201,16 @@ export class EngineLayer extends Component<EngineLayerProps> {
         this.props.onFlag(flag, value ?? true)
       }),
       ctx.events.on('intent:sfx', (p) => this.props.sfx((p as { kind: string }).kind)),
+      ctx.events.on('jump:launch', () => {
+        this.airborne = true
+      }),
+      ctx.events.on('jump:land', () => {
+        this.airborne = false
+        this.spin = 0
+      }),
       ctx.events.on('behavior:complete', () => {
         this.travelDest = null
+        this.props.onDashCam?.(null)
         this.chainArrival()
       }),
       ctx.events.on('behavior:ended', () => this.recoverOrArrive()),
@@ -213,6 +238,8 @@ export class EngineLayer extends Component<EngineLayerProps> {
     this.pendingArrival = this.arrivalId(pageIdx, panelIdx)
     this.currentPanel = panelIdx
     this.travelDest = panelIdx
+    this.rolling = doc.id === 'builtin:roll' || doc.id === 'builtin:hop' || doc.id === 'builtin:combo'
+    this.spin = 0
     this.props.onHeading?.(panelIdx)
     s.rt.runBehavior(doc, { travel: { from: fromId, to: toId } })
   }
@@ -224,6 +251,7 @@ export class EngineLayer extends Component<EngineLayerProps> {
     if (!s) return
     const dest = this.travelDest
     this.travelDest = null
+    this.props.onDashCam?.(null)
     if (dest != null) {
       const spot = this.panelSpot(s.pageIdx, dest)
       if (spot) {

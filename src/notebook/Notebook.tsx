@@ -381,7 +381,12 @@ export default class Notebook extends React.Component<NotebookProps, State> {
 
   // ── ENGINE MODE (P9b) — ?engine=1 mounts the new engine's Dash; legacy is the
   // untouched default until the 9c cutover. All engine hooks are guarded here.
-  private engineMode = typeof location !== 'undefined' && new URLSearchParams(location.search).has('engine')
+  // ENGINE IS THE DEFAULT (owner-directed 9c). The untouched legacy experience
+  // lives at /legacy (or ?legacy=1) for side-by-side comparison until the owner
+  // explicitly retires it.
+  private engineMode =
+    typeof location === 'undefined' ||
+    (location.pathname !== '/legacy' && !new URLSearchParams(location.search).has('legacy'))
   private engineRef: EngineLayer | null = null
 
   /** Engine sfx kinds → the AudioEngine vocabulary (fx:* approximated until 9c). */
@@ -1121,6 +1126,7 @@ export default class Notebook extends React.Component<NotebookProps, State> {
                     onFlag={(flag, value) => this.setState((st) => ({ flags: { ...st.flags, [flag]: value } }))}
                     sfx={(kind) => this.engineSfx(kind)}
                     onPoke={() => { this.ensureAC(); this.sfx('hop') }}
+                    onDashCam={(p) => this.setState({ camo: p ? { cx: p.x, cy: p.y, mult: 0.92, fast: false } : null })}
                   />
                 </div>
               )
