@@ -1,0 +1,19 @@
+{
+  "schemaVersion": 2,
+  "id": "builtin:wallrun",
+  "steps": [
+    {
+      "verb": "moveTo",
+      "target": "travel:to#interior"
+    }
+  ],
+  "cues": [
+    {
+      "at": "onArrive",
+      "do": {
+        "verb": "sfx",
+        "kind": "scrib"
+      }
+    }
+  ]
+}

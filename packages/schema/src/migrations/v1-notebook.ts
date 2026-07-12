@@ -119,9 +119,20 @@ export function migrateNotebookV1(
         case 'wait':
           if (isNum(s.ms)) steps.push({ verb: 'wait', ms: s.ms } as Intent)
           break
-        case 'cam':
-          steps.push({ verb: 'camera', to: isStr(s.on) ? s.on : 'target', ms: 400 } as Intent)
+        case 'cam': {
+          // v1 camera focus vocabulary → TargetRefs: 'dash' frames the character,
+          // 'target' frames the travel destination; 'midpoint'/raw coords have no
+          // ref-shaped home → approximate as the destination, with a report note.
+          let to: string | undefined
+          if (s.on === 'dash') to = 'entity:dash'
+          else if (s.on === 'target') to = 'travel:to#interior'
+          else {
+            report.lossy.push(`${sw}.on: camera focus ${JSON.stringify(s.on)} approximated as travel:to#interior`)
+            to = 'travel:to#interior'
+          }
+          steps.push({ verb: 'camera', to, ms: 400 } as Intent)
           break
+        }
         case 'camClear':
           steps.push({ verb: 'camera', ms: 400 } as Intent)
           break

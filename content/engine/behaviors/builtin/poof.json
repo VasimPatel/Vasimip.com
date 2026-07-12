@@ -1,0 +1,31 @@
+{
+  "schemaVersion": 2,
+  "id": "builtin:poof",
+  "steps": [
+    {
+      "verb": "sfx",
+      "kind": "fx:smoke"
+    },
+    {
+      "verb": "wait",
+      "ms": 220
+    },
+    {
+      "verb": "jumpTo",
+      "target": "travel:to#interior"
+    },
+    {
+      "verb": "sfx",
+      "kind": "fx:smoke"
+    }
+  ],
+  "cues": [
+    {
+      "at": "onLand",
+      "do": {
+        "verb": "sfx",
+        "kind": "poof"
+      }
+    }
+  ]
+}

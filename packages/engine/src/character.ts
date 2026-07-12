@@ -139,6 +139,8 @@ export interface CharacterRuntime {
   speech(): Speech | null
   /** This tick's squash/stretch scales (charm) — renderer group transform. */
   flourish(): { sx: number; sy: number }
+  /** Bind/unbind the from/to panels travel:* refs resolve against (P9 travel runs). */
+  setTravelContext(ctx: { from?: string; to?: string } | null): void
   /** Accessory ribbons (charm; e.g. the bandana) — renderer draws points(). */
   readonly accessories: readonly AccessoryChain[]
   /** Monotonic per-run id (the watchdog's per-run latch key). */
@@ -421,6 +423,7 @@ export function createCharacterRuntime(opts: CharacterRuntimeOptions): Character
     running: () => behavior.running(),
     speech: () => behavior.speech(),
     flourish: () => lastFlourish,
+    setTravelContext: (ctx) => locomotion.setTravelContext(ctx),
     accessories,
     runId: () => behavior.runId(),
     budgetMs: () => behavior.budgetMs(),

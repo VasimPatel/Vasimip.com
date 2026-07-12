@@ -148,6 +148,8 @@ export interface LocomotionState {
   fTarget: { x: number; y: number }
   // per-intent timeout accounting (7b consumes; 7a records)
   elapsedMs: number
+  /** Contextual travel binding for travel:* refs (P9). */
+  travelCtx: { from?: string; to?: string } | null
 }
 
 export interface LocomotionDeps {
@@ -181,6 +183,8 @@ export interface LocomotionDeps {
 export interface Locomotion {
   /** Start a movement intent. Resolves the target, plans a route if cross-surface. */
   begin(intent: Intent & { verb: MovementVerb }): void
+  /** Bind/unbind the from/to panels a travel run resolves travel:* refs against. */
+  setTravelContext(ctx: { from?: string; to?: string } | null): void
   /** Runs BEFORE blender.tick(): advance gait/steer, set the blender base source,
    * commit ground/fly motion + collision. Movement that needs markers waits. */
   preBlend(): void
@@ -341,6 +345,8 @@ export function createLocomotion(deps: LocomotionDeps): Locomotion {
 
   // ground
   let gait: Gait | null = null
+  /** Contextual travel binding (travel:to# / travel:from# refs). Serialized. */
+  let travelCtx: { from?: string; to?: string } | null = null
   let gStartX = 0
   let gSpeed = 0
   let gDir: 1 | -1 = 1
@@ -388,6 +394,18 @@ export function createLocomotion(deps: LocomotionDeps): Locomotion {
     const parsed = parseTargetRef(ref)
     if (!parsed) return null
     const cw: CollisionWorld = world.collision()
+    if (parsed.kind === 'travel') {
+      // Contextual travel ref (P9 TargetRef extension): the from/to panels are
+      // bound by setTravelContext for the duration of a travel run — the v1 cue
+      // compiler's context, made data. Unbound → unresolvable (intent fails loudly).
+      const entity = parsed.which === 'to' ? travelCtx?.to : travelCtx?.from
+      if (!entity) return null
+      const panel = cw.panels.find((p) => p.entity === entity)
+      if (!panel) return null
+      const spots = panel.geom.spots as Record<string, { x: number; y: number }>
+      const spot = spots[parsed.spot] ?? spots.interior
+      return spot ? { ...spot } : null
+    }
     if (parsed.kind === 'panelSpot') {
       const panel = cw.panels.find((p) => p.entity === parsed.panel)
       if (!panel) return null
@@ -1059,6 +1077,7 @@ export function createLocomotion(deps: LocomotionDeps): Locomotion {
       jSupport: jSupport ? { ...jSupport } : null,
       fTarget: { ...fTarget },
       elapsedMs,
+      travelCtx: travelCtx ? { ...travelCtx } : null,
     }
   }
 
@@ -1090,6 +1109,7 @@ export function createLocomotion(deps: LocomotionDeps): Locomotion {
     jSupport = s.jSupport ? { ...s.jSupport } : null
     fTarget = { ...s.fTarget }
     elapsedMs = s.elapsedMs
+    travelCtx = s.travelCtx ? { ...s.travelCtx } : null
     // Rebuild the gait deterministically: gait accumulates rootX/phase LINEARLY, so
     // recreating at gStartX and advancing by gElapsedMs in ONE step reproduces the
     // exact phase/rootX of many small steps.
@@ -1109,6 +1129,9 @@ export function createLocomotion(deps: LocomotionDeps): Locomotion {
 
   return {
     begin,
+    setTravelContext(ctx) {
+      travelCtx = ctx ? { ...ctx } : null
+    },
     preBlend,
     postBlend,
     get status() {

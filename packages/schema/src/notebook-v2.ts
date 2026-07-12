@@ -101,7 +101,7 @@ function checkPanel(x: unknown, path: string, issues: Issues, behaviorIds: Set<s
   }
 }
 
-function checkRegistry<T>(
+function checkRegistry(
   x: unknown,
   path: string,
   issues: Issues,

@@ -1,0 +1,19 @@
+{
+  "schemaVersion": 2,
+  "id": "builtin:hop",
+  "steps": [
+    {
+      "verb": "jumpTo",
+      "target": "travel:to#interior"
+    }
+  ],
+  "cues": [
+    {
+      "at": "onLaunch",
+      "do": {
+        "verb": "sfx",
+        "kind": "hop"
+      }
+    }
+  ]
+}

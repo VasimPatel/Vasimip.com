@@ -1,0 +1,10 @@
+{
+  "schemaVersion": 2,
+  "id": "builtin:walk",
+  "steps": [
+    {
+      "verb": "moveTo",
+      "target": "travel:to#interior"
+    }
+  ]
+}

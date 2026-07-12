@@ -1,0 +1,35 @@
+{
+  "schemaVersion": 2,
+  "id": "builtin:smash",
+  "steps": [
+    {
+      "verb": "jumpTo",
+      "target": "travel:to#interior"
+    }
+  ],
+  "cues": [
+    {
+      "at": "onLand",
+      "do": {
+        "verb": "strikePose",
+        "ref": "fight",
+        "holdMs": 420
+      }
+    },
+    {
+      "at": "onLand",
+      "do": {
+        "verb": "sfx",
+        "kind": "fx:crack"
+      }
+    }
+  ],
+  "reactions": {
+    "onLand": [
+      {
+        "verb": "sfx",
+        "kind": "thud"
+      }
+    ]
+  }
+}
