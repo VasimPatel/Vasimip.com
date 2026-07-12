@@ -3,10 +3,10 @@
     "page": 0,
     "name": "INTRO",
     "nodes": 18,
-    "edges": 96,
+    "edges": 98,
     "byType": {
       "jump": 74,
-      "walk": 10,
+      "walk": 12,
       "hop": 12
     },
     "nodeIds": [
@@ -121,40 +121,33 @@
       "panel:0:5:roofL->panel:0:3:roofR:hop",
       "panel:0:5:roofL->panel:0:4:roofL:jump",
       "panel:0:5:roofL->panel:0:5:interior:jump",
+      "panel:0:5:roofL->panel:0:5:roofR:walk",
       "panel:0:5:roofR->panel:0:3:roofR:jump",
       "panel:0:5:roofR->panel:0:4:interior:jump",
       "panel:0:5:roofR->panel:0:4:roofL:jump",
       "panel:0:5:roofR->panel:0:4:roofR:jump",
-      "panel:0:5:roofR->panel:0:5:interior:jump"
+      "panel:0:5:roofR->panel:0:5:interior:jump",
+      "panel:0:5:roofR->panel:0:5:roofL:walk"
     ]
   },
   {
     "page": 1,
     "name": "ABOUT",
-    "nodes": 6,
-    "edges": 13,
+    "nodes": 4,
+    "edges": 6,
     "byType": {
-      "jump": 9,
-      "walk": 4
+      "jump": 4,
+      "walk": 2
     },
     "nodeIds": [
       "panel:1:0:interior",
-      "panel:1:0:roofL",
-      "panel:1:0:roofR",
       "panel:1:1:interior",
       "panel:1:1:roofL",
       "panel:1:1:roofR"
     ],
     "edges2": [
-      "panel:1:0:roofL->panel:1:0:interior:jump",
-      "panel:1:0:roofL->panel:1:0:roofR:walk",
-      "panel:1:0:roofR->panel:1:0:roofL:walk",
-      "panel:1:0:roofR->panel:1:1:interior:jump",
-      "panel:1:0:roofR->panel:1:1:roofL:jump",
-      "panel:1:1:interior->panel:1:0:roofR:jump",
       "panel:1:1:interior->panel:1:1:roofL:jump",
       "panel:1:1:interior->panel:1:1:roofR:jump",
-      "panel:1:1:roofL->panel:1:0:roofR:jump",
       "panel:1:1:roofL->panel:1:1:interior:jump",
       "panel:1:1:roofL->panel:1:1:roofR:walk",
       "panel:1:1:roofR->panel:1:1:interior:jump",
@@ -202,30 +195,21 @@
   {
     "page": 3,
     "name": "SKILLS",
-    "nodes": 6,
-    "edges": 13,
+    "nodes": 4,
+    "edges": 6,
     "byType": {
-      "jump": 9,
-      "walk": 4
+      "jump": 4,
+      "walk": 2
     },
     "nodeIds": [
       "panel:3:0:interior",
-      "panel:3:0:roofL",
-      "panel:3:0:roofR",
       "panel:3:1:interior",
       "panel:3:1:roofL",
       "panel:3:1:roofR"
     ],
     "edges2": [
-      "panel:3:0:roofL->panel:3:0:interior:jump",
-      "panel:3:0:roofL->panel:3:0:roofR:walk",
-      "panel:3:0:roofR->panel:3:0:roofL:walk",
-      "panel:3:0:roofR->panel:3:1:interior:jump",
-      "panel:3:0:roofR->panel:3:1:roofL:jump",
-      "panel:3:1:interior->panel:3:0:roofR:jump",
       "panel:3:1:interior->panel:3:1:roofL:jump",
       "panel:3:1:interior->panel:3:1:roofR:jump",
-      "panel:3:1:roofL->panel:3:0:roofR:jump",
       "panel:3:1:roofL->panel:3:1:interior:jump",
       "panel:3:1:roofL->panel:3:1:roofR:walk",
       "panel:3:1:roofR->panel:3:1:interior:jump",

@@ -402,9 +402,14 @@ export function createLocomotion(deps: LocomotionDeps): Locomotion {
       if (!entity) return null
       const panel = cw.panels.find((p) => p.entity === entity)
       if (!panel) return null
-      // The grammar closes the spot set — no silent fallback (review finding).
-      const spot = parsed.spot === 'roof' ? panel.geom.spots.roof : panel.geom.spots.interior
-      return spot ? { ...spot } : null
+      // The grammar closes the spot set — no silent fallback (review finding); and
+      // a spot without a REAL platform under it is phantom geometry (deep-anchor
+      // panels have no standable roof): resolve to the panel's SUPPORTED spot.
+      const want = parsed.spot === 'roof' ? panel.geom.spots.roof : panel.geom.spots.interior
+      const other = parsed.spot === 'roof' ? panel.geom.spots.interior : panel.geom.spots.roof
+      if (spotSupported(want.x, want.y)) return { ...want }
+      if (spotSupported(other.x, other.y)) return { ...other }
+      return null
     }
     if (parsed.kind === 'panelSpot') {
       const panel = cw.panels.find((p) => p.entity === parsed.panel)
@@ -441,6 +446,15 @@ export function createLocomotion(deps: LocomotionDeps): Locomotion {
 
   function allSegs(): readonly SegmentRef[] {
     return world.collision().segments
+  }
+
+  /** A spot is standable only if a horizontal-ish segment actually supports it. */
+  function spotSupported(x: number, y: number): boolean {
+    return allSegs().some(({ seg }) => {
+      if (Math.abs(seg.y1 - seg.y2) > Math.abs(seg.x1 - seg.x2)) return false
+      const midY = (seg.y1 + seg.y2) / 2
+      return Math.abs(midY - y) <= GROUND_STEP_TOL && x >= Math.min(seg.x1, seg.x2) - 1 && x <= Math.max(seg.x1, seg.x2) + 1
+    })
   }
 
   // ── route planning ────────────────────────────────────────────────────────────
@@ -529,6 +543,29 @@ export function createLocomotion(deps: LocomotionDeps): Locomotion {
     const land = simulateArc({ x: t.x, y: t.y }, aim)
     if (!land) return false
     return Math.hypot(land.x - aim.x, land.y - aim.y) <= JUMP_LAND_TOL
+  }
+
+  /** Continuous support along a walk line: merge the horizontal-ish collision
+   * segments near lineY and require [x1,x2] coverage with gaps ≤ 16px (the
+   * traversal walk-edge rule, applied to the direct-walk shortcut). */
+  function lineSupported(x1: number, x2: number, lineY: number): boolean {
+    const lo = Math.min(x1, x2)
+    const hi = Math.max(x1, x2)
+    const spans: Array<[number, number]> = []
+    for (const { seg } of allSegs()) {
+      if (Math.abs(seg.y1 - seg.y2) > Math.abs(seg.x1 - seg.x2)) continue // wall-like
+      const y = (seg.y1 + seg.y2) / 2
+      if (Math.abs(y - lineY) > GROUND_STEP_TOL) continue
+      spans.push([Math.min(seg.x1, seg.x2), Math.max(seg.x1, seg.x2)])
+    }
+    spans.sort((a, b) => a[0] - b[0])
+    let covered = lo
+    for (const [a, b] of spans) {
+      if (a > covered + 16) return false
+      if (b > covered) covered = b
+      if (covered >= hi) return true
+    }
+    return covered >= hi
   }
 
   function planRoute(to: { x: number; y: number }, moveVerb: MovementVerb): Leg[] | null {
@@ -819,6 +856,36 @@ export function createLocomotion(deps: LocomotionDeps): Locomotion {
         legs = [{ mode: 'ground', target: to }]
         startLeg()
         return
+      }
+      // A same-line target whose sweep reaches the TARGET NEIGHBOURHOOD before
+      // hitting anything takes the direct ground leg — this is the corner-graze
+      // case (a goal at a floor edge spooks directGroundClear when the capsule
+      // half pokes past the corner), NOT a license to skip routing around real
+      // walls (the breach-hop tests own that semantic). Found when raised jump
+      // caps made a graph route "available" for a plain walk to a floor-edge
+      // goal and the route's node-planned jump leg failed from the actual spot.
+      {
+        const cap = deps.capsule()
+        const feetLine = cap.y1 + cap.r
+        if (Math.abs(to.y - feetLine) <= GROUND_STEP_TOL) {
+          const dx = to.x - t.x
+          // Three conditions make the direct walk definitive on one's own line:
+          // (a) no WALL-LIKE segment blocks the sweep (the support's parallel
+          //     contact reports t≈0 and must not count);
+          // (b) the line is CONTINUOUSLY SUPPORTED (the traversal walk-edge rule
+          //     — without it a cut wall plus a same-line target let the walk ride
+          //     a floorless gap, caught by the breach-hop tests);
+          // (c) the sweep reaches the target neighbourhood (the corner-graze case
+          //     this shortcut exists for).
+          const walls = allSegs().filter((sg) => Math.abs(sg.seg.x1 - sg.seg.x2) < Math.abs(sg.seg.y1 - sg.seg.y2))
+          const hit = sweptCapsuleVsSegments(cap, dx, 0, walls)
+          const clearDist = hit ? Math.abs(dx) * hit.t : Math.abs(dx)
+          if (clearDist >= Math.abs(dx) - cap.r - 6 && lineSupported(t.x, to.x, feetLine)) {
+            legs = [{ mode: 'ground', target: to }]
+            startLeg()
+            return
+          }
+        }
       }
       if (!world.isEnclosed(t.x, t.y)) {
         const route = planRoute(to, intent.verb)

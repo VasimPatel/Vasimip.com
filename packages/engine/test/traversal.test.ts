@@ -136,13 +136,20 @@ test('every page graph passes the sanity invariants', () => {
   }
 })
 
-test('page scoping: 5 page worlds, 3 nodes per panel, no foreign panels in a page graph', () => {
+test('page scoping: 5 page worlds, every panel standable, no foreign panels in a page graph', () => {
   expect(pageWorlds).toHaveLength(5)
   const perPagePanels = [6, 2, 3, 2, 2] // notebook.json panel counts
   pageWorlds.forEach((pw, i) => {
     const g = buildTraversalGraph(pw.world, dashGround)
     expect(new Set(g.nodes.map((n) => n.panel)).size).toBe(perPagePanels[i])
-    expect(g.nodes.length).toBe(perPagePanels[i] * 3)
+    // P9b: panels are PLATFORMS — shallow anchors expose interior+roofL+roofR on
+    // the roof line (3 nodes), deep anchors expose ONLY their interior (1 node);
+    // a node must never stand on phantom geometry.
+    for (const pn of pw.world.entities.filter((e) => e.components.surface)) {
+      const nodes = g.nodes.filter((n) => n.panel === pn.id)
+      expect(nodes.length).toBeGreaterThanOrEqual(1)
+      expect(nodes.length).toBeLessThanOrEqual(3)
+    }
     // every node belongs to THIS page (id carries the page index)
     for (const n of g.nodes) expect(n.panel.startsWith(`panel:${i}:`)).toBe(true)
   })

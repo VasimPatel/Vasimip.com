@@ -12,9 +12,11 @@ import { AudioEngine, type SfxKind } from './audio'
 
 import CoverRenderer from './CoverRenderer'
 import PageRenderer from './PageRenderer'
+import { EngineLayer } from './engine/EngineLayer'
+import { buildEngineDoc } from './engine/engineDoc'
 import { DEFAULT_DOC } from './doc/defaultDoc'
 import type { NotebookDoc, TravelConfig } from './doc/docTypes'
-import { BUILTIN_MODES } from './doc/docTypes'
+import { BUILTIN_MODES, SFX_KINDS } from './doc/docTypes'
 import { compileAction, resolveTravelConfig, whenPasses } from './doc/actions'
 import type { Cue, ActionCtx } from './doc/actions'
 import Dash from './Dash'
@@ -195,6 +197,14 @@ export default class Notebook extends React.Component<NotebookProps, State> {
         this.setState(st as State)
       })
     }
+    const legacyOnM = this._onM
+    this._onM = (e: MouseEvent) => {
+      legacyOnM(e)
+      const cam = this._cam
+      if (this.engineMode && cam && cam.sc) {
+        this.engineRef?.setLook((e.clientX - cam.tx) / cam.sc, (e.clientY - cam.ty) / cam.sc)
+      }
+    }
     window.addEventListener('mousemove', this._onM)
     this._onU = () => { if (this.state.dragging) this.drop(); this._maybeDrag = false }
     window.addEventListener('mouseup', this._onU)
@@ -369,9 +379,27 @@ export default class Notebook extends React.Component<NotebookProps, State> {
     }
   }
 
+  // ── ENGINE MODE (P9b) — ?engine=1 mounts the new engine's Dash; legacy is the
+  // untouched default until the 9c cutover. All engine hooks are guarded here.
+  private engineMode = typeof location !== 'undefined' && new URLSearchParams(location.search).has('engine')
+  private engineRef: EngineLayer | null = null
+
+  /** Engine sfx kinds → the AudioEngine vocabulary (fx:* approximated until 9c). */
+  private engineSfx(kind: string) {
+    const map: Record<string, SfxKind> = { 'fx:smoke': 'whoosh', 'fx:crack': 'crack', 'fx:shake': 'boom', 'fx:jitPage': 'scrib', 'fx:pageShove': 'whoosh', poof: 'whoosh', thud: 'knock' }
+    const k = (map[kind] ?? kind) as SfxKind
+    if ((SFX_KINDS as readonly string[]).includes(k)) this.sfx(k)
+  }
+
   travel(j: number) {
     const s = this.state
     const a = this.anch(s.page, j)
+    if (this.engineMode) {
+      // Camera focuses via state.panel exactly as legacy; the engine owns motion.
+      this.setState({ panel: j, dx: a.x, dy: a.y })
+      this.engineRef?.travelTo(j)
+      return
+    }
     const dxv = a.x - s.dx, dyv = a.y - s.dy
     const horiz = Math.abs(dxv), vert = Math.abs(dyv)
     const dist = Math.hypot(dxv, dyv)
@@ -721,6 +749,12 @@ export default class Notebook extends React.Component<NotebookProps, State> {
   }
 
   enterPage() {
+    if (this.engineMode) {
+      // The EngineLayer performs the entrance (its page prop changed); legacy
+      // page-entry STATE must still reset or nav wedges on busy (found live).
+      this.setState({ panel: 0, busy: false, dop: 0 })
+      return
+    }
     const a = this.anch(this.state.page, 0)
     this.setState({ panel: 0, pose: 'walk', face: 1, dx: -150, dy: a.y, dop: 1, dtrans: 'opacity .25s' })
     this.sfx('scrib')
@@ -772,6 +806,7 @@ export default class Notebook extends React.Component<NotebookProps, State> {
     if (s.busy || s.dragging || s.page === 0) return
     if (s.panel > 0) this.travel(s.panel - 1)
     else if (s.page === 1) this.flipTo(0)
+    else if (this.engineMode) this.flipTo(s.page - 1) // bomb/poof spectacle: 9c
     else if (Math.random() < .55) this.bombBack()
     else this.poofBack()
   }
@@ -855,6 +890,7 @@ export default class Notebook extends React.Component<NotebookProps, State> {
   poke() {
     const s = this.state
     if (this._dragged) { this._dragged = false; return }
+    if (this.engineMode) return // engine pokes come from the layer's own hitbox
     if (s.busy || s.dragging || s.poking || s.page === 0 || s.dop < 1) return
     const standing = s.pose === 'idle' || s.pose === 'fight' || s.pose === 'spray' || s.pose === 'think'
     if (!standing) return
@@ -909,6 +945,7 @@ export default class Notebook extends React.Component<NotebookProps, State> {
   }
 
   scheduleFidget() {
+    if (this.engineMode) return
     this._ft = setTimeout(() => {
       const s = this.state
       if (!s.busy && !s.dragging && !s.poking && s.dop === 1 && s.page > 0 && s.pose === 'idle') {
@@ -1073,6 +1110,21 @@ export default class Notebook extends React.Component<NotebookProps, State> {
             {v.smokeOn && <Smoke style={v.smokeStyle} />}
             {v.bombFlyOn && <Bomb style={v.bombFlyStyle} />}
 
+            {this.engineMode ? (
+              this.state.page > 0 && (
+                <div style={{ position: 'absolute', inset: 0, zIndex: 60, pointerEvents: 'none', visibility: this.state.busy ? 'hidden' : 'visible' }}>
+                  <EngineLayer
+                    ref={(r) => { this.engineRef = r }}
+                    doc={buildEngineDoc(this.doc)}
+                    page={Math.max(0, this.state.page - 1)}
+                    flags={this.state.flags}
+                    onFlag={(flag, value) => this.setState((st) => ({ flags: { ...st.flags, [flag]: value } }))}
+                    sfx={(kind) => this.engineSfx(kind)}
+                    onPoke={() => { this.ensureAC(); this.sfx('hop') }}
+                  />
+                </div>
+              )
+            ) : (
             <div
               onClick={v.onPoke}
               onMouseDown={v.onGrab}
@@ -1082,6 +1134,7 @@ export default class Notebook extends React.Component<NotebookProps, State> {
                 <Dash pose={v.pose} faceTf={v.dashFaceTf} headTilt={v.headTilt} lookXf={v.lookXf} lookY={v.lookY} eyeR={v.eyeR} />
               </div>
             </div>
+            )}
 
             {v.reactOn && <ReactBubble style={v.reactStyle} text={v.react ?? ''} />}
             {v.snarkOn && <PipSnark text={v.snark} />}
