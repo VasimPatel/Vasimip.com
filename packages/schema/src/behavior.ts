@@ -56,11 +56,23 @@ export type ParsedTarget =
   | { kind: 'entity'; entity: string }
   | { kind: 'nearestSurface' }
   | { kind: 'node'; node: string }
+  /** Contextual travel ref (P9 grammar EXTENSION, owner sign-off recorded in the
+   * 9a PR): resolved against the from/to panels a travel run binds at runtime —
+   * the v1 cue compiler's context, made data. */
+  | { kind: 'travel'; which: 'to' | 'from'; spot: string }
 
 /** Parse a TargetRef string into its typed shape, or null if the grammar is bad. */
 export function parseTargetRef(ref: string): ParsedTarget | null {
   if (typeof ref !== 'string' || ref.length === 0) return null
   if (ref === 'nearest:surface') return { kind: 'nearestSurface' }
+  if (ref.startsWith('travel:')) {
+    const rest = ref.slice('travel:'.length)
+    const hash = rest.indexOf('#')
+    const which = hash > 0 ? rest.slice(0, hash) : rest
+    const spot = hash > 0 ? rest.slice(hash + 1) : 'interior'
+    if ((which === 'to' || which === 'from') && spot.length > 0) return { kind: 'travel', which, spot }
+    return null
+  }
   if (ref.startsWith('entity:')) {
     const entity = ref.slice('entity:'.length)
     return entity.length > 0 ? { kind: 'entity', entity } : null
