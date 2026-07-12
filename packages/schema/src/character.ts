@@ -56,20 +56,38 @@ function checkPersonality(x: unknown, issues: Issues): void {
   }
 }
 
+/** Numeric caps must be POSITIVE and BOUNDED (P7a hardening): a zero flySpeed
+ * validates as "can fly" but never moves — a guaranteed runtime wedge; an absurd
+ * speed teleports past waypoints. The bound is generous (whole-page scale is ~1000px). */
+const CAP_MAX = 5000
+
 function checkLocomotion(x: unknown, issues: Issues): void {
   if (!isRecord(x)) {
     issues.push('locomotion: required object {modes, ...}')
     return
   }
+  let modes: string[] = []
   if (!isArr(x.modes) || x.modes.length === 0) {
     issues.push('locomotion.modes: required non-empty array')
   } else {
     x.modes.forEach((m, i) => {
       if (!isStr(m) || !LOCOMOTION_MODES.has(m)) issues.push(`locomotion.modes[${i}]: must be 'walk' | 'hop' | 'fly'`)
     })
+    modes = x.modes.filter(isStr)
   }
   for (const k of ['maxJumpHeight', 'maxJumpDistance', 'flySpeed'] as const) {
-    if (x[k] !== undefined && !isNum(x[k])) issues.push(`locomotion.${k}: must be a finite number when present`)
+    if (x[k] !== undefined && (!isNum(x[k]) || (x[k] as number) <= 0 || (x[k] as number) > CAP_MAX)) {
+      issues.push(`locomotion.${k}: must be a finite number in (0, ${CAP_MAX}] when present`)
+    }
+  }
+  // Mode ⇒ caps coherence: declaring a mode without the caps it runs on is a
+  // runtime wedge waiting to happen (the P7 solver would fall back to defaults the
+  // author never chose).
+  if (modes.includes('fly') && x.flySpeed === undefined) {
+    issues.push("locomotion.flySpeed: required when modes includes 'fly'")
+  }
+  if (modes.includes('hop') && (x.maxJumpHeight === undefined || x.maxJumpDistance === undefined)) {
+    issues.push("locomotion.maxJumpHeight/maxJumpDistance: required when modes includes 'hop'")
   }
 }
 
