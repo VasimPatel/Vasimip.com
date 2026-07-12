@@ -55,11 +55,11 @@ export function createAccessoryChain(
   // trailing stream direction comes from the pin leading the chain as the
   // character moves and from the flutter's slight upward bias at idle.
   const segments = opts.segments ?? 3
-  const segLen = opts.segmentLen ?? 11
-  const damping = opts.damping ?? 0.94
-  const gravityScale = opts.gravityScale ?? 0.12
-  const flutterAmp = opts.flutterAmp ?? 3.2
-  const flutterPeriod = opts.flutterPeriod ?? 120
+  const segLen = opts.segmentLen ?? 13.5
+  const damping = opts.damping ?? 0.88
+  const gravityScale = opts.gravityScale ?? 0.3
+  const flutterAmp = opts.flutterAmp ?? 2.6
+  const flutterPeriod = opts.flutterPeriod ?? 105
   const offsetX = opts.offsetX ?? -6
   const offsetY = opts.offsetY ?? -3
 
@@ -68,7 +68,7 @@ export function createAccessoryChain(
   }
 
   const bodyId = `accessory:${characterId}:${opts.anchorJoint}`
-  const REST_STIFF = 0.016
+  const REST_STIFF = 0.028
 
   // LAZY body creation on the first step(): particles are born already in the rest
   // shape around the REAL anchor position, so there is never a first-frame
@@ -82,7 +82,7 @@ export function createAccessoryChain(
     const particles = []
     const constraints = []
     for (let i = 0; i <= segments; i++) {
-      particles.push({ x: ax - facing * i * segLen * 0.9, y: ay + i * segLen * 0.3, pinned: i === 0 })
+      particles.push({ x: ax - facing * i * segLen * 0.9, y: ay + i * segLen * 0.35, pinned: i === 0 })
     }
     for (let i = 0; i < segments; i++) {
       constraints.push({ kind: 'distance' as const, a: i, b: i + 1, rest: segLen, stiffness: 1 })
@@ -96,7 +96,7 @@ export function createAccessoryChain(
         kind: 'spring' as const,
         a: i,
         ax: ax - facing * i * segLen * 0.9,
-        ay: ay + i * segLen * 0.3,
+        ay: ay + i * segLen * 0.35,
         stiffness: REST_STIFF,
       })
     }
@@ -130,7 +130,7 @@ export function createAccessoryChain(
         world.setSpringAnchor(
           springIds[i],
           ax - facing * k * segLen * 0.9,
-          ay + k * segLen * 0.3 + wave,
+          ay + k * segLen * 0.35 + wave,
         )
       }
     },

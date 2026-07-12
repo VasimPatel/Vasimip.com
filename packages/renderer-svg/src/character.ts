@@ -276,8 +276,8 @@ export function createCharacterRenderer(
     // Tapered ribbon: offset each point perpendicular to the local direction,
     // width easing from rootW to tipW; polygon = up-side then back down. Widths
     // read as the legacy cape's flag silhouette, not a string.
-    const rootW = 8.5
-    const tipW = 3.5
+    const rootW = 10.5
+    const tipW = 5
     const up: string[] = []
     const down: string[] = []
     for (let i = 0; i < pts.length; i++) {

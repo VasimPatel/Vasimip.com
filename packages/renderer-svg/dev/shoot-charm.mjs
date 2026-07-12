@@ -8,10 +8,12 @@ page.on('pageerror', e => errs.push(e.message))
 await page.goto('http://localhost:5197/charm.html', { waitUntil: 'networkidle2' })
 await new Promise(r => setTimeout(r, 2500))
 await page.screenshot({ path: `${SP}/charm-idle.png` })
-// stroll mid-stride
+// stroll mid-stride (rightward), then catch the RETURN leg (leftward walk)
 const btns = await page.$$('button')
 await btns[0].click(); await new Promise(r => setTimeout(r, 1600))
 await page.screenshot({ path: `${SP}/charm-stroll.png` })
+await new Promise(r => setTimeout(r, 3400))
+await page.screenshot({ path: `${SP}/charm-stroll-left.png` })
 // hop: catch mid-air then landing
 await btns[4].click(); await new Promise(r => setTimeout(r, 600))
 await btns[1].click(); await new Promise(r => setTimeout(r, 520))

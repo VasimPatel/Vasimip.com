@@ -164,7 +164,11 @@ export function createGait(rig: RigTemplate, character: CharacterDoc, opts: Gait
       ankleY = opts.floorY(ankleX) - lift * Math.sin(Math.PI * s)
     }
 
-    const local = solveChainToLocal(rig, chain, rootX, hipY, pelvisWorld, ankleX, ankleY, props)
+    // Walking knees bend ALONG the travel direction (+x knee when heading right):
+    // the rig's static bendHints splay the knees for the stand art and read as a
+    // backwards knee mid-stride (owner charm feedback).
+    const kneeBend: 1 | -1 = dir >= 0 ? 1 : -1
+    const local = solveChainToLocal(rig, chain, rootX, hipY, pelvisWorld, ankleX, ankleY, props, kneeBend)
     out[chain.jointIds[0]] = local.root
     out[chain.jointIds[1]] = local.mid
     // Foot bone kept at its baseline local (cosmetic on a flat floor).
