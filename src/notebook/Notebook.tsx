@@ -203,6 +203,7 @@ export default class Notebook extends React.Component<NotebookProps, State> {
       const cam = this._cam
       if (this.engineMode && cam && cam.sc) {
         this.engineRef?.setLook((e.clientX - cam.tx) / cam.sc, (e.clientY - cam.ty) / cam.sc)
+        this.engineRef?.notePointer(e.clientX, e.clientY)
       }
     }
     window.addEventListener('mousemove', this._onM)
@@ -217,13 +218,25 @@ export default class Notebook extends React.Component<NotebookProps, State> {
     // the FARTHEST panel on the current page (max |ax − dashCenterX|) so a Test is
     // a real traversal, not an in-place degenerate.
     ;(window as unknown as { __notebookRunAction?: (name: string) => void }).__notebookRunAction = (name: string) => {
-      if (this.state.busy || this.state.page <= 0) return
+      if (this.state.page <= 0) return
+      // Engine mode: the migrated behavior (`act:<name>`) runs in the engine —
+      // legacy state is hidden, so testing against it would test nothing visible.
+      if (this.engineMode) {
+        if (!this.engineRef?.busy()) this.engineRef?.testBehavior(`act:${name}`)
+        return
+      }
+      if (this.state.busy) return
       const t = this._testTarget()
       if (t) this.runCustomAction(name, t.j, t.dir)
     }
     ;(window as unknown as { __notebookRunBuiltin?: (mode: string) => void }).__notebookRunBuiltin = (mode: string) => {
-      if (this.state.busy || this.state.page <= 0) return
+      if (this.state.page <= 0) return
       if (!(BUILTIN_MODES as readonly string[]).includes(mode)) return
+      if (this.engineMode) {
+        if (!this.engineRef?.busy()) this.engineRef?.testBehavior(`builtin:${mode}`)
+        return
+      }
+      if (this.state.busy) return
       const t = this._testTarget()
       if (!t) return
       const { j, a, dir, dist } = t
@@ -240,7 +253,8 @@ export default class Notebook extends React.Component<NotebookProps, State> {
       else if (m === 'smash') this.smashTo(j, a, dir)
       else this.comboTo(j, a, dir)
     }
-    ;(window as unknown as { __notebookBusy?: () => boolean }).__notebookBusy = () => this.state.busy
+    ;(window as unknown as { __notebookBusy?: () => boolean }).__notebookBusy = () =>
+      this.engineMode ? this.state.busy || (this.engineRef?.busy() ?? false) : this.state.busy
   }
 
   /** Pick the farthest panel from Dash on the current page and pre-compute the
@@ -386,8 +400,9 @@ export default class Notebook extends React.Component<NotebookProps, State> {
   // explicitly retires it.
   private engineMode =
     typeof location === 'undefined' ||
-    (location.pathname !== '/legacy' && !new URLSearchParams(location.search).has('legacy'))
+    (!/(^|\/)legacy\/?$/.test(location.pathname) && !new URLSearchParams(location.search).has('legacy'))
   private engineRef: EngineLayer | null = null
+  private _backNavPending = false
 
   /** Engine sfx kinds → the AudioEngine vocabulary (fx:* approximated until 9c). */
   private engineSfx(kind: string) {
@@ -812,10 +827,17 @@ export default class Notebook extends React.Component<NotebookProps, State> {
     if (s.panel > 0) this.travel(s.panel - 1)
     else if (s.page === 1) this.flipTo(0)
     else if (this.engineMode) {
+      if (this._backNavPending) return
       const kind = Math.random() < 0.55 ? 'bomb' : 'poof'
+      const target = s.page - 1 // captured NOW (review: delayed done() re-read state)
       this.ensureAC()
-      if (this.engineRef) this.engineRef.backNav(kind, () => this.flipTo(this.state.page - 1))
-      else this.flipTo(s.page - 1)
+      if (this.engineRef) {
+        this._backNavPending = true
+        this.engineRef.backNav(kind, () => {
+          this._backNavPending = false
+          if (this.state.page === s.page) this.flipTo(target) // superseded nav wins
+        })
+      } else this.flipTo(target)
     }
     else if (Math.random() < .55) this.bombBack()
     else this.poofBack()

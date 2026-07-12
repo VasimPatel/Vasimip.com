@@ -28,11 +28,53 @@ if (box) {
   await new Promise(r => setTimeout(r, 900))
   await p.screenshot({ path: `${SP}/9c-dropped.png` })
 }
-// back-nav spectacle: go to page 3, then prev across the page boundary
+// STATIONARY CLICK must be a poke, not a drag (review blocker): press+release
+// with zero movement on the hitbox, expect a speech bubble (poke quip) and no thud.
+await new Promise(r => setTimeout(r, 1200))
+const hit = await p.evaluate(() => {
+  const el = document.querySelector('[data-dash-poke]')
+  if (!el) return null
+  const r = el.getBoundingClientRect()
+  return { x: r.x + r.width / 2, y: r.y + r.height / 2 }
+})
+let clickPoked = false
+if (hit) {
+  await p.mouse.move(hit.x, hit.y)
+  await p.mouse.down()
+  await p.mouse.up()
+  await new Promise(r => setTimeout(r, 700))
+  clickPoked = await p.evaluate(() =>
+    [...document.querySelectorAll('div')].some(d => d.textContent === 'Hey!' || (d.style.borderRadius && d.textContent.length > 2 && d.textContent.length < 40 && /[!?.]$/.test(d.textContent) && d.offsetHeight < 90 && d.offsetHeight > 10)))
+  await p.screenshot({ path: `${SP}/9c-click-poke.png` })
+}
+console.log('stationary click produced a bubble:', clickPoked)
+
+// DEV HOOKS route through the engine now: busy flips true while a builtin runs.
+const hooks = await p.evaluate(async () => {
+  const busy0 = window.__notebookBusy()
+  window.__notebookRunBuiltin('hop')
+  await new Promise(r => setTimeout(r, 300))
+  const busy1 = window.__notebookBusy()
+  await new Promise(r => setTimeout(r, 3500))
+  const busy2 = window.__notebookBusy()
+  return { busy0, busy1, busy2 }
+})
+console.log('engine dev hooks (busy before/during/after hop):', hooks)
+
+// back-nav spectacle: go to page 3, then SPAM prev — the guard must serialize
+// (exactly one page back per completed spectacle, no double flips).
 await p.evaluate(() => window.__notebookGoTo && window.__notebookGoTo(3))
 await new Promise(r => setTimeout(r, 2400))
 await p.keyboard.press('ArrowLeft')
+await new Promise(r => setTimeout(r, 120))
+await p.keyboard.press('ArrowLeft')
+await p.keyboard.press('ArrowLeft')
 await new Promise(r => setTimeout(r, 500))
 await p.screenshot({ path: `${SP}/9c-backnav.png` })
+await new Promise(r => setTimeout(r, 2600))
+const pageAfter = await p.evaluate(() => document.title + ' | hash:' + location.hash)
+const pg = await p.evaluate(() => (window.__notebookBusy ? window.__notebookBusy() : 'n/a'))
+await p.screenshot({ path: `${SP}/9c-backnav-settled.png` })
+console.log('after ArrowLeft spam:', pageAfter, 'busy:', pg)
 console.log('errors:', errs.length ? errs.slice(0, 4) : 'none')
 await b.close()

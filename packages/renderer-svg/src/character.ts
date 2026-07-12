@@ -332,13 +332,17 @@ export function createCharacterRenderer(
       const spin = extras?.spin ?? 0
       const hasScale = !!fl && (Math.abs(fl.sx - 1) > 0.004 || Math.abs(fl.sy - 1) > 0.004)
       if (hasScale || Math.abs(spin) > 0.01) {
-        // Spin pivots at the FIGURE CENTRE (mid-height above the ground point) so
-        // the roll reads as a tumble, not a ground-pinned sweep.
+        // Two independent pivots: squash scales about the GROUND point (feet stay
+        // planted — the documented flourish contract) while spin rotates about the
+        // figure centre so the roll reads as a tumble, not a ground-pinned sweep.
         const midY = groundY - 55
-        const parts = [`translate(${rootX}px, ${midY}px)`]
-        if (Math.abs(spin) > 0.01) parts.push(`rotate(${spin}rad)`)
-        if (hasScale && fl) parts.push(`scale(${fl.sx}, ${fl.sy})`)
-        parts.push(`translate(${-rootX}px, ${-midY}px)`)
+        const parts: string[] = []
+        if (hasScale && fl) {
+          parts.push(`translate(${rootX}px, ${groundY}px)`, `scale(${fl.sx}, ${fl.sy})`, `translate(${-rootX}px, ${-groundY}px)`)
+        }
+        if (Math.abs(spin) > 0.01) {
+          parts.push(`translate(${rootX}px, ${midY}px)`, `rotate(${spin}rad)`, `translate(${-rootX}px, ${-midY}px)`)
+        }
         group.style.transform = parts.join(' ')
       } else if (group.style.transform) {
         group.style.transform = ''
