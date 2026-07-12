@@ -41,13 +41,17 @@ const BASE_BOB = 4 // vertical hip bob (px)
 const BASE_ARM_SWING = 0.32 // rad
 const DEFAULT_HIP_HEIGHT = 30 // hip above floor at rest (thigh21+shin16=37 max)
 
-/** stand.json — the default standing baseline for non-leg joints. */
+/** The walking baseline. Legs/torso/head come from stand.json, but the ARMS HANG —
+ * the stand pose's hands-on-hips read as stiff mid-stride (owner charm feedback).
+ * Local angles: pelvis world ≈ −1.49, so upperArm local ≈ 3.0–3.1 points the arm
+ * down; forearms carry a slight elbow bend, L/R deliberately a touch asymmetric
+ * (hand-drawn, not mirrored). */
 const DEFAULT_BASE: Pose = {
   id: '__gait_base',
   root: { x: 0, y: 16, rot: 0 },
   angles: {
     pelvis: -1.490966, neck: -0.07983, head: 0.141897,
-    upperArmR: 1.980924, foreArmR: 1.621259, upperArmL: -2.359253, foreArmL: -1.14047,
+    upperArmR: 3.02, foreArmR: 0.18, upperArmL: 3.14, foreArmL: 0.12,
     thighR: 2.408916, shinR: 0.535738, footR: -1.273834,
     thighL: -2.672873, shinL: -0.424194, footL: 1.249046,
   },
@@ -113,8 +117,11 @@ export function createGait(rig: RigTemplate, character: CharacterDoc, opts: Gait
 
   // Legs branch from the pelvis ORIGIN, and pelvis is the root joint, so the hip is
   // the root point and the thigh's parent world angle is the pelvis world angle.
+  // The walk lean tilts the pelvis per tick, so the WORLD angle the leg IK converts
+  // through must be the LEANED one — a stale angle here reads as foot slide.
   const pelvisLocal = base.angles.pelvis ?? 0
-  const pelvisWorld = rootRot + pelvisLocal
+  const lean = 0.07 * speedNorm
+  let pelvisWorld = rootRot + pelvisLocal
 
   const legR = rig.chains.find((c) => c.id === 'legR')
   const legL = rig.chains.find((c) => c.id === 'legL')
@@ -178,6 +185,12 @@ export function createGait(rig: RigTemplate, character: CharacterDoc, opts: Gait
 
       const angles: Record<string, number> = { ...base.angles }
 
+      // Lean into the direction of travel BEFORE the legs solve (the IK's
+      // world→local conversion reads pelvisWorld).
+      const pelvisLean = pelvisLocal + lean * dir
+      pelvisWorld = rootRot + pelvisLean
+      angles.pelvis = pelvisLean
+
       const planted: PlantedFoot[] = []
       const pr = solveLeg('legR', 'footR', 0, rootY, angles)
       const pl = solveLeg('legL', 'footL', 0.5, rootY, angles)
@@ -191,6 +204,10 @@ export function createGait(rig: RigTemplate, character: CharacterDoc, opts: Gait
       const wobble = sloppiness * 0.08 * Math.sin(TWO_PI * PHI * phase)
       angles.upperArmR = (base.angles.upperArmR ?? 0) - armSwing * sw * dir
       angles.upperArmL = (base.angles.upperArmL ?? 0) + (ampL * sw + wobble) * dir
+      // Forearms trail the upper-arm swing (bent elbows pump slightly; the verlet
+      // secondary adds true follow-through on top of this in the full runtime).
+      angles.foreArmR = (base.angles.foreArmR ?? 0) - 0.45 * armSwing * sw * dir
+      angles.foreArmL = (base.angles.foreArmL ?? 0) + 0.45 * (ampL * sw + wobble) * dir
 
       return { pose: { angles, root: { x: rootX, y: rootY, rot: rootRot } }, planted }
     },

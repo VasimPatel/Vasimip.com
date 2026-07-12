@@ -1,0 +1,27 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Dash Engine v2 — charm checkpoint</title>
+    <style>
+      body { margin: 0; background: #efeadf; font-family: -apple-system, "Segoe UI", sans-serif; }
+      #app { max-width: 1180px; margin: 0 auto; padding: 20px; }
+      h1 { font-size: 22px; margin: 6px 0 2px; }
+      .sub { color: #666; font-size: 13px; margin-bottom: 14px; }
+      .row { display: flex; gap: 18px; align-items: stretch; }
+      .panel { background: #fffdf6; border: 2.5px solid #1a1a1a; border-radius: 6px; box-shadow: 4px 4px 0 rgba(26,26,26,.18); padding: 10px 12px; }
+      .panel h2 { font-size: 13px; letter-spacing: .12em; margin: 0 0 6px; }
+      .legacy { width: 320px; }
+      .engine { flex: 1; }
+      .btns { margin-top: 8px; display: flex; gap: 8px; flex-wrap: wrap; }
+      button { font: inherit; font-size: 13px; padding: 5px 12px; border: 2px solid #1a1a1a; border-radius: 5px; background: #fffdf6; cursor: pointer; box-shadow: 2px 2px 0 rgba(26,26,26,.25); }
+      button:active { transform: translate(1px,1px); box-shadow: 1px 1px 0 rgba(26,26,26,.25); }
+      svg { display: block; }
+    </style>
+  </head>
+  <body>
+    <div id="app"></div>
+    <script type="module" src="./charm.tsx"></script>
+  </body>
+</html>

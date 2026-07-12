@@ -1,8 +1,14 @@
 // L2 procedural controllers — always-on additive contributors + the eye aux
 // channel. Re-exported from @dash/engine.
 
-export type { FaceAux, FaceFn } from './face'
-export { NEUTRAL_FACE } from './face'
+export type { FaceAux, FaceFn, BrowState, MouthState } from './face'
+export { NEUTRAL_FACE, RESTING_FACE } from './face'
+
+export { createExpression } from './expression'
+export type { ExpressionController, ExpressionState } from './expression'
+
+export { createSquashFlourish } from './squash'
+export type { SquashFlourish, FlourishKind } from './squash'
 
 export type { Controller } from './breathing'
 export { breathing } from './breathing'
