@@ -16,7 +16,6 @@
 // rides on `meta`, which the engine never reads.
 
 import type { EntityDoc, WorldDocV2 } from '@dash/schema'
-import { panelEdges } from './surfaces'
 
 export interface NotebookPanelInput {
   x: number
@@ -44,12 +43,27 @@ export function worldFromNotebook(pages: readonly NotebookPageInput[], opts?: { 
   return pages.map((page, pi) => {
     const entities: EntityDoc[] = page.panels.map((pn, j) => {
       const box = { x: pn.x, y: pn.y, w: pn.w, h: pn.h }
+      // NOTEBOOK SEMANTICS (P9b finding): panel borders are INK, not cages — the
+      // legacy Dash hops INTO panels and stands ON them; nothing ever collides
+      // with a border. Panels are PLATFORMS: the roof line is standable, and a
+      // deep anchor adds its interior stand line. Full panelEdges boxes remain
+      // for AUTHORED worlds (the Wall Test cell builds its own walls explicitly).
+      // Shallow anchor (Dash stands ON the panel): the roof line is the platform.
+      // Deep anchor (Dash lives INSIDE it, like the legacy About/Skills panels):
+      // the INTERIOR line is the only platform — a solid roof above it would make
+      // the interior ballistically unreachable (you cannot land under a ceiling),
+      // which the legacy never modelled: he vaults in through the frame.
+      const iy = box.y + pn.anchor.dy
+      const segments =
+        pn.anchor.dy > 8
+          ? [{ x1: box.x, y1: iy, x2: box.x + box.w, y2: iy }]
+          : [{ x1: box.x, y1: box.y, x2: box.x + box.w, y2: box.y }]
       return {
         id: `panel:${pi}:${j}`,
         components: {
           transform: { x: pn.x, y: pn.y },
           surface: { box, anchor: { dx: pn.anchor.dx, dy: pn.anchor.dy } },
-          collidable: { shape: 'segments' as const, segments: panelEdges(box) },
+          collidable: { shape: 'segments' as const, segments },
         },
         // Render-layer payload the engine ignores; `rotate` recorded but unused by 6a.
         meta: { page: page.name, pageIndex: pi, panelIndex: j, rotate: pn.rotate ?? 0, boxes: pn.boxes, sketch: pn.sketch, arrival: pn.arrival },

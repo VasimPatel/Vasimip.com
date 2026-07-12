@@ -16,7 +16,13 @@ import {
   createCharacterRuntime,
   panelEdges,
 } from '../src/index'
-import { rig, character, clips, poses, names, notebook, STEP } from './harness'
+import { rig, character as contentCharacter, clips, poses, names, notebook, STEP } from './harness'
+
+// These fixtures are calibrated to specific jump-arc geometry — PIN the caps so
+// content tuning (Dash's caps were raised for the real site in P9b) can never
+// silently re-shape the scenarios. Tests own their physics.
+const PINNED_CAPS = { modes: contentCharacter.locomotion.modes, maxJumpHeight: 120, maxJumpDistance: 180, flySpeed: contentCharacter.locomotion.flySpeed }
+const character = { ...contentCharacter, locomotion: PINNED_CAPS }
 
 // ── 1. REAL INTRO page: a cross-panel moveTo routes multi-leg (walk + hop) ─────────
 // Dash walks panel 0's roof end-to-end, then HOPS across the gutter onto panel 1 —
@@ -72,26 +78,35 @@ test('INTRO page: a cross-panel moveTo routes multi-leg (walk + hop) to arrival'
 })
 
 // ── 1b. Ground-unreachable target: honest blocked, never a fantasy fly/jump ───────
-// Panel 2 is tucked UNDER panel 0's overhang: the 6a graph offers jump edges to it,
-// but no ballistic arc can get there (arc pruning removes them all) — so the moveTo
-// falls back to the direct ground leg and BLOCKS. It must never silently ride a fly
-// edge or execute an inexecutable jump.
-test('INTRO page: a ground-unreachable target blocks instead of riding fantasy edges', () => {
-  const intro = worldFromNotebook(notebook.pages)[0].world
+// AUTHORED fixture (the notebook world became wall-less platforms in P9b, so this
+// mechanic now lives on an explicit geometry): a low target floor sits directly
+// under a WIDE SOLID SHELF. Adopting the low line means sweeping vertically through
+// the shelf → blocked; and no jump/hop route exists (the shelf overhangs the whole
+// lane). The moveTo must block loudly — never ride a fantasy edge.
+test('a ground-unreachable target blocks instead of riding fantasy edges', () => {
+  const SHELF = { x: 0, y: 200, w: 400, h: 40 }
+  const LOW = { x: 60, y: 480, w: 200, h: 40 }
+  const mk = (id: string, box: { x: number; y: number; w: number; h: number }) => ({
+    id,
+    components: {
+      transform: { x: box.x, y: box.y },
+      surface: { box, anchor: { dx: box.w / 2, dy: 0 } },
+      collidable: { shape: 'segments' as const, segments: panelEdges(box) },
+    },
+  })
+  const world: WorldDocV2 = { schemaVersion: 2, seed: 1, entities: [mk('shelf', SHELF), mk('low', LOW),
+    { id: 'goal', components: { transform: { x: 160, y: 480 } } } as never] }
   const ctx = createContext({ seed: 7 })
   const verlet = createVerletWorld()
-  const mw = createMutableWorld(intro, { character, events: ctx.events, stepMs: STEP })
-  const g = mw.traversal()
-  const startN = g.nodes.find((n) => n.id === 'panel:0:0:roofR')!
-
+  const mw = createMutableWorld(world, { character, events: ctx.events, stepMs: STEP })
   const rt = createCharacterRuntime({
     rig, character, world: mw, verlet, rng: ctx.rng, events: ctx.events, clips, poses, names,
-    restPose: poses.stand, initialTransform: { x: startN.x, y: startN.y, rot: 0, facing: 1 },
+    restPose: poses.stand, initialTransform: { x: 160, y: 160, rot: 0, facing: 1 },
   })
   const c = rt.capsule()
-  rt.transform.y += startN.y - (c.y1 + c.r)
+  rt.transform.y += 200 - (c.y1 + c.r) // standing ON the shelf, goal directly below
 
-  rt.runBehavior({ schemaVersion: 2, id: 'p', steps: [{ verb: 'moveTo', target: 'node:panel:0:2:roofL' }] })
+  rt.runBehavior({ schemaVersion: 2, id: 'p', steps: [{ verb: 'moveTo', target: 'entity:goal' }] })
   for (let i = 0; i < 6000; i++) {
     ctx.clock.advance()
     rt.tick()
@@ -100,11 +115,11 @@ test('INTRO page: a ground-unreachable target blocks instead of riding fantasy e
     if (!rt.behavior.running()) break
   }
   const tr = ctx.events.trace()
+  console.log(`[pathing/sealed] legs=${JSON.stringify(tr.filter((e) => e.type === 'path:leg').map((e) => (e.payload as { edgeType?: string }).edgeType))} status=${rt.locomotion.status}`)
   expect(tr.filter((e) => e.type === 'intent:blocked').length).toBe(1)
   expect(rt.locomotion.status).toBe('blocked')
   expect(rt.behavior.status).toBe('halted')
 })
-
 // ── synthetic reroute fixture ──────────────────────────────────────────────────────
 // P is a tall 4-wall DAMAGEABLE panel. Q sits DEEP INSIDE P (its roof 180px below
 // P's roof — no ballistic arc can enter over the top: the rise exceeds the jump

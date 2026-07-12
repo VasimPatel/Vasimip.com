@@ -38,8 +38,8 @@
       "hop",
       "fly"
     ],
-    "maxJumpHeight": 120,
-    "maxJumpDistance": 180,
+    "maxJumpHeight": 260,
+    "maxJumpDistance": 420,
     "flySpeed": 220
   },
   "accessoryPoints": [

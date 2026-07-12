@@ -3,10 +3,10 @@
     "page": 0,
     "name": "INTRO",
     "nodes": 18,
-    "edges": 96,
+    "edges": 98,
     "byType": {
       "jump": 74,
-      "walk": 10,
+      "walk": 12,
       "hop": 12
     },
     "nodeIds": [
@@ -121,11 +121,13 @@
       "panel:0:5:roofL->panel:0:3:roofR:hop",
       "panel:0:5:roofL->panel:0:4:roofL:jump",
       "panel:0:5:roofL->panel:0:5:interior:jump",
+      "panel:0:5:roofL->panel:0:5:roofR:walk",
       "panel:0:5:roofR->panel:0:3:roofR:jump",
       "panel:0:5:roofR->panel:0:4:interior:jump",
       "panel:0:5:roofR->panel:0:4:roofL:jump",
       "panel:0:5:roofR->panel:0:4:roofR:jump",
-      "panel:0:5:roofR->panel:0:5:interior:jump"
+      "panel:0:5:roofR->panel:0:5:interior:jump",
+      "panel:0:5:roofR->panel:0:5:roofL:walk"
     ]
   },
   {
