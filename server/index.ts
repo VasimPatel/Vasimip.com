@@ -17,6 +17,7 @@ import { seed } from './db/seed'
 import { auth } from './auth'
 import notebook from './routes/notebook'
 import invites from './routes/invites'
+import engine from './routes/engine'
 
 const PORT = Number(process.env.PORT) || 8787
 const DIST_DIR = './dist'
@@ -63,6 +64,7 @@ app.get('/api/health', (c) => c.json({ ok: true }))
 app.on(['GET', 'POST'], '/api/auth/*', (c) => auth.handler(c.req.raw))
 app.route('/api', notebook)
 app.route('/api', invites)
+app.route('/api', engine)
 
 // Static assets, then an SPA fallback for anything else that isn't /api/* and
 // isn't a real file on disk (so client routes like /admin resolve to index.html).

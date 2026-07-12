@@ -13,6 +13,25 @@ import { notebookRevisions, notebookCurrent } from '../db/schema'
 import { tryValidateDoc } from '../../src/notebook/doc/validate'
 import { requireOwner, type OwnerEnv } from '../middleware'
 
+// ── schemaVersion dispatch (P8, tightened by review) ─────────────────────────────
+// V1-FIRST: any doc carrying the v1 discriminator (`version: 1` — required by the
+// legacy validator) routes to tryValidateDoc EXACTLY as before, even with a stray
+// `schemaVersion` field — every previously-accepted v1 doc keeps byte-identical
+// behavior. Only docs WITHOUT the v1 discriminator are considered v2.
+//
+// V2 SAVES ARE REJECTED until the P9 migration: the notebook_current pointer feeds
+// the PUBLIC GET and the admin's v1 editor, so ANY v2 artifact stored there (world
+// or otherwise) would break the live site — and restore could reintroduce it. The
+// v2 validate/dry-run capability P10's editors need is served by the owner-gated
+// POST /api/validate + /api/simulate (server/routes/engine.ts). P9 owns the cutover
+// and will replace this rejection with the migration path.
+function isLegacyV1(doc: unknown): boolean {
+  return typeof doc === 'object' && doc !== null && (doc as { version?: unknown }).version === 1
+}
+function isSchemaV2(doc: unknown): boolean {
+  return typeof doc === 'object' && doc !== null && (doc as { schemaVersion?: unknown }).schemaVersion === 2
+}
+
 const notebook = new Hono<OwnerEnv>()
 
 // Thrown inside a save/restore transaction when the atomic compare-and-swap on
@@ -57,8 +76,21 @@ notebook.put('/notebook', requireOwner, async (c) => {
     return c.json({ errors: ['body must be { doc, baseRevisionId, note? }'] }, 400)
   }
 
+  // V1-FIRST dispatch, then the v2 gate — see the header comment above. Everything
+  // that is not explicitly v2 keeps the legacy validator EXACTLY as-is.
+  if (!isLegacyV1(body.doc) && isSchemaV2(body.doc)) {
+    return c.json(
+      {
+        errors: [
+          'v2 docs cannot be saved as the notebook yet — v2 content storage lands with the P9 migration. Use POST /api/validate and POST /api/simulate to validate/dry-run v2 content.',
+        ],
+      },
+      422,
+    )
+  }
   const result = tryValidateDoc(body.doc)
   if (!result.ok) return c.json({ errors: result.errors }, 400)
+  const docToStore: unknown = result.doc
 
   const note = typeof body.note === 'string' ? body.note : null
   const baseRevisionId = body.baseRevisionId
@@ -67,7 +99,7 @@ notebook.put('/notebook', requireOwner, async (c) => {
     const revisionId = await db.transaction(async (tx) => {
       const [revision] = await tx
         .insert(notebookRevisions)
-        .values({ doc: result.doc, note, createdBy: c.get('userEmail') ?? 'owner' })
+        .values({ doc: docToStore, note, createdBy: c.get('userEmail') ?? 'owner' })
         .returning({ id: notebookRevisions.id })
       // Atomic compare-and-swap: only advance the pointer if it still points at
       // the revision the caller based their edit on. 0 rows → a concurrent save
