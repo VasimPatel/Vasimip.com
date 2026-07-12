@@ -1,0 +1,23 @@
+{
+  "id": "sneeze",
+  "angles": {
+    "pelvis": -1.15,
+    "neck": 0.45,
+    "head": 0.35,
+    "upperArmR": 1.45,
+    "foreArmR": -2.5,
+    "upperArmL": 2.35,
+    "foreArmL": -1.05,
+    "thighR": 2.55,
+    "shinR": 0.55,
+    "footR": -1.4,
+    "thighL": -2.8,
+    "shinL": -0.35,
+    "footL": 1.35
+  },
+  "root": {
+    "x": -2,
+    "y": 16,
+    "rot": 0
+  }
+}

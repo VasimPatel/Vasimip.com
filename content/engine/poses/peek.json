@@ -1,0 +1,23 @@
+{
+  "id": "peek",
+  "angles": {
+    "pelvis": -1.385448,
+    "neck": 0.136403,
+    "head": 0,
+    "upperArmR": 0.38599,
+    "foreArmR": -0.713235,
+    "upperArmL": -2.361689,
+    "foreArmL": -1.553254,
+    "thighR": 2.028949,
+    "shinR": 0.827627,
+    "footR": -1.291274,
+    "thighL": -2.795217,
+    "shinL": -0.414615,
+    "footL": 1.256292
+  },
+  "root": {
+    "x": -4,
+    "y": 16,
+    "rot": 0
+  }
+}

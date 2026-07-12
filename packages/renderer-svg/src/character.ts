@@ -210,6 +210,13 @@ export function createCharacterRenderer(
     mouthEl.setAttribute('stroke-linecap', 'round')
     faceGroup.appendChild(mouthEl)
     group.appendChild(faceGroup)
+
+    // PAINT ORDER (P2 convention, regressed by the charm rewrite and caught by the
+    // dangle/hang/swing drafts): the head circle sits BEHIND the limb chains so
+    // raised arms paint over it — but the FACE stays on top of everything so eyes
+    // and brows never get crossed out by a limb.
+    const firstChain = chains[0]?.path
+    if (firstChain) group.insertBefore(headEl, firstChain)
   }
 
   svgRoot.appendChild(group)

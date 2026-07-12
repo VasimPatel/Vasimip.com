@@ -121,7 +121,10 @@ export interface CharacterState {
 
 export interface CharacterRuntime {
   tick(): void
-  runBehavior(doc: BehaviorDoc): void
+  /** Run a behavior. `opts.travel` binds the from/to panels the doc's travel:*
+   * refs resolve against — applied AFTER the run's locomotion reset, so the
+   * binding is atomic with the run (a reset clears any previous binding). */
+  runBehavior(doc: BehaviorDoc, opts?: { travel?: { from?: string; to?: string } }): void
   getState(): CharacterState
   setState(s: CharacterState): void
   readonly transform: CharacterTransform
@@ -139,6 +142,8 @@ export interface CharacterRuntime {
   speech(): Speech | null
   /** This tick's squash/stretch scales (charm) — renderer group transform. */
   flourish(): { sx: number; sy: number }
+  /** Bind/unbind the from/to panels travel:* refs resolve against (P9 travel runs). */
+  setTravelContext(ctx: { from?: string; to?: string } | null): void
   /** Accessory ribbons (charm; e.g. the bandana) — renderer draws points(). */
   readonly accessories: readonly AccessoryChain[]
   /** Monotonic per-run id (the watchdog's per-run latch key). */
@@ -371,8 +376,9 @@ export function createCharacterRuntime(opts: CharacterRuntimeOptions): Character
     watchdog.tick()
   }
 
-  function runBehavior(doc: BehaviorDoc): void {
-    behavior.run(doc)
+  function runBehavior(doc: BehaviorDoc, opts?: { travel?: { from?: string; to?: string } }): void {
+    behavior.run(doc) // resets locomotion (incl. any stale travel binding)
+    locomotion.setTravelContext(opts?.travel ?? null)
   }
 
   return {
@@ -421,6 +427,7 @@ export function createCharacterRuntime(opts: CharacterRuntimeOptions): Character
     running: () => behavior.running(),
     speech: () => behavior.speech(),
     flourish: () => lastFlourish,
+    setTravelContext: (ctx) => locomotion.setTravelContext(ctx),
     accessories,
     runId: () => behavior.runId(),
     budgetMs: () => behavior.budgetMs(),

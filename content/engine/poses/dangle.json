@@ -1,0 +1,23 @@
+{
+  "id": "dangle",
+  "angles": {
+    "pelvis": -1.54,
+    "neck": -0.05,
+    "head": 0.1,
+    "thighR": 2.95,
+    "shinR": 0.15,
+    "footR": -0.7,
+    "thighL": -3.05,
+    "shinL": -0.1,
+    "footL": 0.75,
+    "upperArmR": 0.5,
+    "foreArmR": -0.15,
+    "upperArmL": -0.5,
+    "foreArmL": 0.15
+  },
+  "root": {
+    "x": -2,
+    "y": 16,
+    "rot": 0
+  }
+}

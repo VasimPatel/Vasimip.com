@@ -1,0 +1,23 @@
+{
+  "id": "hang",
+  "angles": {
+    "pelvis": -1.5,
+    "neck": 0.009478,
+    "head": 0,
+    "upperArmR": 0.62,
+    "foreArmR": -0.2,
+    "upperArmL": -0.62,
+    "foreArmL": 0.2,
+    "thighR": 2.6,
+    "shinR": 0.7,
+    "footR": -1.1,
+    "thighL": -2.75,
+    "shinL": -0.6,
+    "footL": 1.05
+  },
+  "root": {
+    "x": -2,
+    "y": 14,
+    "rot": 0
+  }
+}

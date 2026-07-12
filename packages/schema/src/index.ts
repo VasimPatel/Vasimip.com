@@ -87,3 +87,8 @@ export type {
   CueVerb,
   GateExpr,
 } from './behavior'
+
+export { tryValidateNotebookV2 } from './notebook-v2'
+export type { NotebookDocV2, PageV2, PanelV2 } from './notebook-v2'
+export { migrateNotebookV1 } from './migrations/v1-notebook'
+export type { MigrationBase, MigrationReport } from './migrations/v1-notebook'

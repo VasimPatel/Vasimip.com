@@ -1,0 +1,32 @@
+{
+  "schemaVersion": 2,
+  "id": "builtin:combo",
+  "steps": [
+    {
+      "verb": "strikePose",
+      "ref": "punch",
+      "holdMs": 260
+    },
+    {
+      "verb": "jumpTo",
+      "target": "travel:to#interior"
+    }
+  ],
+  "cues": [
+    {
+      "at": "onLaunch",
+      "do": {
+        "verb": "strikePose",
+        "ref": "jump-tuck",
+        "holdMs": 350
+      }
+    },
+    {
+      "at": "onLand",
+      "do": {
+        "verb": "sfx",
+        "kind": "hop"
+      }
+    }
+  ]
+}

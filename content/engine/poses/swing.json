@@ -1,0 +1,23 @@
+{
+  "id": "swing",
+  "angles": {
+    "pelvis": -1.28,
+    "neck": -0.15,
+    "head": 0,
+    "upperArmR": 0.55,
+    "foreArmR": -0.1,
+    "upperArmL": -0.4,
+    "foreArmL": 0.1,
+    "thighR": 2.25,
+    "shinR": 0.75,
+    "footR": -1.2,
+    "thighL": -2.5,
+    "shinL": -0.9,
+    "footL": 1.1
+  },
+  "root": {
+    "x": -2,
+    "y": 16,
+    "rot": 0
+  }
+}

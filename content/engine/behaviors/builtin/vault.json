@@ -1,0 +1,34 @@
+{
+  "schemaVersion": 2,
+  "id": "builtin:vault",
+  "steps": [
+    {
+      "verb": "jumpTo",
+      "target": "travel:to#interior"
+    }
+  ],
+  "cues": [
+    {
+      "at": "onLaunch",
+      "do": {
+        "verb": "strikePose",
+        "ref": "vault",
+        "holdMs": 400
+      }
+    },
+    {
+      "at": "onLaunch",
+      "do": {
+        "verb": "sfx",
+        "kind": "whoosh"
+      }
+    },
+    {
+      "at": "onLand",
+      "do": {
+        "verb": "sfx",
+        "kind": "thud"
+      }
+    }
+  ]
+}

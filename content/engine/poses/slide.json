@@ -1,0 +1,23 @@
+{
+  "id": "slide",
+  "angles": {
+    "pelvis": -1.446441,
+    "neck": 0.120624,
+    "head": 0,
+    "upperArmR": 0.956484,
+    "foreArmR": 0.095166,
+    "upperArmL": -2.283154,
+    "foreArmL": -0.716542,
+    "thighR": 1.933341,
+    "shinR": -0.165149,
+    "footR": -0.643501,
+    "thighL": -2.480549,
+    "shinL": -1.745469,
+    "footL": -0.511057
+  },
+  "root": {
+    "x": -1,
+    "y": 34,
+    "rot": 0
+  }
+}

@@ -1,0 +1,23 @@
+{
+  "id": "rope",
+  "angles": {
+    "pelvis": -1.508378,
+    "neck": 0.079478,
+    "head": 0,
+    "upperArmR": 1.325267,
+    "foreArmR": 0,
+    "upperArmL": -1.486137,
+    "foreArmL": 0,
+    "thighR": 2.538754,
+    "shinR": 0.407868,
+    "footR": -1.240849,
+    "thighL": -3.093354,
+    "shinL": -0.048238,
+    "footL": -1.43582
+  },
+  "root": {
+    "x": -2,
+    "y": 16,
+    "rot": 0
+  }
+}

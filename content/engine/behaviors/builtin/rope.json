@@ -1,0 +1,24 @@
+{
+  "schemaVersion": 2,
+  "id": "builtin:rope",
+  "steps": [
+    {
+      "verb": "strikePose",
+      "ref": "rope",
+      "holdMs": 350
+    },
+    {
+      "verb": "moveTo",
+      "target": "travel:to#interior"
+    }
+  ],
+  "cues": [
+    {
+      "at": "onArrive",
+      "do": {
+        "verb": "sfx",
+        "kind": "whoosh"
+      }
+    }
+  ]
+}

@@ -1,0 +1,23 @@
+{
+  "id": "vault",
+  "angles": {
+    "pelvis": -1.49,
+    "neck": -0.2,
+    "head": 0,
+    "upperArmR": 1.35,
+    "foreArmR": 0.2,
+    "upperArmL": 1.15,
+    "foreArmL": 0.3,
+    "thighR": -2.15,
+    "shinR": -0.55,
+    "footR": 1.2,
+    "thighL": -1.85,
+    "shinL": -0.45,
+    "footL": 1.1
+  },
+  "root": {
+    "x": -2,
+    "y": 10,
+    "rot": 1.35
+  }
+}

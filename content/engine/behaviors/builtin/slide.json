@@ -1,0 +1,24 @@
+{
+  "schemaVersion": 2,
+  "id": "builtin:slide",
+  "steps": [
+    {
+      "verb": "strikePose",
+      "ref": "slide",
+      "holdMs": 300
+    },
+    {
+      "verb": "moveTo",
+      "target": "travel:to#interior"
+    }
+  ],
+  "cues": [
+    {
+      "at": "onArrive",
+      "do": {
+        "verb": "sfx",
+        "kind": "whoosh"
+      }
+    }
+  ]
+}
