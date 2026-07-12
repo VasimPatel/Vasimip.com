@@ -29,9 +29,11 @@ import {
 } from '../../../packages/engine/src/index'
 import { evalGate, type BehaviorDoc, type GateExpr } from '../../../packages/schema/src/index'
 import { createCharacterRenderer, type CharacterRenderer } from '../../../packages/renderer-svg/src/index'
-import { docV2, pageWorlds } from './engineDoc'
+import type { EngineDoc } from './engineDoc'
 
 export interface EngineLayerProps {
+  /** The engine doc derived from the SAME v1 doc the site renders (hot-swappable). */
+  doc: EngineDoc
   page: number
   /** Site flag store (drives showIfFlag boxes); the layer mirrors engine setFlags. */
   flags: Record<string, boolean>
@@ -40,6 +42,8 @@ export interface EngineLayerProps {
   sfx(kind: string): void
   /** Dash began traveling toward panel j (the Notebook focuses its camera). */
   onHeading?(panelIdx: number): void
+  /** The poke hitbox was clicked (the Notebook plays its sfx/AC ensure). */
+  onPoke?(): void
 }
 
 interface Scene {
@@ -50,9 +54,6 @@ interface Scene {
   pageIdx: number
   offs: Array<() => void>
 }
-
-const dash = docV2.characters.dash
-const rig = docV2.rigs[dash.rig]
 
 export class EngineLayer extends Component<EngineLayerProps> {
   private svgRef = createRef<SVGSVGElement>()
@@ -65,6 +66,17 @@ export class EngineLayer extends Component<EngineLayerProps> {
   private look: { x: number; y: number } | null = null
   private pendingArrival: string | null = null
   private currentPanel = 0
+  private pokeBox: HTMLDivElement | null = null
+
+  private get docV2() {
+    return this.props.doc.docV2
+  }
+  private get dash() {
+    return this.docV2.characters.dash
+  }
+  private get rigDoc() {
+    return this.docV2.rigs[this.dash.rig]
+  }
   /** Destination of the in-flight travel run — poof-recovery lands here if the
    * picked behavior blocks/fails (the legacy poof teleport, driver-owned). */
   private travelDest: number | null = null
@@ -90,12 +102,20 @@ export class EngineLayer extends Component<EngineLayerProps> {
         accessories: s.rt.accessories.map((a) => a.points()),
       })
       this.drawBubble()
+      // Poke hitbox tracks the figure (the wrapper must NOT catch page-wide
+      // clicks — review finding: it swallowed the cover's open handler).
+      if (this.pokeBox) {
+        const t = s.rt.transform
+        this.pokeBox.style.transform = `translate(${t.x - 46}px, ${t.y - 78}px)`
+      }
     }
     this.raf = requestAnimationFrame(frame)
   }
 
   componentDidUpdate(prev: EngineLayerProps): void {
-    if (prev.page !== this.props.page) this.enterPage(this.props.page)
+    // Doc hot-swap (server fetch / admin preview) rebuilds the scene on the SAME
+    // page; page changes rebuild for the new page.
+    if (prev.doc !== this.props.doc || prev.page !== this.props.page) this.enterPage(this.props.page)
   }
 
   componentWillUnmount(): void {
@@ -116,12 +136,14 @@ export class EngineLayer extends Component<EngineLayerProps> {
   /** Build the scene for a page; Dash enters at panel 0's interior spot. */
   enterPage(pageIdx: number): void {
     const svg = this.svgRef.current
-    const pw = pageWorlds[pageIdx]
+    const pw = this.props.doc.pageWorlds[pageIdx]
     if (!svg || !pw) return
     this.teardown()
 
     const ctx = createContext({ seed: (Math.random() * 0xffffffff) >>> 0 })
     const verlet = createVerletWorld()
+    const dash = this.dash
+    const rig = this.rigDoc
     const mw = createMutableWorld(pw.world, { character: dash, events: ctx.events, stepMs: STEP_MS })
     const rt = createCharacterRuntime({
       rig,
@@ -130,11 +152,11 @@ export class EngineLayer extends Component<EngineLayerProps> {
       verlet,
       rng: ctx.rng,
       events: ctx.events,
-      clips: docV2.clips,
-      poses: docV2.poses,
-      behaviors: docV2.behaviors,
+      clips: this.docV2.clips,
+      poses: this.docV2.poses,
+      behaviors: this.docV2.behaviors,
       names: { idle: 'idle-shuffle', walk: 'walk-cycle', jump: 'jump', tuck: 'jump-tuck', jumpLand: 'squash-land' },
-      restPose: docV2.poses.stand,
+      restPose: this.docV2.poses.stand,
       initialTransform: { x: 0, y: 0, rot: 0, facing: 1 },
       accessories: true,
       getLookTarget: () => this.look,
@@ -218,8 +240,8 @@ export class EngineLayer extends Component<EngineLayerProps> {
   poke(): void {
     const s = this.scene
     if (!s) return
-    s.ctx.events.emit('expression:poke', { characterId: dash.id })
-    s.verlet.applyImpulse(`secondary:${dash.id}`, 70, -140)
+    s.ctx.events.emit('expression:poke', { characterId: this.dash.id })
+    s.verlet.applyImpulse(`secondary:${this.dash.id}`, 70, -140)
     for (const a of s.rt.accessories) s.verlet.applyImpulse(a.bodyId, 120, -100)
   }
 
@@ -229,13 +251,13 @@ export class EngineLayer extends Component<EngineLayerProps> {
 
   // ── internals ────────────────────────────────────────────────────────────────
   private arrivalId(pageIdx: number, panelIdx: number): string | null {
-    return docV2.pages[pageIdx]?.panels[panelIdx]?.arrival?.behaviorId ?? null
+    return this.docV2.pages[pageIdx]?.panels[panelIdx]?.arrival?.behaviorId ?? null
   }
 
   private chainArrival(): void {
     const s = this.scene
     if (!s || !this.pendingArrival) return
-    const doc = docV2.behaviors[this.pendingArrival]
+    const doc = this.docV2.behaviors[this.pendingArrival]
     this.pendingArrival = null
     if (!doc) return
     // when-gates consult the SITE flags (the flag store of record in 9b).
@@ -245,7 +267,7 @@ export class EngineLayer extends Component<EngineLayerProps> {
   }
 
   private panelSpot(pageIdx: number, panelIdx: number): { x: number; y: number } | null {
-    const pn = docV2.pages[pageIdx]?.panels[panelIdx]
+    const pn = this.docV2.pages[pageIdx]?.panels[panelIdx]
     if (!pn) return null
     return { x: pn.x + pn.anchor.dx, y: pn.y + pn.anchor.dy }
   }
@@ -262,22 +284,22 @@ export class EngineLayer extends Component<EngineLayerProps> {
     const to = this.panelSpot(pageIdx, destIdx)
     const needsAir = !!from && !!to && (Math.abs(to.y - from.y) > 24 || Math.abs(to.x - from.x) > 200)
     // v1 semantics: the DESTINATION panel's (merged) pool governs the trip.
-    let pool = docV2.pages[pageIdx]?.panels[destIdx]?.travel?.pool
-    const fallback = docV2.behaviors['builtin:hop'] ?? docV2.behaviors['builtin:walk']
+    let pool = this.docV2.pages[pageIdx]?.panels[destIdx]?.travel?.pool
+    const fallback = this.docV2.behaviors['builtin:hop'] ?? this.docV2.behaviors['builtin:walk']
     if (pool && needsAir) {
       const airy = pool.filter((e) => EngineLayer.JUMPY.has(e.behaviorId))
       if (airy.length > 0) pool = airy
     }
     if (!pool || pool.length === 0) {
       // No authored pool → the classic default: the full builtin set (air-filtered).
-      let ids = Object.keys(docV2.behaviors).filter((id) => id.startsWith('builtin:'))
+      let ids = Object.keys(this.docV2.behaviors).filter((id) => id.startsWith('builtin:'))
       if (needsAir) ids = ids.filter((id) => EngineLayer.JUMPY.has(id))
       const id = ids[s.ctx.rng.int(0, ids.length)]
-      return docV2.behaviors[id] ?? fallback
+      return this.docV2.behaviors[id] ?? fallback
     }
     const entries: string[] = []
     for (const e of pool) {
-      const doc = docV2.behaviors[e.behaviorId]
+      const doc = this.docV2.behaviors[e.behaviorId]
       if (!doc) continue
       const gate = (doc as { when?: GateExpr }).when
       if (gate && !evalGate(gate, this.props.flags)) continue
@@ -285,7 +307,7 @@ export class EngineLayer extends Component<EngineLayerProps> {
       for (let k = 0; k < w; k++) entries.push(e.behaviorId)
     }
     if (entries.length === 0) return fallback
-    return docV2.behaviors[entries[s.ctx.rng.int(0, entries.length)]] ?? fallback
+    return this.docV2.behaviors[entries[s.ctx.rng.int(0, entries.length)]] ?? fallback
   }
 
   private makeBubble(svg: SVGSVGElement): void {
@@ -341,6 +363,11 @@ export class EngineLayer extends Component<EngineLayerProps> {
           width="100%"
           height="100%"
           style={{ overflow: 'visible' }}
+        />
+        <div
+          ref={(r) => { this.pokeBox = r }}
+          onClick={() => { this.props.onPoke?.(); this.poke() }}
+          style={{ position: 'absolute', left: 0, top: 0, width: 92, height: 130, pointerEvents: 'auto', cursor: 'pointer' }}
         />
       </div>
     )

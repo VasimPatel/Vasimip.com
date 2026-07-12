@@ -402,9 +402,14 @@ export function createLocomotion(deps: LocomotionDeps): Locomotion {
       if (!entity) return null
       const panel = cw.panels.find((p) => p.entity === entity)
       if (!panel) return null
-      // The grammar closes the spot set — no silent fallback (review finding).
-      const spot = parsed.spot === 'roof' ? panel.geom.spots.roof : panel.geom.spots.interior
-      return spot ? { ...spot } : null
+      // The grammar closes the spot set — no silent fallback (review finding); and
+      // a spot without a REAL platform under it is phantom geometry (deep-anchor
+      // panels have no standable roof): resolve to the panel's SUPPORTED spot.
+      const want = parsed.spot === 'roof' ? panel.geom.spots.roof : panel.geom.spots.interior
+      const other = parsed.spot === 'roof' ? panel.geom.spots.interior : panel.geom.spots.roof
+      if (spotSupported(want.x, want.y)) return { ...want }
+      if (spotSupported(other.x, other.y)) return { ...other }
+      return null
     }
     if (parsed.kind === 'panelSpot') {
       const panel = cw.panels.find((p) => p.entity === parsed.panel)
@@ -441,6 +446,15 @@ export function createLocomotion(deps: LocomotionDeps): Locomotion {
 
   function allSegs(): readonly SegmentRef[] {
     return world.collision().segments
+  }
+
+  /** A spot is standable only if a horizontal-ish segment actually supports it. */
+  function spotSupported(x: number, y: number): boolean {
+    return allSegs().some(({ seg }) => {
+      if (Math.abs(seg.y1 - seg.y2) > Math.abs(seg.x1 - seg.x2)) return false
+      const midY = (seg.y1 + seg.y2) / 2
+      return Math.abs(midY - y) <= GROUND_STEP_TOL && x >= Math.min(seg.x1, seg.x2) - 1 && x <= Math.max(seg.x1, seg.x2) + 1
+    })
   }
 
   // ── route planning ────────────────────────────────────────────────────────────

@@ -13,6 +13,7 @@ import { AudioEngine, type SfxKind } from './audio'
 import CoverRenderer from './CoverRenderer'
 import PageRenderer from './PageRenderer'
 import { EngineLayer } from './engine/EngineLayer'
+import { buildEngineDoc } from './engine/engineDoc'
 import { DEFAULT_DOC } from './doc/defaultDoc'
 import type { NotebookDoc, TravelConfig } from './doc/docTypes'
 import { BUILTIN_MODES, SFX_KINDS } from './doc/docTypes'
@@ -889,13 +890,7 @@ export default class Notebook extends React.Component<NotebookProps, State> {
   poke() {
     const s = this.state
     if (this._dragged) { this._dragged = false; return }
-    if (this.engineMode) {
-      if (s.page === 0) return
-      this.ensureAC()
-      this.sfx('hop')
-      this.engineRef?.poke()
-      return
-    }
+    if (this.engineMode) return // engine pokes come from the layer's own hitbox
     if (s.busy || s.dragging || s.poking || s.page === 0 || s.dop < 1) return
     const standing = s.pose === 'idle' || s.pose === 'fight' || s.pose === 'spray' || s.pose === 'think'
     if (!standing) return
@@ -1116,15 +1111,19 @@ export default class Notebook extends React.Component<NotebookProps, State> {
             {v.bombFlyOn && <Bomb style={v.bombFlyStyle} />}
 
             {this.engineMode ? (
-              <div onClick={v.onPoke} style={{ position: 'absolute', inset: 0, zIndex: 60, pointerEvents: 'auto' }}>
-                <EngineLayer
-                  ref={(r) => { this.engineRef = r }}
-                  page={Math.max(0, this.state.page - 1)}
-                  flags={this.state.flags}
-                  onFlag={(flag, value) => this.setState((st) => ({ flags: { ...st.flags, [flag]: value } }))}
-                  sfx={(kind) => this.engineSfx(kind)}
-                />
-              </div>
+              this.state.page > 0 && (
+                <div style={{ position: 'absolute', inset: 0, zIndex: 60, pointerEvents: 'none', visibility: this.state.busy ? 'hidden' : 'visible' }}>
+                  <EngineLayer
+                    ref={(r) => { this.engineRef = r }}
+                    doc={buildEngineDoc(this.doc)}
+                    page={Math.max(0, this.state.page - 1)}
+                    flags={this.state.flags}
+                    onFlag={(flag, value) => this.setState((st) => ({ flags: { ...st.flags, [flag]: value } }))}
+                    sfx={(kind) => this.engineSfx(kind)}
+                    onPoke={() => { this.ensureAC(); this.sfx('hop') }}
+                  />
+                </div>
+              )
             ) : (
             <div
               onClick={v.onPoke}

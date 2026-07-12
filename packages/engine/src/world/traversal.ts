@@ -91,13 +91,29 @@ export function buildTraversalGraph(world: WorldDocV2, character: CharacterDoc, 
 
   const cw = buildCollisionWorld(world)
 
+  // A standable spot must have an ACTUAL platform segment under it (P9b: notebook
+  // panels emit only their real platform lines — a deep-anchor panel's derived
+  // roof is phantom geometry and must produce no node; review finding).
+  const supported = (x: number, y: number): boolean =>
+    cw.segments.some(({ seg }) => {
+      if (Math.abs(seg.y1 - seg.y2) > Math.abs(seg.x1 - seg.x2)) return false
+      const midY = (seg.y1 + seg.y2) / 2
+      return Math.abs(midY - y) <= 12 && x >= Math.min(seg.x1, seg.x2) - 1 && x <= Math.max(seg.x1, seg.x2) + 1
+    })
+
   // Nodes — panels in doc order, spots in fixed order.
   const nodes: TravNode[] = []
   for (const p of cw.panels) {
     const s = p.geom.spots
-    nodes.push({ id: `${p.entity}:interior`, x: round(s.interior.x), y: round(s.interior.y), panel: p.entity, kind: 'interior' })
-    nodes.push({ id: `${p.entity}:roofL`, x: round(p.geom.roof.x1), y: round(p.geom.roof.y1), panel: p.entity, kind: 'roofL' })
-    nodes.push({ id: `${p.entity}:roofR`, x: round(p.geom.roof.x2), y: round(p.geom.roof.y2), panel: p.entity, kind: 'roofR' })
+    if (supported(s.interior.x, s.interior.y)) {
+      nodes.push({ id: `${p.entity}:interior`, x: round(s.interior.x), y: round(s.interior.y), panel: p.entity, kind: 'interior' })
+    }
+    if (supported(p.geom.roof.x1, p.geom.roof.y1)) {
+      nodes.push({ id: `${p.entity}:roofL`, x: round(p.geom.roof.x1), y: round(p.geom.roof.y1), panel: p.entity, kind: 'roofL' })
+    }
+    if (supported(p.geom.roof.x2, p.geom.roof.y2)) {
+      nodes.push({ id: `${p.entity}:roofR`, x: round(p.geom.roof.x2), y: round(p.geom.roof.y2), panel: p.entity, kind: 'roofR' })
+    }
   }
 
   const classify = (a: TravNode, b: TravNode): EdgeType | null => {

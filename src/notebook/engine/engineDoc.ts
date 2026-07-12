@@ -74,16 +74,28 @@ const base: MigrationBase = {
   behaviors: reg([bWalk, bHop, bRoll, bPoof, bVault, bRope, bSwing, bWallrun, bSlide, bSmash, bCombo]),
 }
 
-const migrated = migrateNotebookV1(notebookV1, base)
-
-/** The migrated v2 doc the engine mounts on (in-memory; storage stays v1). */
-export const docV2: NotebookDocV2 = migrated.doc
-/** Lossy-conversion report — dev-logged so approximations stay visible. */
-export const migrationReport = migrated.report
-/** Per-page engine worlds (page coordinates == world coordinates). */
-export const pageWorlds: PageWorld[] = worldFromNotebook(docV2.pages as never)
-
-if (import.meta.env.DEV && migrationReport.lossy.length > 0) {
-  // eslint-disable-next-line no-console
-  console.info('[engine] migration notes:', migrationReport.lossy)
+export interface EngineDoc {
+  docV2: NotebookDocV2
+  pageWorlds: PageWorld[]
 }
+
+// The site HOT-SWAPS its document (server fetch / admin preview) — the engine must
+// simulate the SAME doc the site renders (review blocker: baked-doc singleton
+// desynced sim from render). Memoized on v1-doc identity: cheap re-migration only
+// when the document actually changes.
+let cache: { v1: unknown; built: EngineDoc } | null = null
+
+export function buildEngineDoc(v1doc: unknown): EngineDoc {
+  if (cache && cache.v1 === v1doc) return cache.built
+  const { doc, report } = migrateNotebookV1(v1doc, base)
+  const built: EngineDoc = { docV2: doc, pageWorlds: worldFromNotebook(doc.pages as never) }
+  cache = { v1: v1doc, built }
+  if (import.meta.env.DEV && report.lossy.length > 0) {
+    // eslint-disable-next-line no-console
+    console.info('[engine] migration notes:', report.lossy)
+  }
+  return built
+}
+
+/** The baked fallback (what the site paints before the server doc arrives). */
+export const bakedEngineDoc: EngineDoc = buildEngineDoc(notebookV1)
