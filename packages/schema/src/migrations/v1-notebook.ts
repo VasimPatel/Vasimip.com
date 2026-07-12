@@ -65,6 +65,13 @@ export function migrateNotebookV1(
   }
   const report: MigrationReport = { lossy: [], missingPoses: [], missingBehaviors: [], generatedBehaviors: [] }
   const behaviors: Record<string, BehaviorDoc> = { ...base.behaviors }
+  // Generated ids must never silently clobber supplied base behaviors (review
+  // finding) — the namespaces are ours, so a collision is a caller bug: throw.
+  const addGenerated = (id: string, doc: BehaviorDoc): void => {
+    if (base.behaviors[id]) throw new Error(`migrateNotebookV1: generated behavior id collides with base: ${JSON.stringify(id)}`)
+    behaviors[id] = doc
+    report.generatedBehaviors.push(id)
+  }
 
   const notePose = (name: string, where: string): void => {
     if (!base.poses[name] && !report.missingPoses.includes(name)) {
@@ -96,6 +103,7 @@ export function migrateNotebookV1(
         case 'pose':
           if (isStr(s.pose)) {
             notePose(s.pose, sw)
+            if (s.face !== undefined) report.lossy.push(`${sw}.face: dropped — facing follows the approach direction`)
             steps.push({ verb: 'strikePose', ref: s.pose, holdMs: isNum(s.ms) ? s.ms : 600 } as Intent)
           }
           break
@@ -105,13 +113,19 @@ export function migrateNotebookV1(
           steps.push({ verb: arc ? 'jumpTo' : 'moveTo', target } as Intent)
           if (isStr(s.sfx)) steps.push({ verb: 'sfx', kind: s.sfx } as Intent)
           if (isStr(s.pose) && s.pose !== 'walk') notePose(s.pose, sw)
-          if (s.ease !== undefined || s.speed !== undefined) {
-            report.lossy.push(`${sw}: v1 ease/speed dropped — the locomotion solver owns motion feel now`)
+          if (s.ease !== undefined || s.speed !== undefined || s.easeY !== undefined || s.ms !== undefined) {
+            report.lossy.push(`${sw}: v1 ease/easeY/speed/ms dropped — the locomotion solver owns motion feel now`)
+          }
+          if (isStr(s.pose) && s.pose !== 'walk') {
+            report.lossy.push(`${sw}.pose: v1 acting pose during a move approximated — 9b maps it to an onLaunch cue where the move is a jump`)
           }
           break
         }
         case 'say':
-          if (isStr(s.text)) steps.push({ verb: 'say', text: s.text } as Intent)
+          if (isStr(s.text)) {
+            if (s.holdMs !== undefined) report.lossy.push(`${sw}.holdMs: say duration is engine-standard now (SAY_DURATION_MS)`)
+            steps.push({ verb: 'say', text: s.text } as Intent)
+          }
           break
         case 'sfx':
           if (isStr(s.kind)) steps.push({ verb: 'sfx', kind: s.kind } as Intent)
@@ -130,6 +144,9 @@ export function migrateNotebookV1(
             report.lossy.push(`${sw}.on: camera focus ${JSON.stringify(s.on)} approximated as travel:to#interior`)
             to = 'travel:to#interior'
           }
+          if (s.mult !== undefined || s.fast !== undefined) {
+            report.lossy.push(`${sw}: camera mult/fast dropped — 9b's camera wiring owns zoom feel`)
+          }
           steps.push({ verb: 'camera', to, ms: 400 } as Intent)
           break
         }
@@ -144,14 +161,18 @@ export function migrateNotebookV1(
           report.lossy.push(`${sw}: unknown step kind ${JSON.stringify(s.do)} dropped`)
       }
     })
-    behaviors[id] = { schemaVersion: 2, id, steps } as BehaviorDoc
-    report.generatedBehaviors.push(id)
+    addGenerated(id, { schemaVersion: 2, id, steps } as BehaviorDoc)
   }
 
   // ── pages/panels ───────────────────────────────────────────────────────────────
+  // v1 travel resolution merges FIELD-WISE across doc → page → panel (the
+  // resolveTravelConfig spread) — a panel with no config still inherits the doc/
+  // page config (review finding: panel-only migration lost global pools).
+  const docTravel = isRecord(v1.travel) ? v1.travel : undefined
   const pages: PageV2[] = []
   ;(v1.pages as unknown[]).forEach((pg, p) => {
     if (!isRecord(pg) || !isArr(pg.panels)) return
+    const pageTravel = isRecord(pg.travel) ? pg.travel : undefined
     const panels: PanelV2[] = []
     ;(pg.panels as unknown[]).forEach((pn, i) => {
       if (!isRecord(pn)) return
@@ -166,6 +187,7 @@ export function migrateNotebookV1(
       if (isNum(pn.rotate)) panel.rotate = pn.rotate
       if (isStr(pn.sketch)) panel.sketch = pn.sketch
       if (isArr(pn.boxes)) panel.boxes = pn.boxes
+      if (isStr(pn.pid)) panel.pid = pn.pid
 
       if (isRecord(pn.arrival)) {
         const a = pn.arrival
@@ -175,7 +197,16 @@ export function migrateNotebookV1(
         if (onceFlag) steps.push({ verb: 'setFlag', flag: onceFlag } as Intent)
         if (isStr(a.pose)) {
           notePose(a.pose, `${where}.arrival`)
-          steps.push({ verb: 'strikePose', ref: a.pose, holdMs: isNum(a.revertMs) ? a.revertMs : 1200 } as Intent)
+          // v1 semantics: no/zero revertMs leaves the pose until the NEXT transition.
+          // v2 behaviors end, so persistence is approximated with a long hold — and
+          // reported, per the honesty contract.
+          let holdMs: number
+          if (isNum(a.revertMs) && a.revertMs > 0) holdMs = a.revertMs
+          else {
+            holdMs = 2500
+            report.lossy.push(`${where}.arrival: v1 pose persisted until the next transition; approximated as a ${2500}ms hold`)
+          }
+          steps.push({ verb: 'strikePose', ref: a.pose, holdMs } as Intent)
         }
         if (isStr(a.say)) steps.push({ verb: 'say', text: a.say } as Intent)
         if (isStr(a.sfx)) steps.push({ verb: 'sfx', kind: a.sfx } as Intent)
@@ -184,13 +215,13 @@ export function migrateNotebookV1(
         if (a.flourish !== undefined) report.lossy.push(`${where}.arrival.flourish: dropped — squash/expression layers act arrivals now`)
         const doc: BehaviorDoc = { schemaVersion: 2, id, steps } as BehaviorDoc
         if (onceFlag) (doc as { when?: unknown }).when = { not: { flag: onceFlag } }
-        behaviors[id] = doc
-        report.generatedBehaviors.push(id)
+        addGenerated(id, doc)
         panel.arrival = { behaviorId: id }
       }
 
-      if (isRecord(pn.travel)) {
-        const t = pn.travel
+      const panelTravel = isRecord(pn.travel) ? pn.travel : undefined
+      const t = docTravel || pageTravel || panelTravel ? { ...docTravel, ...pageTravel, ...panelTravel } : null
+      if (t) {
         const pool: { behaviorId: string; weight?: number }[] = []
         const builtins = isArr(t.builtins) && t.builtins.length > 0 ? (t.builtins as string[]) : V1_BUILTIN_MODES
         for (const mode of builtins) {
@@ -199,17 +230,23 @@ export function migrateNotebookV1(
           pool.push({ behaviorId: id })
         }
         if (isArr(t.actions)) {
+          // v1 weight semantics: max(0, floor(actionWeight ?? 1)); 0 = disabled.
+          const weight = Math.max(0, Math.floor(isNum(t.actionWeight) ? t.actionWeight : 1))
           for (const name of t.actions as string[]) {
             const id = `act:${name}`
+            if (weight === 0) {
+              report.lossy.push(`${where}.travel: action ${JSON.stringify(name)} disabled by actionWeight 0 — omitted from the pool`)
+              continue
+            }
             noteBehavior(id, `${where}.travel`)
-            pool.push({ behaviorId: id, weight: isNum(t.actionWeight) ? t.actionWeight : 2 })
+            pool.push({ behaviorId: id, weight })
           }
         }
-        panel.travel = { pool }
+        if (pool.length > 0) panel.travel = { pool }
       }
       panels.push(panel)
     })
-    pages.push({ ...(isStr(pg.name) ? { name: pg.name } : {}), panels })
+    pages.push({ ...(isStr(pg.name) ? { name: pg.name } : {}), ...(isStr(pg.snark) ? { snark: pg.snark } : {}), panels })
   })
 
   const doc: NotebookDocV2 = {
@@ -236,7 +273,10 @@ function contextualTarget(to: unknown, where: string, report: MigrationReport): 
   if (to.at === 'panelEdge') {
     const panel = to.panel === 'from' ? 'from' : 'to'
     const side = isStr(to.side) ? to.side : 'top'
-    return `travel:${panel}#${side === 'top' ? 'roof' : side}`
+    // v2 surface spots are roof|interior (closed — no silent grammar drift).
+    if (side === 'top') return `travel:${panel}#roof`
+    report.lossy.push(`${where}.to: v1 edge side ${JSON.stringify(side)} approximated as the roof spot`)
+    return `travel:${panel}#roof`
   }
   report.lossy.push(`${where}.to: unmapped v1 target ${JSON.stringify(to)} → travel:to#interior`)
   return 'travel:to#interior'

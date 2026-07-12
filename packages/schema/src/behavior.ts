@@ -70,7 +70,11 @@ export function parseTargetRef(ref: string): ParsedTarget | null {
     const hash = rest.indexOf('#')
     const which = hash > 0 ? rest.slice(0, hash) : rest
     const spot = hash > 0 ? rest.slice(hash + 1) : 'interior'
-    if ((which === 'to' || which === 'from') && spot.length > 0) return { kind: 'travel', which, spot }
+    // Spot vocabulary is CLOSED (review finding: an open spot string silently
+    // resolved to interior — travel:to#roff must be a validation error).
+    if ((which === 'to' || which === 'from') && (spot === 'roof' || spot === 'interior')) {
+      return { kind: 'travel', which, spot }
+    }
     return null
   }
   if (ref.startsWith('entity:')) {

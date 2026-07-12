@@ -38,11 +38,14 @@ test('THE 9a ROUND-TRIP: live notebook.json migrates CLEAN with the full base', 
   expect(report.missingPoses).toEqual([])
   expect(report.missingBehaviors).toEqual([])
 
-  // Owner content preserved byte-identically at the render layer.
+  // Owner content preserved byte-identically at the render layer — including the
+  // page snark lines (Pip's heckles; a review-caught silent drop).
   expect(doc.pages.length).toBe(5)
+  const v1pages = (notebook as never as { pages: { snark: string }[] }).pages
+  doc.pages.forEach((pg, i) => expect(pg.snark).toBe(v1pages[i].snark))
   expect(doc.cover).toEqual((notebook as { cover: unknown }).cover)
   expect(doc.pages[0].panels[0].boxes).toEqual(
-    (notebook as never as { pages: { panels: { boxes: unknown }[] }[] }).pages[0].panels[0].boxes,
+    (notebook as never as { pages: { panels: { boxes: unknown[] }[] }[] }).pages[0].panels[0].boxes,
   )
 
   // The owner's arrivals as behaviors.
@@ -53,7 +56,7 @@ test('THE 9a ROUND-TRIP: live notebook.json migrates CLEAN with the full base', 
 
   // Travel pool: tightrope weighted 2 beside the full builtin pool.
   const workPanel = doc.pages[2].panels[1]
-  expect(workPanel.travel?.pool.some((e) => e.behaviorId === 'act:tightrope' && e.weight === 2)).toBe(true)
+  expect(workPanel.travel?.pool.some((e) => e.behaviorId === 'act:tightrope' && e.weight === 1)).toBe(true) // v1 default weight = max(0, floor(?? 1))
   expect(workPanel.travel?.pool.some((e) => e.behaviorId === 'builtin:walk')).toBe(true)
 
   // Contextual travel targets in the migrated custom action.
@@ -67,7 +70,7 @@ test('THE 9a ROUND-TRIP: live notebook.json migrates CLEAN with the full base', 
 
   // Report is small and every note is an EXPECTED approximation class.
   for (const note of report.lossy) {
-    expect(/face|flourish|ease\/speed|geometric gate|fx /.test(note)).toBe(true)
+    expect(/face|flourish|ease|geometric gate|fx |holdMs|persisted|edge side|approximated|disabled|camera mult/.test(note)).toBe(true)
   }
 })
 

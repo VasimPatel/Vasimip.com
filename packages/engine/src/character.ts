@@ -121,7 +121,10 @@ export interface CharacterState {
 
 export interface CharacterRuntime {
   tick(): void
-  runBehavior(doc: BehaviorDoc): void
+  /** Run a behavior. `opts.travel` binds the from/to panels the doc's travel:*
+   * refs resolve against — applied AFTER the run's locomotion reset, so the
+   * binding is atomic with the run (a reset clears any previous binding). */
+  runBehavior(doc: BehaviorDoc, opts?: { travel?: { from?: string; to?: string } }): void
   getState(): CharacterState
   setState(s: CharacterState): void
   readonly transform: CharacterTransform
@@ -373,8 +376,9 @@ export function createCharacterRuntime(opts: CharacterRuntimeOptions): Character
     watchdog.tick()
   }
 
-  function runBehavior(doc: BehaviorDoc): void {
-    behavior.run(doc)
+  function runBehavior(doc: BehaviorDoc, opts?: { travel?: { from?: string; to?: string } }): void {
+    behavior.run(doc) // resets locomotion (incl. any stale travel binding)
+    locomotion.setTravelContext(opts?.travel ?? null)
   }
 
   return {

@@ -23,8 +23,7 @@ test('travel:to resolves against the bound context; behavior arrives at panel B'
   const r = newRuntime(world(), { x: 80, y: 200 - 40 })
   const cap = r.rt.capsule()
   r.rt.transform.y += 200 - (cap.y1 + cap.r)
-  r.rt.setTravelContext({ from: 'panelA', to: 'panelB' })
-  r.rt.runBehavior(builtinHop as never)
+  r.rt.runBehavior(builtinHop as never, { travel: { from: 'panelA', to: 'panelB' } })
   driveUntilDone(r, 4000)
   expect(eventsOf(r, 'intent:arrived').length).toBeGreaterThan(0)
   // Arrived at panel B's interior spot x (anchor dx 80 → 320).
@@ -43,7 +42,7 @@ test('unbound travel context fails loudly (unresolvable target)', () => {
 
 test('travel context survives snapshot/restore', () => {
   const r = newRuntime(world(), { x: 80, y: 160 })
-  r.rt.setTravelContext({ from: 'panelA', to: 'panelB' })
+  r.rt.runBehavior(builtinHop as never, { travel: { from: 'panelA', to: 'panelB' } })
   const s = r.rt.getState()
   expect(s.locomotion.travelCtx).toEqual({ from: 'panelA', to: 'panelB' })
 })

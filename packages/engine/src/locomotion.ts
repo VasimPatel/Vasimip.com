@@ -402,8 +402,8 @@ export function createLocomotion(deps: LocomotionDeps): Locomotion {
       if (!entity) return null
       const panel = cw.panels.find((p) => p.entity === entity)
       if (!panel) return null
-      const spots = panel.geom.spots as Record<string, { x: number; y: number }>
-      const spot = spots[parsed.spot] ?? spots.interior
+      // The grammar closes the spot set — no silent fallback (review finding).
+      const spot = parsed.spot === 'roof' ? panel.geom.spots.roof : panel.geom.spots.interior
       return spot ? { ...spot } : null
     }
     if (parsed.kind === 'panelSpot') {
@@ -1028,6 +1028,7 @@ export function createLocomotion(deps: LocomotionDeps): Locomotion {
   }
 
   function reset(): void {
+    travelCtx = null // stale context must never leak into a later behavior (review)
     mode = 'idle'
     status = 'idle'
     verb = null

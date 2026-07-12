@@ -30,6 +30,8 @@ export interface PanelV2 {
   w: number
   h: number
   anchor: { dx: number; dy: number }
+  /** Render-layer id tag (the whiteboard admin's P·0N chips). */
+  pid?: string
   /** Render-layer passthrough (whiteboard boxes, sketch variant, rotation). */
   rotate?: number
   sketch?: string
@@ -42,6 +44,8 @@ export interface PanelV2 {
 
 export interface PageV2 {
   name?: string
+  /** Render-layer passthrough: Pip's heckle line for the page. */
+  snark?: string
   panels: PanelV2[]
 }
 
@@ -59,7 +63,7 @@ export interface NotebookDocV2 {
 }
 
 const TOP_KEYS = new Set(['schemaVersion', 'seed', 'cover', 'pages', 'rigs', 'characters', 'poses', 'clips', 'behaviors'])
-const PANEL_KEYS = new Set(['x', 'y', 'w', 'h', 'anchor', 'rotate', 'sketch', 'boxes', 'arrival', 'travel'])
+const PANEL_KEYS = new Set(['x', 'y', 'w', 'h', 'anchor', 'rotate', 'sketch', 'boxes', 'arrival', 'travel', 'pid'])
 
 function checkPanel(x: unknown, path: string, issues: Issues, behaviorIds: Set<string>): void {
   if (!isRecord(x)) {
@@ -74,7 +78,15 @@ function checkPanel(x: unknown, path: string, issues: Issues, behaviorIds: Set<s
   if (isNum(x.h) && x.h <= 0) issues.push(`${path}.h: must be positive`)
   if (!isRecord(x.anchor) || !isNum(x.anchor.dx) || !isNum(x.anchor.dy)) {
     issues.push(`${path}.anchor: required {dx, dy}`)
+  } else if (isNum(x.w) && isNum(x.h)) {
+    // v1 proximity rule restored (review finding): a runaway anchor corrupts
+    // surface spots and the traversal graph.
+    const { dx, dy } = x.anchor
+    if (dx < -200 || dx > x.w + 200 || dy < -200 || dy > x.h + 200) {
+      issues.push(`${path}.anchor: must stay within 200px of the panel bounds`)
+    }
   }
+  if (x.pid !== undefined && !isStr(x.pid)) issues.push(`${path}.pid: must be a string`)
   if (x.rotate !== undefined && !isNum(x.rotate)) issues.push(`${path}.rotate: must be a number`)
   if (x.sketch !== undefined && !isStr(x.sketch)) issues.push(`${path}.sketch: must be a string`)
   if (x.boxes !== undefined && !isArr(x.boxes)) issues.push(`${path}.boxes: must be an array (render payload)`)
@@ -85,7 +97,8 @@ function checkPanel(x: unknown, path: string, issues: Issues, behaviorIds: Set<s
     }
   }
   if (x.travel !== undefined) {
-    if (!isRecord(x.travel) || !isArr(x.travel.pool)) issues.push(`${path}.travel: must be { pool: [...] }`)
+    if (!isRecord(x.travel) || !isArr(x.travel.pool) || x.travel.pool.length === 0)
+      issues.push(`${path}.travel: must be { pool: [...] } with at least one entry`)
     else
       x.travel.pool.forEach((e, i) => {
         if (!isRecord(e) || !isStr(e.behaviorId)) issues.push(`${path}.travel.pool[${i}]: must be { behaviorId, weight? }`)
@@ -143,6 +156,7 @@ export function tryValidateNotebookV2(
             return
           }
           if (pg.name !== undefined && !isStr(pg.name)) issues.push(`pages[${p}].name: must be a string`)
+          if (pg.snark !== undefined && !isStr(pg.snark)) issues.push(`pages[${p}].snark: must be a string`)
           pg.panels.forEach((pn, i) => checkPanel(pn, `pages[${p}].panels[${i}]`, issues, behaviorIds))
         })
 
@@ -150,6 +164,51 @@ export function tryValidateNotebookV2(
       checkRegistry(doc.characters, 'characters', issues, tryValidateCharacter)
       checkRegistry(doc.poses, 'poses', issues, tryValidatePose)
       checkRegistry(doc.clips, 'clips', issues, tryValidateClip)
+
+      // ── cross-registry pass (review finding): structural validity is not enough —
+      // a behavior striking an unknown pose or a character on an unknown rig
+      // validates structurally and then fails at runtime. Catch it here. ──
+      const rigIds = new Set(isRecord(doc.rigs) ? Object.keys(doc.rigs) : [])
+      const poseIds = new Set(isRecord(doc.poses) ? Object.keys(doc.poses) : [])
+      const clipIds = new Set(isRecord(doc.clips) ? Object.keys(doc.clips) : [])
+      if (isRecord(doc.characters)) {
+        for (const [id, c] of Object.entries(doc.characters)) {
+          if (isRecord(c) && isStr(c.rig) && !rigIds.has(c.rig)) {
+            issues.push(`characters.${id}.rig: references unknown rig ${JSON.stringify(c.rig)}`)
+          }
+        }
+      }
+      if (isRecord(doc.behaviors)) {
+        const walkIntents = (list: unknown, path: string): void => {
+          if (!isArr(list)) return
+          list.forEach((it, i) => {
+            if (!isRecord(it)) return
+            const p = `${path}[${i}]`
+            if (it.verb === 'strikePose' && isStr(it.ref) && !poseIds.has(it.ref)) {
+              issues.push(`${p}: strikePose references unknown pose ${JSON.stringify(it.ref)}`)
+            }
+            if (it.verb === 'playClip' && isStr(it.ref) && !clipIds.has(it.ref)) {
+              issues.push(`${p}: playClip references unknown clip ${JSON.stringify(it.ref)}`)
+            }
+            if (it.verb === 'branchOnFlag') {
+              walkIntents(it.then, `${p}.then`)
+              walkIntents(it.else, `${p}.else`)
+            }
+          })
+        }
+        for (const [id, b] of Object.entries(doc.behaviors)) {
+          if (!isRecord(b)) continue
+          walkIntents(b.steps, `behaviors.${id}.steps`)
+          if (isRecord(b.reactions)) {
+            for (const [trig, list] of Object.entries(b.reactions)) walkIntents(list, `behaviors.${id}.reactions.${trig}`)
+          }
+          if (isArr(b.cues)) {
+            b.cues.forEach((c, i) => {
+              if (isRecord(c)) walkIntents([c.do], `behaviors.${id}.cues[${i}].do`)
+            })
+          }
+        }
+      }
       checkRegistry(doc.behaviors, 'behaviors', issues, tryValidateBehavior)
     },
   ])
