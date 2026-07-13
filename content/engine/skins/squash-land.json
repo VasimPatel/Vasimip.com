@@ -1,0 +1,105 @@
+{
+  "schemaVersion": 2,
+  "id": "skin:squash-land",
+  "sources": [
+    "squash-land"
+  ],
+  "face": "baked",
+  "elements": [
+    {
+      "kind": "group",
+      "children": [
+        {
+          "kind": "circle",
+          "cx": 8,
+          "cy": -4,
+          "r": 13,
+          "fill": "#fffdf6",
+          "stroke": "#1a1a1a",
+          "strokeWidth": 4
+        },
+        {
+          "kind": "path",
+          "d": "M2,-11 l8,2 M12,-9 l8,-2",
+          "fill": "none",
+          "stroke": "#1a1a1a",
+          "strokeWidth": 2.6,
+          "linecap": "round"
+        },
+        {
+          "kind": "circle",
+          "cx": 5,
+          "cy": -4,
+          "r": 2,
+          "fill": "#1a1a1a"
+        },
+        {
+          "kind": "circle",
+          "cx": 14,
+          "cy": -3,
+          "r": 2,
+          "fill": "#1a1a1a"
+        },
+        {
+          "kind": "path",
+          "d": "M4,9 L0,26",
+          "fill": "none",
+          "stroke": "#1a1a1a",
+          "strokeWidth": 5.5,
+          "linecap": "round"
+        },
+        {
+          "kind": "path",
+          "d": "M5,13 L19,29",
+          "fill": "none",
+          "stroke": "#1a1a1a",
+          "strokeWidth": 4.5,
+          "linecap": "round"
+        },
+        {
+          "kind": "circle",
+          "cx": 20,
+          "cy": 31,
+          "r": 4,
+          "fill": "#1a1a1a"
+        },
+        {
+          "kind": "path",
+          "d": "M3,11 L-12,3 L-19,-7",
+          "fill": "none",
+          "stroke": "#1a1a1a",
+          "strokeWidth": 4.5,
+          "linecap": "round"
+        },
+        {
+          "kind": "circle",
+          "cx": -20,
+          "cy": -9,
+          "r": 4,
+          "fill": "#1a1a1a"
+        },
+        {
+          "kind": "path",
+          "d": "M0,26 L16,21 L19,39 l10,2",
+          "fill": "none",
+          "stroke": "#1a1a1a",
+          "strokeWidth": 5,
+          "linecap": "round"
+        },
+        {
+          "kind": "path",
+          "d": "M0,26 L-14,31 L-9,42 l-9,2",
+          "fill": "none",
+          "stroke": "#1a1a1a",
+          "strokeWidth": 5,
+          "linecap": "round"
+        }
+      ]
+    }
+  ],
+  "head": {
+    "cx": 8,
+    "cy": -4,
+    "r": 13
+  }
+}

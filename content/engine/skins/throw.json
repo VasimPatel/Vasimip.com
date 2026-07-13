@@ -1,0 +1,161 @@
+{
+  "schemaVersion": 2,
+  "id": "skin:throw",
+  "sources": [
+    "throw"
+  ],
+  "face": "baked",
+  "elements": [
+    {
+      "kind": "group",
+      "children": [
+        {
+          "kind": "circle",
+          "cx": 2,
+          "cy": -30,
+          "r": 14,
+          "fill": "#fffdf6",
+          "stroke": "#1a1a1a",
+          "strokeWidth": 4
+        },
+        {
+          "kind": "path",
+          "d": "M-6,-38 l11,5 M17,-38 l-11,5",
+          "fill": "none",
+          "stroke": "#1a1a1a",
+          "strokeWidth": 2.8,
+          "linecap": "round"
+        },
+        {
+          "kind": "circle",
+          "cx": 0,
+          "cy": -28,
+          "r": 2,
+          "fill": "#1a1a1a"
+        },
+        {
+          "kind": "circle",
+          "cx": 11,
+          "cy": -28,
+          "r": 2,
+          "fill": "#1a1a1a"
+        },
+        {
+          "kind": "circle",
+          "cx": 6,
+          "cy": -20,
+          "r": 2.2,
+          "fill": "none",
+          "stroke": "#1a1a1a",
+          "strokeWidth": 2
+        },
+        {
+          "kind": "path",
+          "d": "M0,-16 L-2,16",
+          "fill": "none",
+          "stroke": "#1a1a1a",
+          "strokeWidth": 5.5,
+          "linecap": "round"
+        },
+        {
+          "kind": "path",
+          "d": "M-1,-9 L-14,-3",
+          "fill": "none",
+          "stroke": "#1a1a1a",
+          "strokeWidth": 4.5,
+          "linecap": "round"
+        },
+        {
+          "kind": "group",
+          "children": [
+            {
+              "kind": "group",
+              "children": [
+                {
+                  "kind": "path",
+                  "d": "M0,0 L-5,-13",
+                  "fill": "none",
+                  "stroke": "#1a1a1a",
+                  "strokeWidth": 4.5,
+                  "linecap": "round"
+                },
+                {
+                  "kind": "group",
+                  "children": [
+                    {
+                      "kind": "group",
+                      "children": [
+                        {
+                          "kind": "path",
+                          "d": "M0,0 L-6,-10",
+                          "fill": "none",
+                          "stroke": "#1a1a1a",
+                          "strokeWidth": 4.5,
+                          "linecap": "round"
+                        },
+                        {
+                          "kind": "circle",
+                          "cx": -8,
+                          "cy": -14,
+                          "r": 6,
+                          "fill": "#1a1a1a"
+                        },
+                        {
+                          "kind": "group",
+                          "children": [
+                            {
+                              "kind": "path",
+                              "d": "M-4,-24 l1.5,3 l3,1.5 l-3,1.5 l-1.5,3 l-1.5,-3 l-3,-1.5 l3,-1.5 Z",
+                              "fill": "#ffd23f",
+                              "stroke": "#1a1a1a",
+                              "strokeWidth": 1.2
+                            }
+                          ],
+                          "anim": {
+                            "name": "sparkfuse"
+                          },
+                          "origin": "50% 50%"
+                        }
+                      ],
+                      "anim": {
+                        "name": "throwfa"
+                      },
+                      "origin": "20% 90%"
+                    }
+                  ],
+                  "transform": "translate(-5,-13)"
+                }
+              ],
+              "anim": {
+                "name": "throwua"
+              },
+              "origin": "10% 90%"
+            }
+          ],
+          "transform": "translate(1,-9)"
+        },
+        {
+          "kind": "path",
+          "d": "M-2,16 L11,33 L13,50 l11,2",
+          "fill": "none",
+          "stroke": "#1a1a1a",
+          "strokeWidth": 5,
+          "linecap": "round"
+        },
+        {
+          "kind": "path",
+          "d": "M-2,16 L-13,34 L-15,50 l-10,2",
+          "fill": "none",
+          "stroke": "#1a1a1a",
+          "strokeWidth": 5,
+          "linecap": "round"
+        }
+      ]
+    }
+  ],
+  "head": {
+    "cx": 2,
+    "cy": -30,
+    "r": 14
+  }
+}

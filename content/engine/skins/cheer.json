@@ -1,0 +1,139 @@
+{
+  "schemaVersion": 2,
+  "id": "skin:cheer",
+  "sources": [
+    "cheer"
+  ],
+  "face": "baked",
+  "elements": [
+    {
+      "kind": "group",
+      "children": [
+        {
+          "kind": "circle",
+          "cx": 2,
+          "cy": -30,
+          "r": 14,
+          "fill": "#fffdf6",
+          "stroke": "#1a1a1a",
+          "strokeWidth": 4
+        },
+        {
+          "kind": "path",
+          "d": "M-6,-38 l11,5 M17,-38 l-11,5",
+          "fill": "none",
+          "stroke": "#1a1a1a",
+          "strokeWidth": 2.8,
+          "linecap": "round"
+        },
+        {
+          "kind": "path",
+          "d": "M-3,-31 q3,-4 7,0 M8,-31 q3,-4 7,0",
+          "fill": "none",
+          "stroke": "#1a1a1a",
+          "strokeWidth": 2.4,
+          "linecap": "round"
+        },
+        {
+          "kind": "path",
+          "d": "M1,-22 q5,5 11,0",
+          "fill": "none",
+          "stroke": "#1a1a1a",
+          "strokeWidth": 2.8,
+          "linecap": "round"
+        },
+        {
+          "kind": "path",
+          "d": "M0,-16 L-2,16",
+          "fill": "none",
+          "stroke": "#1a1a1a",
+          "strokeWidth": 5.5,
+          "linecap": "round"
+        },
+        {
+          "kind": "group",
+          "children": [
+            {
+              "kind": "group",
+              "children": [
+                {
+                  "kind": "path",
+                  "d": "M0,0 L8,-16 L4,-30",
+                  "fill": "none",
+                  "stroke": "#1a1a1a",
+                  "strokeWidth": 4.5,
+                  "linecap": "round"
+                },
+                {
+                  "kind": "circle",
+                  "cx": 4,
+                  "cy": -32,
+                  "r": 4,
+                  "fill": "#1a1a1a"
+                }
+              ],
+              "anim": {
+                "name": "cheerpump"
+              },
+              "origin": "0% 100%"
+            }
+          ],
+          "transform": "translate(1,-9)"
+        },
+        {
+          "kind": "group",
+          "children": [
+            {
+              "kind": "group",
+              "children": [
+                {
+                  "kind": "path",
+                  "d": "M0,0 L-9,-15 L-6,-30",
+                  "fill": "none",
+                  "stroke": "#1a1a1a",
+                  "strokeWidth": 4.5,
+                  "linecap": "round"
+                },
+                {
+                  "kind": "circle",
+                  "cx": -6,
+                  "cy": -32,
+                  "r": 4,
+                  "fill": "#1a1a1a"
+                }
+              ],
+              "anim": {
+                "name": "cheerpump",
+                "delaySec": -0.17
+              },
+              "origin": "0% 100%"
+            }
+          ],
+          "transform": "translate(-1,-9)"
+        },
+        {
+          "kind": "path",
+          "d": "M-2,16 L10,33 L12,50 l11,2",
+          "fill": "none",
+          "stroke": "#1a1a1a",
+          "strokeWidth": 5,
+          "linecap": "round"
+        },
+        {
+          "kind": "path",
+          "d": "M-2,16 L-12,34 L-14,50 l-10,2",
+          "fill": "none",
+          "stroke": "#1a1a1a",
+          "strokeWidth": 5,
+          "linecap": "round"
+        }
+      ],
+      "origin": "50% 96%"
+    }
+  ],
+  "head": {
+    "cx": 2,
+    "cy": -30,
+    "r": 14
+  }
+}

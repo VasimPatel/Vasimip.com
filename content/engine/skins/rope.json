@@ -1,0 +1,160 @@
+{
+  "schemaVersion": 2,
+  "id": "skin:rope",
+  "sources": [
+    "rope"
+  ],
+  "face": "baked",
+  "groupAnim": {
+    "name": "ropewob",
+    "origin": "50% 96%"
+  },
+  "elements": [
+    {
+      "kind": "circle",
+      "cx": 2,
+      "cy": -30,
+      "r": 14,
+      "fill": "#fffdf6",
+      "stroke": "#1a1a1a",
+      "strokeWidth": 4
+    },
+    {
+      "kind": "path",
+      "d": "M-5,-36 l9,2.5 M9,-34 l9,-2.5",
+      "fill": "none",
+      "stroke": "#1a1a1a",
+      "strokeWidth": 2.6,
+      "linecap": "round"
+    },
+    {
+      "kind": "circle",
+      "cx": 0,
+      "cy": -29,
+      "r": 2.2,
+      "fill": "#1a1a1a"
+    },
+    {
+      "kind": "circle",
+      "cx": 11,
+      "cy": -29,
+      "r": 2.2,
+      "fill": "#1a1a1a"
+    },
+    {
+      "kind": "ellipse",
+      "cx": 6,
+      "cy": -20,
+      "rx": 2.4,
+      "ry": 3,
+      "fill": "none",
+      "stroke": "#1a1a1a",
+      "strokeWidth": 2.2
+    },
+    {
+      "kind": "path",
+      "d": "M0,-16 L-2,16",
+      "fill": "none",
+      "stroke": "#1a1a1a",
+      "strokeWidth": 5.5,
+      "linecap": "round"
+    },
+    {
+      "kind": "group",
+      "children": [
+        {
+          "kind": "group",
+          "children": [
+            {
+              "kind": "path",
+              "d": "M0,0 L27,-5",
+              "fill": "none",
+              "stroke": "#1a1a1a",
+              "strokeWidth": 4.5,
+              "linecap": "round"
+            },
+            {
+              "kind": "circle",
+              "cx": 28,
+              "cy": -6,
+              "r": 3.2,
+              "fill": "#1a1a1a"
+            }
+          ],
+          "anim": {
+            "name": "ropearm"
+          },
+          "origin": "0% 50%"
+        }
+      ],
+      "transform": "translate(1,-10)"
+    },
+    {
+      "kind": "group",
+      "children": [
+        {
+          "kind": "group",
+          "children": [
+            {
+              "kind": "path",
+              "d": "M0,0 L-27,-4",
+              "fill": "none",
+              "stroke": "#1a1a1a",
+              "strokeWidth": 4.5,
+              "linecap": "round"
+            },
+            {
+              "kind": "circle",
+              "cx": -28,
+              "cy": -5,
+              "r": 3.2,
+              "fill": "#1a1a1a"
+            }
+          ],
+          "anim": {
+            "name": "ropearm",
+            "delaySec": -0.42
+          },
+          "origin": "100% 50%"
+        }
+      ],
+      "transform": "translate(-1,-10)"
+    },
+    {
+      "kind": "path",
+      "d": "M-2,16 L-4,34 L-5,50 l10,2",
+      "fill": "none",
+      "stroke": "#1a1a1a",
+      "strokeWidth": 5,
+      "linecap": "round"
+    },
+    {
+      "kind": "group",
+      "children": [
+        {
+          "kind": "group",
+          "children": [
+            {
+              "kind": "path",
+              "d": "M0,0 L9,15 L11,30 l10,2",
+              "fill": "none",
+              "stroke": "#1a1a1a",
+              "strokeWidth": 5,
+              "linecap": "round"
+            }
+          ],
+          "anim": {
+            "name": "ropeleg"
+          },
+          "origin": "0% 0%"
+        }
+      ],
+      "transform": "translate(-2,16)"
+    }
+  ],
+  "head": {
+    "cx": 2,
+    "cy": -30,
+    "r": 14
+  }
+}

@@ -42,6 +42,32 @@ import peek from '../../../content/engine/poses/peek.json'
 import hang from '../../../content/engine/poses/hang.json'
 import knock from '../../../content/engine/poses/knock.json'
 
+import skinKeyframes from '../../../content/engine/skins/keyframes.json'
+import sStand from '../../../content/engine/skins/stand.json'
+import sWalk from '../../../content/engine/skins/walk-mid.json'
+import sTuck from '../../../content/engine/skins/jump-tuck.json'
+import sLand from '../../../content/engine/skins/squash-land.json'
+import sFight from '../../../content/engine/skins/fight.json'
+import sSpray from '../../../content/engine/skins/spray.json'
+import sThink from '../../../content/engine/skins/think.json'
+import sVault from '../../../content/engine/skins/vault.json'
+import sRope from '../../../content/engine/skins/rope.json'
+import sSwing from '../../../content/engine/skins/swing.json'
+import sWallrun from '../../../content/engine/skins/wallrun.json'
+import sSlide from '../../../content/engine/skins/slide.json'
+import sSurf from '../../../content/engine/skins/surf.json'
+import sDangle from '../../../content/engine/skins/dangle.json'
+import sThrow from '../../../content/engine/skins/throw.json'
+import sWave from '../../../content/engine/skins/wave.json'
+import sCheer from '../../../content/engine/skins/cheer.json'
+import sTrip from '../../../content/engine/skins/trip.json'
+import sSneeze from '../../../content/engine/skins/sneeze.json'
+import sShove from '../../../content/engine/skins/shove.json'
+import sPunch from '../../../content/engine/skins/punch.json'
+import sPeek from '../../../content/engine/skins/peek.json'
+import sHang from '../../../content/engine/skins/hang.json'
+import sKnock from '../../../content/engine/skins/knock.json'
+
 import bWalk from '../../../content/engine/behaviors/builtin/walk.json'
 import bHop from '../../../content/engine/behaviors/builtin/hop.json'
 import bRoll from '../../../content/engine/behaviors/builtin/roll.json'
@@ -72,6 +98,18 @@ const base: MigrationBase = {
   ]),
   clips: reg([idleClip, walkClip, jumpClip]),
   behaviors: reg([bWalk, bHop, bRoll, bPoof, bVault, bRope, bSwing, bWallrun, bSlide, bSmash, bCombo]),
+}
+
+// Expressive data skins (parity Stage 2b) — render-layer content, NOT part of
+// the migration base (the sim never sees them). One frozen registry.
+import type { PoseSkinDoc, SkinKeyframe } from '../../../packages/schema/src/index'
+export const engineSkins: { keyframes: Record<string, SkinKeyframe>; docs: readonly PoseSkinDoc[] } = {
+  keyframes: (skinKeyframes as unknown as { keyframes: Record<string, SkinKeyframe> }).keyframes,
+  docs: [
+    sStand, sWalk, sTuck, sLand, sFight, sSpray, sThink, sVault, sRope, sSwing,
+    sWallrun, sSlide, sSurf, sDangle, sThrow, sWave, sCheer, sTrip, sSneeze,
+    sShove, sPunch, sPeek, sHang, sKnock,
+  ] as unknown as PoseSkinDoc[],
 }
 
 export interface EngineDoc {

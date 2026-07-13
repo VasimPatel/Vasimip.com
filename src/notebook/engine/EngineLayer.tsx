@@ -30,7 +30,7 @@ import {
 } from '../../../packages/engine/src/index'
 import { evalGate, type BehaviorDoc, type GateExpr } from '../../../packages/schema/src/index'
 import { createCharacterRenderer, type CharacterRenderer } from '../../../packages/renderer-svg/src/index'
-import type { EngineDoc } from './engineDoc'
+import { engineSkins, type EngineDoc } from './engineDoc'
 import { pick, scalar, reviewHook, reviewLog } from '../review'
 
 export interface EngineLayerProps {
@@ -149,10 +149,13 @@ export class EngineLayer extends Component<EngineLayerProps> {
       }
       this.lean += (leanTarget - this.lean) * 0.08
       // Pose props (sword, spray can) ride the active strikePose; the fight pose
-      // also shuffles the whole figure (the legacy fightshift cycle).
+      // also shuffles the whole figure (the legacy fightshift cycle). With a SKIN
+      // active the drawing carries its own props/acting — the renderer suppresses
+      // the rig figure and prop layer itself.
       const src = s.rt.activeSource()
       const activePose = src.kind === 'pose' ? this.docV2.poses[src.id] : undefined
       this.syncPoseAct(src.kind === 'pose' ? src.id : null)
+      const cap = s.rt.capsule()
       this.renderer.render(solved, s.rt.face(), s.rt.overrides(), {
         flourish: s.rt.flourish(),
         spin: this.rolling && this.airborne ? this.spin : 0,
@@ -160,6 +163,9 @@ export class EngineLayer extends Component<EngineLayerProps> {
         pupilScale: 1 + 0.55 * near, // legacy eyeR 2 → 3.1 at the cursor
         lean: this.lean,
         props: (activePose as { props?: never[] } | undefined)?.props,
+        skinId: src.id,
+        skinRoot: { x: s.rt.transform.x, y: Math.max(cap.y0, cap.y1) + cap.r },
+        facing: s.rt.transform.facing as 1 | -1,
       })
 
       // Camera follows Dash while a travel is in flight (throttled ~9 ticks; the
@@ -306,7 +312,7 @@ export class EngineLayer extends Component<EngineLayerProps> {
     // Face-level calibration: the head bone's world angle in the rest pose.
     const stand = this.docV2.poses.stand?.angles ?? {}
     const faceRestAngle = (stand.pelvis ?? 0) + (stand.neck ?? 0) + (stand.head ?? 0)
-    this.renderer = createCharacterRenderer(svg, dash, rig, { faceRestAngle })
+    this.renderer = createCharacterRenderer(svg, dash, rig, { faceRestAngle, skins: engineSkins })
     // Wrap the renderer group so the legacy CSS keyframe arcs (pokehop, spin360,
     // pokewob, fidgethop — already in styles.css) can play on the whole figure
     // without fighting the renderer's own squash/spin/lean transform.

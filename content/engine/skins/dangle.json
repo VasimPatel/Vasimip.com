@@ -1,0 +1,115 @@
+{
+  "schemaVersion": 2,
+  "id": "skin:dangle",
+  "sources": [
+    "dangle"
+  ],
+  "face": "baked",
+  "groupAnim": {
+    "name": "dangleswing",
+    "origin": "50% 6%"
+  },
+  "elements": [
+    {
+      "kind": "circle",
+      "cx": 2,
+      "cy": -30,
+      "r": 14,
+      "fill": "#fffdf6",
+      "stroke": "#1a1a1a",
+      "strokeWidth": 4
+    },
+    {
+      "kind": "path",
+      "d": "M-6,-39 l10,4 M19,-39 l-10,4",
+      "fill": "none",
+      "stroke": "#1a1a1a",
+      "strokeWidth": 2.6,
+      "linecap": "round"
+    },
+    {
+      "kind": "circle",
+      "cx": 0,
+      "cy": -28,
+      "r": 2.4,
+      "fill": "#1a1a1a"
+    },
+    {
+      "kind": "circle",
+      "cx": 11,
+      "cy": -28,
+      "r": 2.4,
+      "fill": "#1a1a1a"
+    },
+    {
+      "kind": "circle",
+      "cx": 6,
+      "cy": -20,
+      "r": 2.4,
+      "fill": "none",
+      "stroke": "#1a1a1a",
+      "strokeWidth": 2.2
+    },
+    {
+      "kind": "path",
+      "d": "M0,-16 L-2,16",
+      "fill": "none",
+      "stroke": "#1a1a1a",
+      "strokeWidth": 5.5,
+      "linecap": "round"
+    },
+    {
+      "kind": "path",
+      "d": "M0,-9 L13,1 M-1,-9 L-14,2",
+      "fill": "none",
+      "stroke": "#1a1a1a",
+      "strokeWidth": 4.5,
+      "linecap": "round"
+    },
+    {
+      "kind": "group",
+      "children": [
+        {
+          "kind": "group",
+          "children": [
+            {
+              "kind": "path",
+              "d": "M0,0 L7,16 L9,31 l10,2",
+              "fill": "none",
+              "stroke": "#1a1a1a",
+              "strokeWidth": 5,
+              "linecap": "round"
+            }
+          ],
+          "anim": {
+            "name": "kickl"
+          },
+          "origin": "15% 0%"
+        },
+        {
+          "kind": "group",
+          "children": [
+            {
+              "kind": "path",
+              "d": "M0,0 L-7,17 L-7,32 l-9,2",
+              "fill": "none",
+              "stroke": "#1a1a1a",
+              "strokeWidth": 5,
+              "linecap": "round"
+            }
+          ],
+          "anim": {
+            "name": "kickr"
+          },
+          "origin": "85% 0%"
+        }
+      ],
+      "transform": "translate(-2,16)"
+    }
+  ],
+  "head": {
+    "cx": 2,
+    "cy": -30,
+    "r": 14
+  }
+}

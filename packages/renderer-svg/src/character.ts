@@ -15,11 +15,17 @@
 //
 // Geometry constants are expressed in HEAD RADII so any rig proportion scales.
 
-import type { CharacterDoc, PoseProp, RigTemplate } from '@dash/schema'
+import type { CharacterDoc, PoseProp, PoseSkinDoc, RigTemplate, SkinElement, SkinKeyframe } from '@dash/schema'
 import type { FaceAux, SolvedSkeleton } from '@dash/engine'
 import { NEUTRAL_FACE } from '@dash/engine'
 
 const SVG_NS = 'http://www.w3.org/2000/svg'
+// Legacy Dash local space: viewBox -60 -75 120 130 rendered 104×113, positioned
+// so the figure's ground-centre is local (0, 55). Skin-local → world is
+// translate(groundCentre) · scale(SKIN_SX·facing, SKIN_SY) · translate(0, -55).
+const SKIN_SX = 104 / 120
+const SKIN_SY = 113 / 130
+const SKIN_FOOT_Y = 55
 const HEAD_JOINT_ID = 'head'
 const DEFAULT_COLOR = '#1a1a1a'
 const DEFAULT_WIDTH = 5
@@ -63,6 +69,15 @@ export interface RenderExtras {
   props?: readonly PoseProp[]
   /** Whole-figure lean (rad, about the ground point) — the legacy cursor lean. */
   lean?: number
+  /** Active SKIN source id (pose/clip id, e.g. 'fight' or 'walk-cycle'). When a
+   * registered skin matches, the authored legacy drawing replaces the rig figure
+   * (chains/head/props hide); null/undefined or no match → rig rendering. */
+  skinId?: string | null
+  /** The figure's ground-centre in world px — the skin's placement anchor.
+   * Required whenever skinId resolves (the caller owns the transform). */
+  skinRoot?: { x: number; y: number }
+  /** Horizontal facing (1 right, −1 left) — mirrors the skin art. */
+  facing?: 1 | -1
 }
 
 export interface CharacterRenderer {
@@ -127,6 +142,28 @@ function isArmChain(jointIds: string[]): boolean {
   return jointIds.some((id) => /arm/i.test(id))
 }
 
+/** Synthesize the skins' @keyframes CSS from data (names prefixed 'dskin-' so
+ * the legacy site stylesheet — which still defines the ORIGINAL names — can
+ * never collide with the data-driven copies). */
+function skinKeyframesCss(table: Record<string, SkinKeyframe>): string {
+  const out: string[] = []
+  for (const [name, k] of Object.entries(table)) {
+    const stops: string[] = []
+    for (const [off, f] of Object.entries(k.frames)) {
+      const parts: string[] = []
+      if (f.translate) parts.push(`translate(${f.translate[0]}px, ${f.translate[1]}px)`)
+      if (f.rotate !== undefined) parts.push(`rotate(${f.rotate}deg)`)
+      if (f.scale) parts.push(`scale(${f.scale[0]}, ${f.scale[1]})`)
+      const decls: string[] = []
+      if (parts.length > 0) decls.push(`transform: ${parts.join(' ')}`)
+      if (f.opacity !== undefined) decls.push(`opacity: ${f.opacity}`)
+      stops.push(`${off}% { ${decls.join('; ')} }`)
+    }
+    out.push(`@keyframes dskin-${name} { ${stops.join(' ')} }`)
+  }
+  return out.join('\n')
+}
+
 export function createCharacterRenderer(
   svgRoot: SVGSVGElement,
   character: CharacterDoc,
@@ -137,6 +174,11 @@ export function createCharacterRenderer(
      * standing 8° offset) and rotates only with DEVIATIONS from rest — a tuck
      * still carries the face around. */
     faceRestAngle?: number
+    /** Expressive data skins (parity Stage 2b): the shared keyframes table plus
+     * the pose-skin docs. The renderer synthesizes one <style> block (names
+     * prefixed 'dskin-' so the site's legacy stylesheet can't collide) and swaps
+     * whole-figure authored drawings by extras.skinId. */
+    skins?: { keyframes: Record<string, SkinKeyframe>; docs: readonly PoseSkinDoc[] }
   },
 ): CharacterRenderer {
   const color = character.style?.color ?? DEFAULT_COLOR
@@ -295,6 +337,133 @@ export function createCharacterRenderer(
     }
   }
 
+  // ── expressive data skins ───────────────────────────────────────────────────────
+  // One <g> per skin doc, built lazily and cached; the OUTER group carries the
+  // world placement (per frame), an INNER group carries the skin's whole-figure
+  // animation, exactly mirroring the legacy component structure. While a skin is
+  // active the rig figure (chains/head/fists/props) hides; the verlet ribbons
+  // stay (the engine cape is engine-owned charm) and squash/spin/lean still wrap
+  // everything via the outer renderer group.
+  const skinBySource = new Map<string, PoseSkinDoc>()
+  for (const doc of opts?.skins?.docs ?? []) for (const s of doc.sources) skinBySource.set(s, doc)
+  const skinGroups = new Map<string, { outer: SVGGElement; doc: PoseSkinDoc }>()
+  let activeSkin: { outer: SVGGElement; doc: PoseSkinDoc } | null = null
+  const skinLayer = document.createElementNS(SVG_NS, 'g') as SVGGElement
+  if (faceGroup) group.insertBefore(skinLayer, faceGroup)
+  else group.appendChild(skinLayer)
+
+  let skinStyleEl: SVGStyleElement | null = null
+  if (opts?.skins && Object.keys(opts.skins.keyframes).length > 0) {
+    skinStyleEl = document.createElementNS(SVG_NS, 'style') as SVGStyleElement
+    skinStyleEl.textContent = skinKeyframesCss(opts.skins.keyframes)
+    svgRoot.appendChild(skinStyleEl)
+  }
+
+  function animShorthand(name: string, delaySec?: number): string {
+    const k = opts?.skins?.keyframes[name]
+    if (!k) return ''
+    const parts = [`dskin-${name}`, `${k.duration}s`, k.ease ?? 'ease-in-out']
+    if (delaySec !== undefined) parts.push(`${delaySec}s`)
+    const iter = k.iterations ?? 'infinite'
+    parts.push(String(iter))
+    if (k.fill === 'forwards') parts.push('forwards')
+    return parts.join(' ')
+  }
+
+  function buildSkinElement(e: SkinElement): SVGElement {
+    if (e.kind === 'group') {
+      const g = document.createElementNS(SVG_NS, 'g') as SVGGElement
+      if (e.transform) {
+        // SVG-attribute syntax (unitless, the legacy positioning wrappers) goes on
+        // the attribute; CSS syntax (px/deg — legacy style transforms) on style.
+        if (/(px|deg|rad)/.test(e.transform)) g.style.transform = e.transform
+        else g.setAttribute('transform', e.transform)
+      }
+      if (e.anim) {
+        g.style.transformBox = 'fill-box'
+        if (e.origin) g.style.transformOrigin = e.origin
+        g.style.animation = animShorthand(e.anim.name, e.anim.delaySec)
+      } else if (e.origin) {
+        g.style.transformBox = 'fill-box'
+        g.style.transformOrigin = e.origin
+      }
+      for (const c of e.children) g.appendChild(buildSkinElement(c))
+      return g
+    }
+    let el: SVGElement
+    if (e.kind === 'path') {
+      el = document.createElementNS(SVG_NS, 'path')
+      el.setAttribute('d', e.d)
+    } else if (e.kind === 'circle') {
+      el = document.createElementNS(SVG_NS, 'circle')
+      el.setAttribute('cx', String(e.cx))
+      el.setAttribute('cy', String(e.cy))
+      el.setAttribute('r', String(e.r))
+    } else if (e.kind === 'ellipse') {
+      el = document.createElementNS(SVG_NS, 'ellipse')
+      el.setAttribute('cx', String(e.cx))
+      el.setAttribute('cy', String(e.cy))
+      el.setAttribute('rx', String(e.rx))
+      el.setAttribute('ry', String(e.ry))
+    } else {
+      el = document.createElementNS(SVG_NS, 'rect')
+      el.setAttribute('x', String(e.x))
+      el.setAttribute('y', String(e.y))
+      el.setAttribute('width', String(e.w))
+      el.setAttribute('height', String(e.h))
+      if (e.rx !== undefined) el.setAttribute('rx', String(e.rx))
+    }
+    if (e.fill !== undefined) el.setAttribute('fill', e.fill)
+    else el.setAttribute('fill', 'none')
+    if (e.stroke) el.setAttribute('stroke', e.stroke)
+    if (e.strokeWidth !== undefined) el.setAttribute('stroke-width', String(e.strokeWidth))
+    if (e.linecap) el.setAttribute('stroke-linecap', e.linecap)
+    el.setAttribute('stroke-linejoin', 'round')
+    if (e.opacity !== undefined) el.setAttribute('opacity', String(e.opacity))
+    return el
+  }
+
+  function skinGroupFor(doc: PoseSkinDoc): { outer: SVGGElement; doc: PoseSkinDoc } {
+    const cached = skinGroups.get(doc.id)
+    if (cached) return cached
+    const outer = document.createElementNS(SVG_NS, 'g') as SVGGElement
+    const inner = document.createElementNS(SVG_NS, 'g') as SVGGElement
+    if (doc.groupAnim) {
+      inner.style.transformBox = 'fill-box'
+      inner.style.transformOrigin = doc.groupAnim.origin ?? '50% 88%'
+      inner.style.animation = animShorthand(doc.groupAnim.name, doc.groupAnim.delaySec)
+    }
+    for (const e of doc.elements) inner.appendChild(buildSkinElement(e))
+    outer.appendChild(inner)
+    outer.style.display = 'none'
+    skinLayer.appendChild(outer)
+    const entry = { outer, doc }
+    skinGroups.set(doc.id, entry)
+    return entry
+  }
+
+  function setRigVisible(visible: boolean): void {
+    const disp = visible ? '' : 'none'
+    for (const c of chains) {
+      c.path.style.display = disp
+      if (c.fist) c.fist.style.display = disp
+    }
+    if (headEl) headEl.style.display = disp
+    propGroup.style.display = disp
+  }
+
+  /** Swap the visible skin (or back to the rig). display:none unloads CSS
+   * animations, so re-showing a cached skin RESTARTS them from 0 — the same
+   * behavior as the legacy React component remount. */
+  function swapSkin(next: { outer: SVGGElement; doc: PoseSkinDoc } | null): void {
+    if (activeSkin === next) return
+    if (activeSkin) activeSkin.outer.style.display = 'none'
+    activeSkin = next
+    if (next) next.outer.style.display = ''
+    setRigVisible(next === null)
+    if (faceGroup) faceGroup.style.display = next && next.doc.face !== 'parametric' ? 'none' : ''
+  }
+
   svgRoot.appendChild(group)
 
   // ── face state drawing (all in head-local px; the face group carries the head
@@ -397,6 +566,62 @@ export function createCharacterRenderer(
     return i === undefined ? undefined : solved.bones[i]
   }
 
+  /** Head circle + parametric face — two anchor modes: the solved head bone (rig
+   * figure) or the active skin's authored head anchor (parametric skins; baked
+   * skins hide the face entirely — their drawing carries its own). */
+  function renderFace(solved: SolvedSkeleton, face: FaceAux, overrides?: EndpointOverrides, extras?: RenderExtras): void {
+    if (!faceGroup) return
+    let hx: number
+    let hy: number
+    let rot = 0
+    let fs = 1
+    if (activeSkin) {
+      if (activeSkin.doc.face !== 'parametric') return // baked — hidden by swapSkin
+      const sr = extras?.skinRoot
+      if (!sr) return
+      const facingS = extras?.facing ?? 1
+      const a = activeSkin.doc.head ?? { cx: 2, cy: -30, r: 14 }
+      hx = sr.x + SKIN_SX * facingS * a.cx
+      hy = sr.y + SKIN_SY * (a.cy - SKIN_FOOT_Y)
+      fs = (a.r * SKIN_SY) / headR // face geometry is authored in rig headR units
+      faceGroup.style.transform = `translate(${hx}px, ${hy}px) scale(${fs})`
+    } else {
+      const head = bone(solved, HEAD_JOINT_ID)
+      if (!head || !headEl) return
+      hx = overrides?.[HEAD_JOINT_ID]?.ex ?? head.ex
+      hy = overrides?.[HEAD_JOINT_ID]?.ey ?? head.ey
+      headEl.setAttribute('cx', String(hx))
+      headEl.setAttribute('cy', String(hy))
+      rot = head.worldAngle - (opts?.faceRestAngle ?? -Math.PI / 2)
+      faceGroup.style.transform = `translate(${hx}px, ${hy}px) rotate(${rot}rad)`
+    }
+
+    const facing = face.facing ?? 1
+    const intensity = face.intensity ?? 0.5
+    const openY = 1 - Math.min(1, Math.max(0, face.blink))
+    const maxOff = 0.2 * headR
+    let dx = face.pupilDx
+    let dy = face.pupilDy
+    const len = Math.hypot(dx, dy)
+    if (len > maxOff && len > 0) {
+      dx = (dx / len) * maxOff
+      dy = (dy / len) * maxOff
+    }
+    // Dilation: the legacy eyes grow toward the cursor (eyeR 2 → 3.1 near).
+    const pr = PUPIL_R * headR * (extras?.pupilScale ?? 1)
+    for (let i = 0; i < 2; i++) {
+      const side = i === 0 ? -1 : 1
+      const ex = (EYE_FACING * facing + EYE_SEP * side) * headR + dx
+      const ey = EYE_Y * headR + dy
+      pupils[i].setAttribute('cx', String(ex))
+      pupils[i].setAttribute('cy', String(ey))
+      pupils[i].setAttribute('rx', String(pr))
+      pupils[i].setAttribute('ry', String(pr * openY))
+      brows[i].setAttribute('d', browD(side as -1 | 1, face.brow ?? 'determined', intensity, facing))
+    }
+    if (mouthEl) mouthEl.setAttribute('d', mouthD(face.mouth ?? 'smile', intensity, facing))
+  }
+
   return {
     render(solved, face: FaceAux = NEUTRAL_FACE, overrides?, extras?): void {
 
@@ -431,6 +656,31 @@ export function createCharacterRenderer(
         group.style.transform = ''
       }
 
+      // Expressive skin: when the active source has a registered drawing, it
+      // REPLACES the rig figure — placed at the ground-centre, mirrored by
+      // facing; the inner CSS animations carry the legacy internal acting.
+      const skinDoc = extras?.skinId ? skinBySource.get(extras.skinId) : undefined
+      swapSkin(skinDoc ? skinGroupFor(skinDoc) : null)
+      if (activeSkin && extras?.skinRoot) {
+        const sr = extras.skinRoot
+        const facing = extras.facing ?? 1
+        activeSkin.outer.setAttribute(
+          'transform',
+          `translate(${sr.x},${sr.y}) scale(${SKIN_SX * facing},${SKIN_SY}) translate(0,${-SKIN_FOOT_Y})`,
+        )
+      }
+
+      // Accessory ribbons (engine-owned cape — drawn under skins AND rig).
+      const accs = extras?.accessories ?? []
+      for (let i = 0; i < accs.length; i++) ensureRibbon(i).setAttribute('d', ribbonD(accs[i]))
+      for (let i = accs.length; i < ribbons.length; i++) ribbons[i].setAttribute('d', 'M0,0')
+
+      if (activeSkin) {
+        // The rig figure is hidden; only the (possibly parametric) face remains.
+        renderFace(solved, face, overrides, extras)
+        return
+      }
+
       // Pose props: rebuild when the active pose's prop set changes, then ride
       // the anchor joint's end point every frame.
       if ((extras?.props ?? null) !== propsKey) rebuildProps(extras?.props)
@@ -438,11 +688,6 @@ export function createCharacterRenderer(
         const bn = bone(solved, pa.joint)
         if (bn) pa.g.setAttribute('transform', `translate(${bn.ex},${bn.ey})`)
       }
-
-      // Accessory ribbons.
-      const accs = extras?.accessories ?? []
-      for (let i = 0; i < accs.length; i++) ensureRibbon(i).setAttribute('d', ribbonD(accs[i]))
-      for (let i = accs.length; i < ribbons.length; i++) ribbons[i].setAttribute('d', 'M0,0')
 
       // Limb chains: continuous polylines; overrides replace bone ENDS.
       for (const chain of chains) {
@@ -471,44 +716,11 @@ export function createCharacterRenderer(
         }
       }
 
-      // Head + face.
-      const head = bone(solved, HEAD_JOINT_ID)
-      if (head && headEl && faceGroup) {
-        const hx = overrides?.[HEAD_JOINT_ID]?.ex ?? head.ex
-        const hy = overrides?.[HEAD_JOINT_ID]?.ey ?? head.ey
-        headEl.setAttribute('cx', String(hx))
-        headEl.setAttribute('cy', String(hy))
-        const rot = head.worldAngle - (opts?.faceRestAngle ?? -Math.PI / 2)
-        faceGroup.style.transform = `translate(${hx}px, ${hy}px) rotate(${rot}rad)`
-
-        const facing = face.facing ?? 1
-        const intensity = face.intensity ?? 0.5
-        const openY = 1 - Math.min(1, Math.max(0, face.blink))
-        const maxOff = 0.2 * headR
-        let dx = face.pupilDx
-        let dy = face.pupilDy
-        const len = Math.hypot(dx, dy)
-        if (len > maxOff && len > 0) {
-          dx = (dx / len) * maxOff
-          dy = (dy / len) * maxOff
-        }
-        // Dilation: the legacy eyes grow toward the cursor (eyeR 2 → 3.1 near).
-        const pr = PUPIL_R * headR * (extras?.pupilScale ?? 1)
-        for (let i = 0; i < 2; i++) {
-          const side = i === 0 ? -1 : 1
-          const ex = (EYE_FACING * facing + EYE_SEP * side) * headR + dx
-          const ey = EYE_Y * headR + dy
-          pupils[i].setAttribute('cx', String(ex))
-          pupils[i].setAttribute('cy', String(ey))
-          pupils[i].setAttribute('rx', String(pr))
-          pupils[i].setAttribute('ry', String(pr * openY))
-          brows[i].setAttribute('d', browD(side as -1 | 1, face.brow ?? 'determined', intensity, facing))
-        }
-        if (mouthEl) mouthEl.setAttribute('d', mouthD(face.mouth ?? 'smile', intensity, facing))
-      }
+      renderFace(solved, face, overrides, extras)
     },
     destroy(): void {
       group.remove()
+      skinStyleEl?.remove()
       pupils = []
       brows = []
       mouthEl = null

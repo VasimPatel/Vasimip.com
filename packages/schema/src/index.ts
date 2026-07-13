@@ -45,6 +45,10 @@ export type { RigTemplate, JointDef, IkChainDef, Attach } from './rig'
 export { tryValidatePose, validatePoseAgainstRig } from './pose'
 export type { Pose, RootOffset, PoseProp, PropElement, PoseFace } from './pose'
 
+// ── parity recovery Stage 2b: expressive data skins (L1c) ────────────────────
+export { tryValidatePoseSkin, tryValidateSkinKeyframes, validateSkinAgainstKeyframes } from './skin'
+export type { PoseSkinDoc, SkinKeyframesDoc, SkinKeyframe, SkinFrame, SkinElement } from './skin'
+
 export { tryValidateCharacter } from './character'
 export type {
   CharacterDoc,

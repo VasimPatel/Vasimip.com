@@ -1,0 +1,61 @@
+{
+  "schemaVersion": 2,
+  "id": "skin:jump-tuck",
+  "sources": [
+    "jump-tuck",
+    "jump"
+  ],
+  "face": "baked",
+  "groupAnim": {
+    "name": "tuckspin",
+    "origin": "50% 50%"
+  },
+  "elements": [
+    {
+      "kind": "circle",
+      "cx": 0,
+      "cy": -14,
+      "r": 12,
+      "fill": "#fffdf6",
+      "stroke": "#1a1a1a",
+      "strokeWidth": 4
+    },
+    {
+      "kind": "path",
+      "d": "M-6,-15 l6,1 M6,-14 l6,-1",
+      "fill": "none",
+      "stroke": "#1a1a1a",
+      "strokeWidth": 2.4,
+      "linecap": "round"
+    },
+    {
+      "kind": "path",
+      "d": "M-12,-4 q-4,18 10,20 q15,2 15,-12",
+      "fill": "none",
+      "stroke": "#1a1a1a",
+      "strokeWidth": 5.5,
+      "linecap": "round"
+    },
+    {
+      "kind": "path",
+      "d": "M-7,2 L9,-2",
+      "fill": "none",
+      "stroke": "#1a1a1a",
+      "strokeWidth": 4.5,
+      "linecap": "round"
+    },
+    {
+      "kind": "path",
+      "d": "M-9,-5 L11,1",
+      "fill": "none",
+      "stroke": "#1a1a1a",
+      "strokeWidth": 4.5,
+      "linecap": "round"
+    }
+  ],
+  "head": {
+    "cx": 0,
+    "cy": -14,
+    "r": 12
+  }
+}
