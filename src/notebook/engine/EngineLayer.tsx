@@ -51,6 +51,10 @@ export interface EngineLayerProps {
   /** Quips for the end of a drag (the legacy DROPS list) — spoken via the
    * engine's own bubble so positioning always tracks the figure. */
   dropLines?: string[]
+  /** Poke-reaction quips (the legacy POKE list). */
+  pokeLines?: string[]
+  /** Idle chatter quips (the legacy CHATTER list, for the fidget scheduler). */
+  chatterLines?: string[]
 }
 
 interface Scene {
@@ -98,6 +102,14 @@ export class EngineLayer extends Component<EngineLayerProps> {
   private onDragUp: ((e: MouseEvent) => void) | null = null
   private onDragBlur: (() => void) | null = null
   private backNavCancel: (() => void) | null = null
+  /** Legacy charm wrapper around the renderer group: plays the poke/fidget
+   * keyframe arcs (pokehop/spin360/pokewob/fidgethop from styles.css).
+   * Render-layer only. */
+  private arcWrap: SVGGElement | null = null
+  private arcTimer = 0
+  private fidgetTimer = 0
+  /** Smoothed cursor-lean (rad) — the legacy .22s ease-out transition. */
+  private lean = 0
 
   private cancelBackNav(): void {
     this.backNavCancel?.()
@@ -122,11 +134,27 @@ export class EngineLayer extends Component<EngineLayerProps> {
         // advanced PER SIM TICK so rotation speed is refresh-rate independent.
         if (this.rolling && this.airborne) this.spin += (Math.PI * 2 * STEP_MS) / 600
       }
-      this.renderer.render(s.rt.solved(), s.rt.face(), s.rt.overrides(), {
+      // Proximity charm (legacy renderVals): pupils dilate and the standing figure
+      // tips toward a near cursor; both ease so nothing pops.
+      const solved = s.rt.solved()
+      const standing = !s.rt.running() && !this.airborne && !this.dragging
+      let near = 0
+      let leanTarget = 0
+      const headBone = solved.bones.find((b) => b.id === 'head')
+      if (this.look && headBone) {
+        const d = Math.hypot(this.look.x - headBone.ex, this.look.y - headBone.ey)
+        near = Math.max(0, Math.min(1, (150 - d) / 150))
+        if (standing) leanTarget = (this.look.x < headBone.ex ? 1 : -1) * near * (8 * Math.PI / 180)
+      }
+      this.lean += (leanTarget - this.lean) * 0.08
+      this.renderer.render(solved, s.rt.face(), s.rt.overrides(), {
         flourish: s.rt.flourish(),
         spin: this.rolling && this.airborne ? this.spin : 0,
         accessories: s.rt.accessories.map((a) => a.points()),
+        pupilScale: 1 + 0.35 * near,
+        lean: this.lean,
       })
+
       // Camera follows Dash while a travel is in flight (throttled ~9 ticks; the
       // Notebook's CSS cam transition glides between updates).
       if (this.travelDest != null && ++this.camTick % 9 === 0) {
@@ -153,6 +181,7 @@ export class EngineLayer extends Component<EngineLayerProps> {
       }
     }
     this.raf = requestAnimationFrame(frame)
+    this.scheduleFidget()
   }
 
   componentDidUpdate(prev: EngineLayerProps): void {
@@ -163,6 +192,7 @@ export class EngineLayer extends Component<EngineLayerProps> {
 
   componentWillUnmount(): void {
     cancelAnimationFrame(this.raf)
+    window.clearTimeout(this.fidgetTimer)
     this.teardown()
   }
 
@@ -178,6 +208,10 @@ export class EngineLayer extends Component<EngineLayerProps> {
     this.scene?.rt.dispose()
     this.renderer?.destroy()
     this.renderer = null
+    window.clearTimeout(this.arcTimer)
+    this.arcWrap?.remove()
+    this.arcWrap = null
+    this.lean = 0
     this.bubble?.remove()
     this.bubble = null
     this.scene = null
@@ -258,10 +292,35 @@ export class EngineLayer extends Component<EngineLayerProps> {
     this.scene = { ctx, verlet, mw, rt, pageIdx, offs }
     this.currentPanel = 0
     this.renderer = createCharacterRenderer(svg, dash, rig)
+    // Wrap the renderer group so the legacy CSS keyframe arcs (pokehop, spin360,
+    // pokewob, fidgethop — already in styles.css) can play on the whole figure
+    // without fighting the renderer's own squash/spin/lean transform.
+    const NS = 'http://www.w3.org/2000/svg'
+    const rg = svg.querySelector('[data-dash-renderer]')
+    if (rg) {
+      const arc = document.createElementNS(NS, 'g') as SVGGElement
+      svg.insertBefore(arc, rg)
+      arc.appendChild(rg)
+      this.arcWrap = arc
+    }
     this.makeBubble(svg)
 
-    // Entrance = the panel's arrival behavior (the owner's authored moment).
+    // Entrance: the legacy Dash STROLLS IN from the panel's left edge before the
+    // arrival plays (enterPage ran him in from offscreen at 1.25s). Engine-native:
+    // spawn at the left end of panel 0's support line, walk to the anchor. Short
+    // lines (< 60 px of walk) skip the stroll — a two-step shuffle reads as jitter.
     this.pendingArrival = this.arrivalId(pageIdx, 0)
+    const pn0 = this.docV2.pages[pageIdx]?.panels[0]
+    const walkDoc = this.docV2.behaviors['builtin:walk']
+    const entryDist = pn0 ? spot.x - (pn0.x + 10) : 0
+    if (pn0 && walkDoc && entryDist >= 60) {
+      rt.transform.x = pn0.x + 10
+      rt.transform.facing = 1
+      this.travelDest = 0
+      this.props.sfx('fx:jitPage')
+      rt.runBehavior(walkDoc, { travel: { from: `panel:${pageIdx}:0`, to: `panel:${pageIdx}:0` } })
+      return
+    }
     this.chainArrival()
   }
 
@@ -368,6 +427,7 @@ export class EngineLayer extends Component<EngineLayerProps> {
     const toId = `panel:${pageIdx}:${far}`
     this.clearTravel()
     this.travelDest = far
+    this.rolling = doc.id === 'builtin:roll' || doc.id === 'builtin:hop' || doc.id === 'builtin:combo'
     this.pendingArrival = this.arrivalId(pageIdx, far)
     this.currentPanel = far
     s.rt.runBehavior(doc, { travel: { from: fromId, to: toId } })
@@ -384,6 +444,17 @@ export class EngineLayer extends Component<EngineLayerProps> {
     s.ctx.events.emit('expression:poke', { characterId: this.dash.id })
     s.verlet.applyImpulse(`secondary:${this.dash.id}`, 70, -140)
     for (const a of s.rt.accessories) s.verlet.applyImpulse(a.bodyId, 120, -100)
+    // The legacy reaction: a random whole-figure arc + a quip — only when he's
+    // actually standing around (legacy gated pokes on `standing`).
+    if (!s.rt.running() && !this.dragging && !this.airborne) {
+      const arcs: Array<'hop' | 'spin' | 'wob'> = ['hop', 'spin', 'wob']
+      this.playArc(arcs[Math.floor(Math.random() * arcs.length)], false)
+      const lines = this.props.pokeLines
+      if (lines && lines.length > 0) {
+        const line = lines[Math.floor(Math.random() * lines.length)]
+        s.rt.runBehavior({ schemaVersion: 2, id: '__poke:quip', steps: [{ verb: 'say', text: line }] } as never)
+      }
+    }
   }
 
   setLook(x: number, y: number): void {
@@ -468,6 +539,81 @@ export class EngineLayer extends Component<EngineLayerProps> {
       const line = lines[s.ctx.rng.int(0, lines.length)]
       s.rt.runBehavior({ schemaVersion: 2, id: '__drop:quip', steps: [{ verb: 'say', text: line }] } as never)
     }
+  }
+
+  // ── charm layer (render-only; replays the legacy keyframes verbatim) ─────────
+  /** Anchor points for whole-figure animations, in WORLD coords (the svg viewBox
+   * is the page space, so world px == origin px). fill-box percentages are
+   * unusable here: the wrapper's bbox includes the cape, which drags a "50%"
+   * origin sideways — the spin swept an arc instead of turning in place. */
+  private figurePoints(): { ground: string; mid: string } | null {
+    const s = this.scene
+    if (!s) return null
+    const cap = s.rt.capsule()
+    const x = s.rt.transform.x
+    const top = Math.min(cap.y0, cap.y1) - cap.r
+    const bottom = Math.max(cap.y0, cap.y1) + cap.r
+    return { ground: `${x}px ${bottom}px`, mid: `${x}px ${(top + bottom) / 2}px` }
+  }
+
+  /** Play a one-shot legacy arc on the whole figure. Timings verbatim from
+   * POKEARC/FIDGETARC in constants.ts; origins at the live figure points. */
+  private playArc(kind: 'hop' | 'spin' | 'wob', fidget: boolean): void {
+    const w = this.arcWrap
+    const pts = this.figurePoints()
+    if (!w || !pts) return
+    const spec =
+      kind === 'spin'
+        ? { origin: pts.mid, anim: `spin360 ${fidget ? '.6s' : '.55s'} cubic-bezier(.5,.1,.4,1)`, ms: fidget ? 650 : 600 }
+        : kind === 'hop'
+          ? fidget
+            ? { origin: pts.ground, anim: 'fidgethop .7s cubic-bezier(.4,.1,.3,1)', ms: 750 }
+            : { origin: pts.ground, anim: 'pokehop .5s cubic-bezier(.4,.1,.3,1)', ms: 550 }
+          : { origin: pts.ground, anim: `pokewob ${fidget ? '.7s' : '.65s'} ease-in-out`, ms: fidget ? 750 : 700 }
+    window.clearTimeout(this.arcTimer)
+    w.style.transformBox = 'view-box'
+    w.style.transformOrigin = spec.origin
+    w.style.animation = 'none'
+    void w.getBoundingClientRect() // restart the animation
+    w.style.animation = spec.anim
+    this.arcTimer = window.setTimeout(() => {
+      w.style.animation = ''
+    }, spec.ms)
+  }
+
+  /** The legacy fidget scheduler: every 2.8–6 s an idle Dash hops, spins, wobbles,
+   * waves, sneezes, or chatters (chat weighted double). Site-side randomness — the
+   * deterministic core is untouched (same class as the travel-pool pick). */
+  private scheduleFidget(): void {
+    this.fidgetTimer = window.setTimeout(() => {
+      const s = this.scene
+      // props.page is the ENGINE page index (0-based content page — the layer is
+      // never mounted on the cover), so no page gate: scene + rest state suffice.
+      const idle = !!s && !s.rt.running() && !this.dragging && !this.airborne
+      if (idle && s) {
+        const opts = ['hop', 'spin', 'wob', 'wave', 'sneeze', 'chat', 'chat']
+        const f = opts[Math.floor(Math.random() * opts.length)]
+        if (f === 'chat') {
+          const lines = this.props.chatterLines
+          if (lines && lines.length > 0) {
+            const line = lines[Math.floor(Math.random() * lines.length)]
+            s.rt.runBehavior({ schemaVersion: 2, id: '__fidget:chat', steps: [{ verb: 'say', text: line }] } as never)
+          }
+        } else if (f === 'wave') {
+          s.rt.runBehavior({ schemaVersion: 2, id: '__fidget:wave', steps: [{ verb: 'strikePose', ref: 'wave', holdMs: 1200 }] } as never)
+        } else if (f === 'sneeze') {
+          this.props.sfx('fx:jitPage')
+          s.rt.runBehavior({ schemaVersion: 2, id: '__fidget:sneeze', steps: [
+            { verb: 'say', text: 'ah— ah— CHOO!' },
+            { verb: 'strikePose', ref: 'sneeze', holdMs: 700 },
+          ] } as never)
+        } else {
+          if (f === 'hop') this.props.sfx('hop')
+          this.playArc(f as 'hop' | 'spin' | 'wob', true)
+        }
+      }
+      this.scheduleFidget()
+    }, 2800 + Math.random() * 3200)
   }
 
   // ── internals ────────────────────────────────────────────────────────────────

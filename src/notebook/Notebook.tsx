@@ -1155,6 +1155,8 @@ export default class Notebook extends React.Component<NotebookProps, State> {
                     onPoke={() => { this.ensureAC(); this.sfx('hop') }}
                     onDashCam={(p) => this.setState({ camo: p ? { cx: p.x, cy: p.y, mult: 0.92, fast: false } : null })}
                     dropLines={DROPS}
+                    pokeLines={POKE}
+                    chatterLines={CHATTER}
                   />
                 </div>
               )
