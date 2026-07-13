@@ -204,6 +204,72 @@
         }
       }
     },
+    "capeidle": {
+      "duration": 0.9,
+      "ease": "ease-in-out",
+      "iterations": "infinite",
+      "frames": {
+        "0": {
+          "scale": [
+            1,
+            1
+          ]
+        },
+        "50": {
+          "scale": [
+            1.07,
+            1
+          ]
+        },
+        "100": {
+          "scale": [
+            1,
+            1
+          ]
+        }
+      }
+    },
+    "capewalk": {
+      "duration": 0.9,
+      "ease": "ease-in-out",
+      "iterations": "infinite",
+      "frames": {
+        "0": {
+          "rotate": 5
+        },
+        "50": {
+          "rotate": -3
+        },
+        "100": {
+          "rotate": 5
+        }
+      }
+    },
+    "cheercape": {
+      "duration": 0.5,
+      "ease": "ease-in-out",
+      "iterations": "infinite",
+      "frames": {
+        "0": {
+          "scale": [
+            1.08,
+            1
+          ]
+        },
+        "50": {
+          "scale": [
+            0.95,
+            1
+          ]
+        },
+        "100": {
+          "scale": [
+            1.08,
+            1
+          ]
+        }
+      }
+    },
     "cheerpump": {
       "duration": 0.34,
       "ease": "ease-in-out",

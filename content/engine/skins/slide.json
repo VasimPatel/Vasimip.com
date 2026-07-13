@@ -141,6 +141,22 @@
       ]
     }
   ],
+  "cape": {
+    "socket": {
+      "x": -3,
+      "y": -16
+    },
+    "elements": [
+      {
+        "kind": "path",
+        "d": "M-3,-16 L-26,-32 L-19,-24 L-31,-14 L-7,-8 Z",
+        "fill": "#ff5ca8",
+        "stroke": "#1a1a1a",
+        "strokeWidth": 3,
+        "opacity": 0.55
+      }
+    ]
+  },
   "head": {
     "cx": 2,
     "cy": -18,

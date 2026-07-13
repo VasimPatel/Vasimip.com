@@ -97,6 +97,11 @@ export interface PoseSkinDoc {
    * from traveled-distance / strideLen instead of wall-clock, locking contact
    * beats to world motion (the walk skin). Absent → decorative wall-clock. */
   strideLen?: number
+  /** The AUTHORED cape (quality Q3): the legacy per-pose cape drawing with its
+   * own animation, painted FIRST (behind the body), knot at `socket` (skin-local
+   * px). While a caped skin is active the physics ribbon hides — the silhouette
+   * authority is the drawing; secondary motion is a bounded render-layer lag. */
+  cape?: { socket: { x: number; y: number }; elements: SkinElement[] }
   /** Whole-figure animation (legacy top-group anims like fightshift/idlesway). */
   groupAnim?: { name: string; delaySec?: number; origin?: string }
   elements: SkinElement[]
@@ -108,7 +113,7 @@ export interface PoseSkinDoc {
 const FRAME_KEYS = new Set(['translate', 'rotate', 'scale', 'opacity'])
 const KEYFRAME_KEYS = new Set(['duration', 'ease', 'iterations', 'fill', 'frames'])
 const KEYFRAMES_DOC_KEYS = new Set(['schemaVersion', 'id', 'keyframes'])
-const POSE_SKIN_KEYS = new Set(['schemaVersion', 'id', 'sources', 'head', 'face', 'groupAnim', 'elements', 'strideLen'])
+const POSE_SKIN_KEYS = new Set(['schemaVersion', 'id', 'sources', 'head', 'face', 'groupAnim', 'elements', 'strideLen', 'cape'])
 const HEAD_KEYS = new Set(['cx', 'cy', 'r'])
 const GROUP_ANIM_KEYS = new Set(['name', 'delaySec', 'origin'])
 const PAINT_KEYS = ['fill', 'stroke', 'strokeWidth', 'linecap', 'opacity']
@@ -233,6 +238,16 @@ const poseSkinChecks: Check[] = [
       issues.push("face: must be 'baked' or 'parametric' when present")
     if (doc.strideLen !== undefined && (!isNum(doc.strideLen) || doc.strideLen <= 0))
       issues.push('strideLen: must be a finite number > 0 when present')
+    if (doc.cape !== undefined) {
+      const c = doc.cape
+      if (!isRecord(c)) issues.push('cape: must be { socket, elements }')
+      else {
+        for (const k of Object.keys(c)) if (k !== 'socket' && k !== 'elements') issues.push(`cape.${k}: unknown key`)
+        if (!isRecord(c.socket) || !isNum(c.socket.x) || !isNum(c.socket.y)) issues.push('cape.socket: must be { x, y }')
+        if (!isArr(c.elements) || c.elements.length === 0) issues.push('cape.elements: required non-empty array')
+        else c.elements.forEach((e, i) => checkElement(e, `cape.elements[${i}]`, issues, 0))
+      }
+    }
     if (doc.groupAnim !== undefined) {
       const g = doc.groupAnim
       if (!isRecord(g) || !isStr(g.name)) issues.push('groupAnim: must be { name, delaySec?, origin? }')
@@ -268,5 +283,6 @@ export function validateSkinAgainstKeyframes(skin: PoseSkinDoc, table: SkinKeyfr
   }
   if (skin.groupAnim && !known.has(skin.groupAnim.name)) issues.push(`groupAnim: unknown keyframe '${skin.groupAnim.name}'`)
   skin.elements.forEach((e, i) => visit(e, `elements[${i}]`))
+  skin.cape?.elements.forEach((e, i) => visit(e, `cape.elements[${i}]`))
   return issues
 }

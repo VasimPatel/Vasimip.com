@@ -141,6 +141,10 @@ export class EngineLayer extends Component<EngineLayerProps> {
    * the deterministic sim is untouched; a big prev→cur jump (teleport) snaps. */
   private prevSnap: { x: number; y: number } | null = null
   private curSnap: { x: number; y: number } | null = null
+  /** Q3 bounded cape secondary: eased velocity lag (rad), reset on teleports/
+   * facing flips — momentum must never drag the cape through the body. */
+  private capeLag = 0
+  private capeFacing: 1 | -1 = 1
   /** The hop-hang variant rolled for the in-flight travel. */
   private pendingHang = false
   /** Adapter speech (trip 'whoa—', hang 'hup—') — shown when the engine bubble
@@ -223,6 +227,21 @@ export class EngineLayer extends Component<EngineLayerProps> {
       const skinRoot = { x: pres.x + offX, y: (pres.supportY ?? Math.max(cap.y0, cap.y1) + cap.r + offY) + negStep }
       const stride = EngineLayer.STRIDES.get(src.id)
       const phase = stride && pres.groundMoving ? (pres.groundDistance / stride) % 1 : undefined
+      // Q3 cape lag: trail the authored cape by horizontal velocity, softly eased,
+      // hard-clamped to a small envelope; snap to rest on teleports/facing flips.
+      let vx = 0
+      if (this.prevSnap && this.curSnap) {
+        const jx = this.curSnap.x - this.prevSnap.x
+        if (Math.abs(jx) < 48) vx = jx / (STEP_MS / 1000)
+      }
+      if (pres.facing !== this.capeFacing) {
+        this.capeFacing = pres.facing
+        this.capeLag = 0
+      }
+      // facing mirroring flips the group's x-axis, so lag is authored in FACING
+      // space: positive = trailing behind the motion.
+      const target = Math.max(-0.16, Math.min(0.16, vx * pres.facing * 0.0009))
+      this.capeLag += (target - this.capeLag) * 0.1
       this.renderer.render(solved, s.rt.face(), s.rt.overrides(), {
         flourish: s.rt.flourish(),
         spin: this.rolling && this.airborne && !skinned ? this.spin : 0,
@@ -235,6 +254,7 @@ export class EngineLayer extends Component<EngineLayerProps> {
         facing: s.rt.transform.facing as 1 | -1,
         phase,
         offset: { dx: offX, dy: offY },
+        capeLag: this.capeLag,
       })
       if (reviewHook()?.motion) this.recordMotion(s, solved, skinRoot, src.id)
 
@@ -349,6 +369,7 @@ export class EngineLayer extends Component<EngineLayerProps> {
     this.stagingUntil = 0
     this.prevSnap = null
     this.curSnap = null
+    this.capeLag = 0
     if (this.svgRef.current) this.svgRef.current.style.opacity = '1'
     this.clearTravel()
     for (const off of this.scene?.offs ?? []) off()

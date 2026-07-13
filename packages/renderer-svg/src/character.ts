@@ -87,6 +87,10 @@ export interface RenderExtras {
    * the whole figure between fixed sim steps. Skins bake it into skinRoot; the
    * RIG figure applies it here as a group translate. */
   offset?: { dx: number; dy: number }
+  /** Bounded cape secondary (quality Q3): a small velocity lag (radians) applied
+   * to the AUTHORED cape group about its knot socket. The adapter owns easing,
+   * clamping, and discontinuity resets; the renderer just rotates. */
+  capeLag?: number
 }
 
 export interface CharacterRenderer {
@@ -360,6 +364,9 @@ export function createCharacterRenderer(
     doc: PoseSkinDoc
     /** Paused WAAPI animations for phase-driven skins (strideLen docs). */
     phaseAnims: Array<{ anim: Animation; durMs: number; offsetMs: number }>
+    /** The authored cape group (Q3) — rotated about its socket for the lag. */
+    capeGroup: SVGGElement | null
+    capeSocket: { x: number; y: number } | null
   }
   const skinGroups = new Map<string, SkinEntry>()
   let activeSkin: SkinEntry | null = null
@@ -480,12 +487,22 @@ export function createCharacterRenderer(
     if (cached) return cached
     const outer = document.createElementNS(SVG_NS, 'g') as SVGGElement
     const inner = document.createElementNS(SVG_NS, 'g') as SVGGElement
-    const entry: SkinEntry = { outer, doc, phaseAnims: [] }
+    const entry: SkinEntry = { outer, doc, phaseAnims: [], capeGroup: null, capeSocket: null }
     const collector = doc.strideLen !== undefined ? entry.phaseAnims : null
     if (doc.groupAnim) {
       inner.style.transformBox = 'fill-box'
       inner.style.transformOrigin = doc.groupAnim.origin ?? '50% 88%'
       attachAnim(inner, doc.groupAnim.name, doc.groupAnim.delaySec, collector)
+    }
+    // The AUTHORED cape paints FIRST (legacy: cape is element #1, behind the
+    // body); the lag rotation composes on this wrapper via the SVG transform
+    // attribute (explicit socket centre in skin-local units).
+    if (doc.cape) {
+      const capeG = document.createElementNS(SVG_NS, 'g') as SVGGElement
+      for (const e of doc.cape.elements) capeG.appendChild(buildSkinElement(e, collector))
+      inner.appendChild(capeG)
+      entry.capeGroup = capeG
+      entry.capeSocket = { ...doc.cape.socket }
     }
     for (const e of doc.elements) inner.appendChild(buildSkinElement(e, collector))
     outer.appendChild(inner)
@@ -732,10 +749,23 @@ export function createCharacterRenderer(
             pa.anim.currentTime = (phase * pa.durMs + pa.offsetMs) % pa.durMs
           }
         }
+        // Bounded cape secondary (Q3): rotate the authored cape about its knot.
+        if (activeSkin.capeGroup && activeSkin.capeSocket) {
+          const lag = extras.capeLag ?? 0
+          if (Math.abs(lag) > 0.002) {
+            activeSkin.capeGroup.setAttribute(
+              'transform',
+              `rotate(${(lag * 180) / Math.PI} ${activeSkin.capeSocket.x} ${activeSkin.capeSocket.y})`,
+            )
+          } else if (activeSkin.capeGroup.hasAttribute('transform')) {
+            activeSkin.capeGroup.removeAttribute('transform')
+          }
+        }
       }
 
-      // Accessory ribbons (engine-owned cape — drawn under skins AND rig).
-      const accs = extras?.accessories ?? []
+      // Accessory ribbons: the PHYSICS cape draws only for the rig figure or
+      // capeless skins — an authored skin cape is the silhouette authority (Q3).
+      const accs = activeSkin?.doc.cape ? [] : (extras?.accessories ?? [])
       for (let i = 0; i < accs.length; i++) ensureRibbon(i).setAttribute('d', ribbonD(accs[i]))
       for (let i = accs.length; i < ribbons.length; i++) ribbons[i].setAttribute('d', 'M0,0')
 
