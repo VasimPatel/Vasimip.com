@@ -94,3 +94,25 @@ body {
 @keyframes squishpop{0%{transform:scale(1,1) translateY(0)}14%{transform:scale(1.32,.52) translateY(6px)}52%{transform:scale(1.26,.56) translateY(5px)}68%{transform:scale(.88,1.14) translateY(-4px)}82%{transform:scale(1.06,.94) translateY(1px)}100%{transform:scale(1,1) translateY(0)}}
 @keyframes crackin{0%{opacity:0;transform:scale(.5)}30%{opacity:1;transform:scale(1.06)}45%{transform:scale(.98)}100%{opacity:1;transform:scale(1)}}
 @keyframes wallscramble{0%,100%{transform:rotate(-34deg)}50%{transform:rotate(28deg)}}
+
+/* ── parity Stage 7: keyboard focus + reduced motion ─────────────────────────
+   Focus: the HUD is real buttons now — visible focus without hover reliance.
+   Reduced motion: preserve every story BEAT (poses/pages/effects still change
+   state) while taming the large vestibular movements — camera shake, page
+   jitter, whole-figure arcs and spins become near-instant or gentle fades. */
+.hud-btn:focus-visible, .hud-tab:focus-visible {
+  outline: 2.5px solid #1a1a1a;
+  outline-offset: 2px;
+  border-radius: 4px;
+  background: rgba(255,210,63,.45);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  [data-dash-renderer], [data-dash-renderer] *,
+  [data-dash-actor], [data-dash-actor] * {
+    animation-duration: 0.01s !important;
+    animation-iteration-count: 1 !important;
+  }
+  /* camera shake / page jitter are pure vestibular noise — off */
+  *[style*="camshake"], *[style*="pagejit"] { animation: none !important; }
+}
