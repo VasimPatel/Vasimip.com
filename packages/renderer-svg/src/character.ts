@@ -83,6 +83,10 @@ export interface RenderExtras {
    * animation whose currentTime is set from this each frame — contact beats
    * ride world motion, not wall-clock (quality Q1). Undefined → contact frame. */
   phase?: number
+  /** Render-interpolation offset (quality Q2): a presentation-only translate of
+   * the whole figure between fixed sim steps. Skins bake it into skinRoot; the
+   * RIG figure applies it here as a group translate. */
+  offset?: { dx: number; dy: number }
 }
 
 export interface CharacterRenderer {
@@ -682,13 +686,16 @@ export function createCharacterRenderer(
       const fl = extras?.flourish
       const spin = extras?.spin ?? 0
       const lean = extras?.lean ?? 0
+      const off = extras?.offset
+      const hasOff = !!off && !activeSkin && (Math.abs(off.dx) > 0.01 || Math.abs(off.dy) > 0.01)
       const hasScale = !!fl && (Math.abs(fl.sx - 1) > 0.004 || Math.abs(fl.sy - 1) > 0.004)
-      if (hasScale || Math.abs(spin) > 0.01 || Math.abs(lean) > 0.004) {
+      if (hasOff || hasScale || Math.abs(spin) > 0.01 || Math.abs(lean) > 0.004) {
         // Two independent pivots: squash scales about the GROUND point (feet stay
         // planted — the documented flourish contract) while spin rotates about the
         // figure centre so the roll reads as a tumble, not a ground-pinned sweep.
         const midY = groundY - 55
         const parts: string[] = []
+        if (hasOff && off) parts.push(`translate(${off.dx}px, ${off.dy}px)`)
         if (hasScale && fl) {
           parts.push(`translate(${rootX}px, ${groundY}px)`, `scale(${fl.sx}, ${fl.sy})`, `translate(${-rootX}px, ${-groundY}px)`)
         }

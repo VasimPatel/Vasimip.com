@@ -121,7 +121,9 @@ function metrics(samples) {
   }
   const bobY = moving.map((i) => samples[i].skinY)
   const bobT = moving.map((i) => samples[i].t)
-  const bobAmp = bobY.length ? (Math.max(...bobY) - Math.min(...bobY)) / 2 : 0
+  // robust amplitude: p95−p5 ignores single mode-boundary samples (the first/
+  // last frame of a walk flips between support-line and capsule anchoring).
+  const bobAmp = bobY.length ? (quantile(bobY, 0.95) - quantile(bobY, 0.05)) / 2 : 0
   const bobHz = dominantHz(bobY, bobT)
 
   // screen-space step pattern: normalized |d(scr)/frame| — alternation score =

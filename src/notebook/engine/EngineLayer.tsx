@@ -137,6 +137,10 @@ export class EngineLayer extends Component<EngineLayerProps> {
   /** Q0 motion recorder state: sim-tick counter + the last camera target sent. */
   private simTicks = 0
   private lastCam: { x: number; y: number } | null = null
+  /** Q2 render interpolation: sim-step snapshots of the root. Presentation-only —
+   * the deterministic sim is untouched; a big prev→cur jump (teleport) snaps. */
+  private prevSnap: { x: number; y: number } | null = null
+  private curSnap: { x: number; y: number } | null = null
   /** The hop-hang variant rolled for the in-flight travel. */
   private pendingHang = false
   /** Adapter speech (trip 'whoa—', hang 'hup—') — shown when the engine bubble
@@ -158,10 +162,12 @@ export class EngineLayer extends Component<EngineLayerProps> {
       if (!s || !this.renderer) return
       while (this.acc >= STEP_MS) {
         this.acc -= STEP_MS
+        this.prevSnap = this.curSnap
         s.ctx.clock.advance()
         s.rt.tick()
         s.verlet.step()
         s.mw.stepMutations()
+        this.curSnap = { x: s.rt.transform.x, y: s.rt.transform.y }
         this.simTicks++
         // The legacy roll: spin the tuck through the arc (~1 turn / 600ms) —
         // advanced PER SIM TICK so rotation speed is refresh-rate independent.
@@ -199,7 +205,22 @@ export class EngineLayer extends Component<EngineLayerProps> {
       // own bobw is the only bob) and its walk cycle is PHASE-LOCKED to distance
       // traveled over the drawing's authored stride.
       const pres = s.rt.presentation()
-      const skinRoot = { x: pres.x, y: (pres.supportY ?? Math.max(cap.y0, cap.y1) + cap.r) + negStep }
+      // Q2 — interpolate the fixed-step root between sim snapshots (alpha = the
+      // accumulator remainder). Offsets, not absolutes: scripted/drag motion
+      // mutates the transform per-rAF (already continuous) and must not fight
+      // the sim snapshots. Teleport-scale jumps snap (poof, page placement).
+      const alpha = Math.max(0, Math.min(1, this.acc / STEP_MS))
+      let offX = 0
+      let offY = 0
+      if (this.prevSnap && this.curSnap) {
+        const jx = this.prevSnap.x - this.curSnap.x
+        const jy = this.prevSnap.y - this.curSnap.y
+        if (Math.abs(jx) < 48 && Math.abs(jy) < 48) {
+          offX = jx * (1 - alpha)
+          offY = jy * (1 - alpha)
+        }
+      }
+      const skinRoot = { x: pres.x + offX, y: (pres.supportY ?? Math.max(cap.y0, cap.y1) + cap.r + offY) + negStep }
       const stride = EngineLayer.STRIDES.get(src.id)
       const phase = stride && pres.groundMoving ? (pres.groundDistance / stride) % 1 : undefined
       this.renderer.render(solved, s.rt.face(), s.rt.overrides(), {
@@ -213,6 +234,7 @@ export class EngineLayer extends Component<EngineLayerProps> {
         skinRoot,
         facing: s.rt.transform.facing as 1 | -1,
         phase,
+        offset: { dx: offX, dy: offY },
       })
       if (reviewHook()?.motion) this.recordMotion(s, solved, skinRoot, src.id)
 
@@ -325,6 +347,8 @@ export class EngineLayer extends Component<EngineLayerProps> {
     this.actorHidden = false
     this.actorHiddenApplied = false
     this.stagingUntil = 0
+    this.prevSnap = null
+    this.curSnap = null
     if (this.svgRef.current) this.svgRef.current.style.opacity = '1'
     this.clearTravel()
     for (const off of this.scene?.offs ?? []) off()
