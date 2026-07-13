@@ -208,19 +208,16 @@ export function migrateNotebookV1(
         if (onceFlag) steps.push({ verb: 'setFlag', flag: onceFlag } as Intent)
         if (isStr(a.pose)) {
           notePose(a.pose, `${where}.arrival`)
-          // v1 semantics: no/zero revertMs leaves the pose until the NEXT transition.
-          // v2 behaviors end, so persistence is approximated with a long hold — and
-          // reported, per the honesty contract.
-          let holdMs: number
-          if (isNum(a.revertMs) && a.revertMs > 0) holdMs = a.revertMs
-          else {
-            // Long enough to read as "he stays in character on this panel" (the
-            // legacy Fight swung its sword until you navigated away); any travel
-            // or interaction interrupts the hold cleanly.
-            holdMs = 12000
-            report.lossy.push(`${where}.arrival: v1 pose persisted until the next transition; approximated as a ${12000}ms hold`)
+          // v1 semantics restored (parity Stage 2c): no/zero revertMs leaves the
+          // pose until the NEXT transition — strikePose {hold:'persist'} rides the
+          // acting layer, the behavior completes, and the character stays
+          // interactable in the pose (the legacy Fight swings its sword until you
+          // navigate away). Authored revertMs stays a timed hold.
+          if (isNum(a.revertMs) && a.revertMs > 0) {
+            steps.push({ verb: 'strikePose', ref: mapPose(a.pose), holdMs: a.revertMs } as Intent)
+          } else {
+            steps.push({ verb: 'strikePose', ref: mapPose(a.pose), hold: 'persist' } as Intent)
           }
-          steps.push({ verb: 'strikePose', ref: mapPose(a.pose), holdMs } as Intent)
         }
         if (isStr(a.say)) steps.push({ verb: 'say', text: a.say } as Intent)
         if (isStr(a.sfx)) steps.push({ verb: 'sfx', kind: a.sfx } as Intent)

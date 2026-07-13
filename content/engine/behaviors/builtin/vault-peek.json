@@ -1,9 +1,10 @@
 {
   "schemaVersion": 2,
-  "id": "builtin:vault",
+  "id": "builtin:vault-peek",
   "steps": [
     { "verb": "sfx", "kind": "scrib" },
     { "verb": "moveTo", "target": "travel:from#edge" },
+    { "verb": "strikePose", "ref": "peek", "holdMs": 760 },
     { "verb": "jumpTo", "target": "travel:to#interior" },
     { "verb": "wait", "ms": 540 }
   ],

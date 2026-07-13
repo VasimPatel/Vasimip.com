@@ -806,7 +806,7 @@ export default class Notebook extends React.Component<NotebookProps, State> {
     this.to(1660, () => { this.panelPose(); this.setState({ busy: false }) })
   }
 
-  flipTo(p: number) {
+  flipTo(p: number, landPanel = 0) {
     const s = this.state
     if (s.busy || s.dragging || p === s.page) return
     this.sfx('flip')
@@ -826,7 +826,7 @@ export default class Notebook extends React.Component<NotebookProps, State> {
       this.to(1780, () => { this.panelPose(); this.setState({ busy: false }) })
       return
     }
-    this.setState({ busy: true, busyFlip: true, flipRange: [lo, hi], page: p, panel: 0, pose: 'hidden', dop: 0 })
+    this.setState({ busy: true, busyFlip: true, flipRange: [lo, hi], page: p, panel: landPanel, pose: 'hidden', dop: 0 })
     this.to(820, () => {
       this.setState({ busyFlip: false })
       if (p === 0) this.setState({ busy: false })
@@ -853,12 +853,15 @@ export default class Notebook extends React.Component<NotebookProps, State> {
       if (this._backNavPending) return
       const kind = chance('backnav.bomb', 0.55) ? 'bomb' : 'poof'
       const target = s.page - 1 // captured NOW (review: delayed done() re-read state)
+      // Legacy lands at the LAST panel of the previous page (bomb pop-out /
+      // poof reappear) — the engine stages the landing there via done().
+      const landing = Math.max(0, (this.geom()[target]?.panels.length ?? 1) - 1)
       this.ensureAC()
       if (this.engineRef) {
         this._backNavPending = true
-        this.engineRef.backNav(kind, () => {
+        this.engineRef.backNav(kind, landing, () => {
           this._backNavPending = false
-          if (this.state.page === s.page) this.flipTo(target) // superseded nav wins
+          if (this.state.page === s.page) this.flipTo(target, landing) // superseded nav wins
         })
       } else this.flipTo(target)
     }
@@ -1167,7 +1170,7 @@ export default class Notebook extends React.Component<NotebookProps, State> {
 
             {this.engineMode ? (
               this.state.page > 0 && (
-                <div style={{ position: 'absolute', inset: 0, zIndex: 60, pointerEvents: 'none', visibility: this.state.busy ? 'hidden' : 'visible' }}>
+                <div style={{ position: 'absolute', inset: 0, zIndex: 60, pointerEvents: 'none', visibility: this.state.busyFlip ? 'hidden' : 'visible' }}>
                   <EngineLayer
                     ref={(r) => { this.engineRef = r }}
                     doc={buildEngineDoc(this.doc)}
@@ -1176,7 +1179,29 @@ export default class Notebook extends React.Component<NotebookProps, State> {
                     onFlag={(flag, value) => this.setState((st) => ({ flags: { ...st.flags, [flag]: value } }))}
                     sfx={(kind) => this.engineSfx(kind)}
                     onPoke={() => { this.ensureAC(); this.sfx('hop') }}
-                    onDashCam={(p) => this.setState({ camo: p ? { cx: p.x, cy: p.y, mult: 0.92, fast: false } : null })}
+                    onDashCam={(p) => this.setState({ camo: p ? { cx: p.x, cy: p.y, mult: p.mult ?? 0.92, fast: p.fast ?? false } : null })}
+                    onFx={(fx) => {
+                      // The engine drives the SHARED overlays (legacy staging owns
+                      // their look; the engine owns the timing).
+                      const st: Partial<State> = {}
+                      if (fx.kind === 'bomb') {
+                        st.bombFlyOn = fx.on
+                        if (fx.on) { st.bombX = fx.x ?? 0; st.bombY = fx.y ?? 0 }
+                      } else if (fx.kind === 'boom') {
+                        st.boomOn = fx.on
+                        if (fx.on) { st.holeX = fx.x ?? 0; st.holeY = fx.y ?? 0 }
+                      } else if (fx.kind === 'hole') {
+                        st.holeOn = fx.on
+                        if (fx.on && fx.x !== undefined) { st.holeX = fx.x; st.holeY = fx.y ?? 0 }
+                      } else if (fx.kind === 'smoke') {
+                        st.smokeOn = fx.on
+                        if (fx.on) { st.smokeX = fx.x ?? 0; st.smokeY = fx.y ?? 0 }
+                      } else if (fx.kind === 'crack') {
+                        st.crackOn = fx.on
+                        if (fx.on) { st.crackX = fx.x ?? 0; st.crackY = fx.y ?? 0 }
+                      }
+                      this.setState(st as State)
+                    }}
                     dropLines={DROPS}
                     pokeLines={POKE}
                     chatterLines={CHATTER}

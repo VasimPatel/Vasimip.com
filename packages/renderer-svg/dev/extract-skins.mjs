@@ -19,7 +19,9 @@ mkdirSync(OUT_DIR, { recursive: true })
 // (engine pose names differ from file names for some — the V1_POSE_RENAMES map.)
 const SOURCE_MAP = {
   Idle: ['stand', 'idle-shuffle'],
-  Walk: ['walk-mid', 'walk-cycle'],
+  // '__gait' is the locomotion controller's synthetic ground-gait blend source —
+  // claiming it puts the legacy walk drawing on every ground move.
+  Walk: ['walk-mid', 'walk-cycle', '__gait'],
   Tuck: ['jump-tuck', 'jump'],
   Land: ['squash-land'],
   Fight: ['fight'],

@@ -38,9 +38,10 @@ test(`all ${files.length} shipped skins validate + resolve (24 legacy drawings)`
     const missing = validateSkinAgainstKeyframes(doc, table)
     if (missing.length) console.log(f, missing)
     expect(missing).toEqual([])
-    // every source id must be a shipped pose or clip
+    // every source id must be a shipped pose or clip — or the locomotion
+    // controller's synthetic gait source ('__gait', the ground-move blend id).
     for (const s of doc.sources) {
-      expect(poseIds.has(s) || clipIds.has(s)).toBe(true)
+      expect(poseIds.has(s) || clipIds.has(s) || s === '__gait').toBe(true)
     }
     // the head anchor is required content policy (schema keeps it optional)
     expect(doc.head).toBeTruthy()

@@ -73,6 +73,7 @@ import bHop from '../../../content/engine/behaviors/builtin/hop.json'
 import bRoll from '../../../content/engine/behaviors/builtin/roll.json'
 import bPoof from '../../../content/engine/behaviors/builtin/poof.json'
 import bVault from '../../../content/engine/behaviors/builtin/vault.json'
+import bVaultPeek from '../../../content/engine/behaviors/builtin/vault-peek.json'
 import bRope from '../../../content/engine/behaviors/builtin/rope.json'
 import bSwing from '../../../content/engine/behaviors/builtin/swing.json'
 import bWallrun from '../../../content/engine/behaviors/builtin/wallrun.json'
@@ -97,7 +98,7 @@ const base: MigrationBase = {
     punch, peek, hang, knock,
   ]),
   clips: reg([idleClip, walkClip, jumpClip]),
-  behaviors: reg([bWalk, bHop, bRoll, bPoof, bVault, bRope, bSwing, bWallrun, bSlide, bSmash, bCombo]),
+  behaviors: reg([bWalk, bHop, bRoll, bPoof, bVault, bVaultPeek, bRope, bSwing, bWallrun, bSlide, bSmash, bCombo]),
 }
 
 // Expressive data skins (parity Stage 2b) — render-layer content, NOT part of

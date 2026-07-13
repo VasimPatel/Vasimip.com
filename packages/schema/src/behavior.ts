@@ -72,7 +72,10 @@ export function parseTargetRef(ref: string): ParsedTarget | null {
     const spot = hash > 0 ? rest.slice(hash + 1) : 'interior'
     // Spot vocabulary is CLOSED (review finding: an open spot string silently
     // resolved to interior — travel:to#roff must be a validation error).
-    if ((which === 'to' || which === 'from') && (spot === 'roof' || spot === 'interior')) {
+    // 'edge' (parity Stage 2c, owner-approved widening): the bound panel's
+    // standable edge on the side TOWARD the other bound panel — the legacy
+    // run-up target (vault/rope/slide/smash approach beats).
+    if ((which === 'to' || which === 'from') && (spot === 'roof' || spot === 'interior' || spot === 'edge')) {
       return { kind: 'travel', which, spot }
     }
     return null

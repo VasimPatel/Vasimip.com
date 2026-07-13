@@ -3,7 +3,8 @@
   "id": "skin:walk-mid",
   "sources": [
     "walk-mid",
-    "walk-cycle"
+    "walk-cycle",
+    "__gait"
   ],
   "face": "baked",
   "groupAnim": {

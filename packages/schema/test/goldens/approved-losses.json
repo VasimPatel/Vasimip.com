@@ -42,11 +42,6 @@
       "restoredBy": "Stage 2c/4: fx intents drive the real overlays"
     },
     {
-      "match": "approximated as a 12000ms hold",
-      "why": "v1 persist-until-next-transition faked with a long timer",
-      "restoredBy": "Stage 2a/4: strikePose {hold:'persist'}"
-    },
-    {
       "match": "flourish: dropped",
       "why": "v1 arrival flourish (knock/shove/squish) not migrated",
       "restoredBy": "Stage 4: flourish behaviors + 24% arrival roll"
