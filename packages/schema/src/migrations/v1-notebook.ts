@@ -214,8 +214,11 @@ export function migrateNotebookV1(
           let holdMs: number
           if (isNum(a.revertMs) && a.revertMs > 0) holdMs = a.revertMs
           else {
-            holdMs = 2500
-            report.lossy.push(`${where}.arrival: v1 pose persisted until the next transition; approximated as a ${2500}ms hold`)
+            // Long enough to read as "he stays in character on this panel" (the
+            // legacy Fight swung its sword until you navigated away); any travel
+            // or interaction interrupts the hold cleanly.
+            holdMs = 12000
+            report.lossy.push(`${where}.arrival: v1 pose persisted until the next transition; approximated as a ${12000}ms hold`)
           }
           steps.push({ verb: 'strikePose', ref: mapPose(a.pose), holdMs } as Intent)
         }

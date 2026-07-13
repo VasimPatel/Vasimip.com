@@ -151,7 +151,10 @@ function App() {
     const svg = svgRef.current!
     const scene = buildScene()
     sceneRef.current = scene
-    rendererRef.current = createCharacterRenderer(svg, character, rig)
+    const standA = (poses.stand?.angles ?? {}) as Record<string, number>
+    rendererRef.current = createCharacterRenderer(svg, character, rig, {
+      faceRestAngle: (standA.pelvis ?? 0) + (standA.neck ?? 0) + (standA.head ?? 0),
+    })
 
     // Speech bubble (imperative, follows the head).
     const SVG_NS = 'http://www.w3.org/2000/svg'

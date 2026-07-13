@@ -30,8 +30,8 @@ import { STEP_MS } from './loop'
 import type { EventBus } from './events'
 import { createGait, type Gait } from './gait'
 import type { MutableWorld } from './world/holes'
-import type { CollisionWorld, Capsule, SegmentRef } from './world/collision'
-import { sweptCapsuleVsSegments, stopAt } from './world/collision'
+import type { CollisionWorld, Capsule, SegmentRef, SweptHit } from './world/collision'
+import { sweptCapsuleVsSegment, sweptCapsuleVsSegments, stopAt } from './world/collision'
 import type { TraversalGraph, TravNode } from './world/traversal'
 
 // ── milestone event vocabulary (7b's cue scheduler anchors to these; keep exact) ──
@@ -616,6 +616,19 @@ export function createLocomotion(deps: LocomotionDeps): Locomotion {
     return out.length > 0 ? out : [{ mode: moveVerb === 'jumpTo' ? 'jump' : 'ground', target: to }]
   }
 
+  /** Earliest swept hit whose normal OPPOSES the motion (a real block) — grazes
+   * with perpendicular normals are skipped instead of masking later walls. */
+  function earliestBlockingHit(cap: Capsule, mx: number, my: number): SweptHit | null {
+    let best: SweptHit | null = null
+    for (const ref of allSegs()) {
+      const h = sweptCapsuleVsSegment(cap, mx, my, ref.seg)
+      if (!h) continue
+      if (mx * h.nx + my * h.ny >= -INTO_WALL_EPS) continue // graze/slide, not a block
+      if (best === null || h.t < best.t) best = { t: h.t, nx: h.nx, ny: h.ny, entity: ref.entity, segIndex: ref.segIndex, seg: ref.seg }
+    }
+    return best
+  }
+
   /** Is the straight ground path from the character to `to` clear of blocking walls? */
   function directGroundClear(to: { x: number; y: number }): boolean {
     const dx = to.x - t.x
@@ -947,8 +960,12 @@ export function createLocomotion(deps: LocomotionDeps): Locomotion {
     // follow reads the character's OWN support as a wall — the tick-one self-block
     // the charm round uncovered. Vertical hazards (drop-offs, healed floors) are
     // the leg re-validation's job, not the wall sweep's.
-    const hit = sweptCapsuleVsSegments(deps.capsule(), dx, 0, allSegs())
-    if (hit && dx * hit.nx < -INTO_WALL_EPS) {
+    // Earliest BLOCKING hit, not earliest hit: a tangential graze (head brushing a
+    // panel roof, t=0, normal ⊥ motion) must not MASK a real wall behind it — the
+    // parity round's raised walking hip tunneled straight through a box wall while
+    // the roof graze ate every sweep (and the old hip only blocked by bob phase).
+    const hit = earliestBlockingHit(deps.capsule(), dx, 0)
+    if (hit) {
       const p = stopAt(before, t.y, before + dx, t.y, hit.t, CAP_SKIN)
       blockAt(p.x, p.y, hit)
       return
@@ -992,9 +1009,10 @@ export function createLocomotion(deps: LocomotionDeps): Locomotion {
     const mx = ux * step
     const my = uy * step
     // Fliers are swept like everyone else — panels block them. A waypoint inside a
-    // wall is a blocked intent, not a pass-through.
-    const hit = sweptCapsuleVsSegments(deps.capsule(), mx, my, allSegs())
-    if (hit && mx * hit.nx + my * hit.ny < -INTO_WALL_EPS) {
+    // wall is a blocked intent, not a pass-through. Same earliest-BLOCKING rule as
+    // the ground sweep: a ceiling graze must not mask the wall behind it.
+    const hit = earliestBlockingHit(deps.capsule(), mx, my)
+    if (hit) {
       const p = stopAt(t.x, t.y, t.x + mx, t.y + my, hit.t, CAP_SKIN)
       blockAt(p.x, p.y, hit)
       return

@@ -138,8 +138,10 @@ export function createGait(rig: RigTemplate, character: CharacterDoc, opts: Gait
   const stride = (speed < 0 ? -1 : 1) * strideMag
   const cadence = strideMag > 0 ? Math.abs(speed) / strideMag : naturalCadence
 
-  const halfStride = strideMag / 2
-  const reachableHip = Math.sqrt(Math.max(1, legLen * legLen - halfStride * halfStride)) * 0.97
+  // Max stance reach with the led plants is PLANT_LEAD strides (0.38), not half a
+  // stride — crouching for the old symmetric reach hunched the walk (parity).
+  const maxReach = strideMag * 0.4
+  const reachableHip = Math.sqrt(Math.max(1, legLen * legLen - maxReach * maxReach)) * 0.97
   const hipHeight = Math.min(opts.hipHeight ?? DEFAULT_HIP_HEIGHT, reachableHip)
   const lift = BASE_LIFT * (0.5 + bounciness)
   const speedNorm = Math.min(1, Math.abs(speed) / REF_SPEED)
@@ -151,7 +153,10 @@ export function createGait(rig: RigTemplate, character: CharacterDoc, opts: Gait
   // The walk lean tilts the pelvis per tick, so the WORLD angle the leg IK converts
   // through must be the LEANED one — a stale angle here reads as foot slide.
   const pelvisLocal = base.angles.pelvis ?? 0
-  const lean = 0.07 * speedNorm
+  // Walk lean (parity): the legacy walker tips the WHOLE figure ~5° into travel
+  // (dashFaceTf lean=5). 0.07·speedNorm gave <2° at site speed — the spine stayed
+  // vertical while the legs reached ahead ("legs go before the body").
+  const lean = 0.06 * Math.min(1, speedNorm * 3) + 0.03 * speedNorm
   let pelvisWorld = rootRot + pelvisLocal
 
   const legR = rig.chains.find((c) => c.id === 'legR')
@@ -160,11 +165,16 @@ export function createGait(rig: RigTemplate, character: CharacterDoc, opts: Gait
   let rootX = opts.startX ?? 0
   let phase = 0 // accumulated cycles
 
+  /** How far ahead of the hip a foot PLANTS, in strides (0.5 = symmetric). The
+   * legacy read leads with the CHEST: plants land shorter ahead and trail longer
+   * behind, so the body rides in front of its feet instead of chasing them. */
+  const PLANT_LEAD = 0.38
+
   /** World x of a leg's fixed plant, `laps` cycles from the current stance
    * (0 = the plant it is on / last on, 1 = the next). Constant in world during the
    * relevant interval by construction. */
   function plantWorldX(phiLeg: number, laps: number): number {
-    return rootX + stride * (0.5 + laps - phiLeg)
+    return rootX + stride * (PLANT_LEAD + laps - phiLeg)
   }
 
   function solveLeg(

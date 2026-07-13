@@ -134,6 +134,9 @@ export interface CharacterRuntime {
   solved(): SolvedSkeleton
   /** This tick's face aux channel. */
   face(): FaceAux
+  /** The blender's current source (pose id during a strikePose hold) — the site
+   * uses it to attach pose PROPS (sword, spray can) and pose-scoped acting. */
+  activeSource(): { kind: 'pose' | 'clip'; id: string }
   /** Current world collision capsule. */
   capsule(): Capsule
   /** Verlet endpoint overrides for the renderer (secondary follow-through). */
@@ -341,8 +344,16 @@ export function createCharacterRuntime(opts: CharacterRuntimeOptions): Character
     behavior.advance()
     // 2. advance gait/fly + set the blender base source; ground/fly collision.
     locomotion.preBlend()
-    // 3. face contributors (blink + look-at pupils).
+    // 3. face contributors (blink + look-at pupils) — the active POSE may override
+    // brow/mouth (the legacy per-pose expressions: Fight's steep brows + grit).
     lastFace = controllerSet.update(tickCount)
+    const src = blender.currentSource()
+    const poseFace = src.kind === 'pose' ? (poses[src.id] as { face?: { brow?: FaceAux['brow']; mouth?: FaceAux['mouth']; intensity?: number } } | undefined)?.face : undefined
+    if (poseFace) {
+      if (poseFace.brow) lastFace = { ...lastFace, brow: poseFace.brow }
+      if (poseFace.mouth) lastFace = { ...lastFace, mouth: poseFace.mouth }
+      if (poseFace.intensity !== undefined) lastFace = { ...lastFace, intensity: poseFace.intensity }
+    }
     // 4. base blend + additives; clip markers drive the jump launch sync.
     const { pose, markers } = blender.tick()
     // 5. jump launch (marker-synced) + ballistic integration + landing.
@@ -429,6 +440,7 @@ export function createCharacterRuntime(opts: CharacterRuntimeOptions): Character
     },
     solved: () => lastSolved,
     face: () => lastFace,
+    activeSource: () => blender.currentSource(),
     capsule,
     overrides: () => secondary.overrides(),
     running: () => behavior.running(),

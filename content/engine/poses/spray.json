@@ -19,5 +19,66 @@
     "x": -2,
     "y": 16,
     "rot": 0
-  }
+  },
+  "props": [
+    {
+      "joint": "foreArmR",
+      "elements": [
+        {
+          "kind": "rect",
+          "x": 0,
+          "y": -14,
+          "w": 9,
+          "h": 15,
+          "rx": 2,
+          "fill": "#fffdf6",
+          "stroke": "#1a1a1a",
+          "strokeWidth": 2.5
+        },
+        {
+          "kind": "circle",
+          "cx": 4.5,
+          "cy": -15.5,
+          "r": 1.6,
+          "fill": "#1a1a1a"
+        },
+        {
+          "kind": "circle",
+          "cx": 16,
+          "cy": -10,
+          "r": 2.2,
+          "fill": "#ff5ca8",
+          "opacity": 0.8,
+          "jitter": true
+        },
+        {
+          "kind": "circle",
+          "cx": 22,
+          "cy": -6,
+          "r": 1.7,
+          "fill": "#ff5ca8",
+          "opacity": 0.7,
+          "jitter": true
+        },
+        {
+          "kind": "circle",
+          "cx": 20,
+          "cy": -14,
+          "r": 1.7,
+          "fill": "#ff5ca8",
+          "opacity": 0.7,
+          "jitter": true
+        },
+        {
+          "kind": "circle",
+          "cx": 28,
+          "cy": -9,
+          "r": 1.4,
+          "fill": "#ff5ca8",
+          "opacity": 0.6,
+          "jitter": true
+        }
+      ]
+    }
+  ]
 }

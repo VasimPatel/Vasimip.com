@@ -147,12 +147,18 @@ export class EngineLayer extends Component<EngineLayerProps> {
         if (standing) leanTarget = (this.look.x < headBone.ex ? 1 : -1) * near * (8 * Math.PI / 180)
       }
       this.lean += (leanTarget - this.lean) * 0.08
+      // Pose props (sword, spray can) ride the active strikePose; the fight pose
+      // also shuffles the whole figure (the legacy fightshift cycle).
+      const src = s.rt.activeSource()
+      const activePose = src.kind === 'pose' ? this.docV2.poses[src.id] : undefined
+      this.syncPoseAct(src.kind === 'pose' ? src.id : null)
       this.renderer.render(solved, s.rt.face(), s.rt.overrides(), {
         flourish: s.rt.flourish(),
         spin: this.rolling && this.airborne ? this.spin : 0,
         accessories: s.rt.accessories.map((a) => a.points()),
-        pupilScale: 1 + 0.35 * near,
+        pupilScale: 1 + 0.55 * near, // legacy eyeR 2 → 3.1 at the cursor
         lean: this.lean,
+        props: (activePose as { props?: never[] } | undefined)?.props,
       })
 
       // Camera follows Dash while a travel is in flight (throttled ~9 ticks; the
@@ -291,7 +297,10 @@ export class EngineLayer extends Component<EngineLayerProps> {
 
     this.scene = { ctx, verlet, mw, rt, pageIdx, offs }
     this.currentPanel = 0
-    this.renderer = createCharacterRenderer(svg, dash, rig)
+    // Face-level calibration: the head bone's world angle in the rest pose.
+    const stand = this.docV2.poses.stand?.angles ?? {}
+    const faceRestAngle = (stand.pelvis ?? 0) + (stand.neck ?? 0) + (stand.head ?? 0)
+    this.renderer = createCharacterRenderer(svg, dash, rig, { faceRestAngle })
     // Wrap the renderer group so the legacy CSS keyframe arcs (pokehop, spin360,
     // pokewob, fidgethop — already in styles.css) can play on the whole figure
     // without fighting the renderer's own squash/spin/lean transform.
@@ -519,7 +528,36 @@ export class EngineLayer extends Component<EngineLayerProps> {
 
   private clearArc(): void {
     window.clearTimeout(this.arcTimer)
+    this.actPose = null
     if (this.arcWrap) this.arcWrap.style.animation = ''
+  }
+
+  /** Pose-scoped whole-figure acting: the legacy Fight shuffles (fightshift) for
+   * as long as the pose holds. Uses the same wrapper as the one-shot arcs — a
+   * running behavior means no fidget/poke arc can race it. */
+  private static POSE_ACTS: Record<string, string> = {
+    fight: 'fightshift 2.6s ease-in-out infinite',
+  }
+
+  private actPose: string | null = null
+
+  private syncPoseAct(poseId: string | null): void {
+    const anim = poseId ? EngineLayer.POSE_ACTS[poseId] : undefined
+    const want = anim ? poseId : null
+    if (this.actPose === want) return
+    const w = this.arcWrap
+    if (!w) return
+    if (want && anim) {
+      const pts = this.figurePoints()
+      if (!pts) return
+      window.clearTimeout(this.arcTimer)
+      w.style.transformBox = 'view-box'
+      w.style.transformOrigin = pts.ground
+      w.style.animation = anim
+    } else {
+      w.style.animation = ''
+    }
+    this.actPose = want
   }
 
   private endDrag(): void {
