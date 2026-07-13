@@ -30,7 +30,7 @@ import {
 import { evalGate, type BehaviorDoc, type GateExpr } from '../../../packages/schema/src/index'
 import { createCharacterRenderer, type CharacterRenderer } from '../../../packages/renderer-svg/src/index'
 import { engineSkins, type EngineDoc } from './engineDoc'
-import { pick, chance, scalar, reviewHook, reviewLog } from '../review'
+import { pick, chance, scalar, reviewHook, reviewLog, type MotionSample } from '../review'
 
 export interface EngineLayerProps {
   /** The engine doc derived from the SAME v1 doc the site renders (hot-swappable). */
@@ -134,6 +134,9 @@ export class EngineLayer extends Component<EngineLayerProps> {
   private travelFrom = 0
   /** Back-nav staging window: busy() holds and fidgets stay quiet until then. */
   private stagingUntil = 0
+  /** Q0 motion recorder state: sim-tick counter + the last camera target sent. */
+  private simTicks = 0
+  private lastCam: { x: number; y: number } | null = null
   /** The hop-hang variant rolled for the in-flight travel. */
   private pendingHang = false
   /** Adapter speech (trip 'whoa—', hang 'hup—') — shown when the engine bubble
@@ -159,6 +162,7 @@ export class EngineLayer extends Component<EngineLayerProps> {
         s.rt.tick()
         s.verlet.step()
         s.mw.stepMutations()
+        this.simTicks++
         // The legacy roll: spin the tuck through the arc (~1 turn / 600ms) —
         // advanced PER SIM TICK so rotation speed is refresh-rate independent.
         if (this.rolling && this.airborne) this.spin += (Math.PI * 2 * STEP_MS) / 600
@@ -187,6 +191,10 @@ export class EngineLayer extends Component<EngineLayerProps> {
       // A skinned source carries its own internal animation (the tuck skin's
       // tuckspin already rotates) — the render-layer roll spin would double it.
       const skinned = EngineLayer.SKINNED.has(src.id)
+      // Q0 negative control: injected root stepping — the motion metrics must
+      // catch exactly this class of defect (review-forced, never organic).
+      const negStep = reviewHook()?.force?.['negctl.step'] ? (this.simTicks & 8 ? 4 : -4) : 0
+      const skinRoot = { x: s.rt.transform.x, y: Math.max(cap.y0, cap.y1) + cap.r + negStep }
       this.renderer.render(solved, s.rt.face(), s.rt.overrides(), {
         flourish: s.rt.flourish(),
         spin: this.rolling && this.airborne && !skinned ? this.spin : 0,
@@ -195,15 +203,17 @@ export class EngineLayer extends Component<EngineLayerProps> {
         lean: this.lean,
         props: (activePose as { props?: never[] } | undefined)?.props,
         skinId: src.id,
-        skinRoot: { x: s.rt.transform.x, y: Math.max(cap.y0, cap.y1) + cap.r },
+        skinRoot,
         facing: s.rt.transform.facing as 1 | -1,
       })
+      if (reviewHook()?.motion) this.recordMotion(s, solved, skinRoot, src.id)
 
       // Camera follows Dash while a travel is in flight (throttled ~9 ticks; the
       // Notebook's CSS cam transition glides between updates) — unless an
       // AUTHORED camera cue owns the shot (cleared by cue or behavior end).
       if (this.travelDest != null && !this.camOverride && ++this.camTick % 9 === 0) {
-        this.props.onDashCam?.({ x: s.rt.transform.x, y: s.rt.transform.y })
+        this.lastCam = { x: s.rt.transform.x, y: s.rt.transform.y }
+        this.props.onDashCam?.(this.lastCam)
       }
       // Scripted root motion (back-nav hop-to-hole): a render-layer arc, exactly
       // like the drag's direct transform drive.
@@ -241,6 +251,43 @@ export class EngineLayer extends Component<EngineLayerProps> {
     }
     this.raf = requestAnimationFrame(frame)
     this.scheduleFidget()
+  }
+
+  /** Q0 motion recorder: one presentation sample per rAF (review-mode only).
+   * The DOM rect read forces layout — acceptable in a review run, never active
+   * for real visitors. Capped so a forgotten recorder can't grow unbounded. */
+  private recordMotion(s: Scene, solved: ReturnType<CharacterRuntime['solved']>, skinRoot: { x: number; y: number }, srcId: string): void {
+    const arr = (window.__dashMotion ??= [])
+    if (arr.length >= 30000) return
+    const t = s.rt.transform
+    const neck = solved.bones.find((b) => b.id === 'neck')
+    const pts = s.rt.accessories[0]?.points() ?? []
+    const tip = pts[pts.length - 1]
+    const rect = this.svgRef.current?.querySelector('[data-dash-renderer]')?.getBoundingClientRect()
+    // Q0 negative control: a displaced cape socket the separation metric must flag.
+    const sockBias = reviewHook()?.force?.['negctl.socket'] ? 6 : 0
+    const sample: MotionSample = {
+      t: performance.now(),
+      tick: this.simTicks,
+      acc: this.acc,
+      rootX: t.x,
+      rootY: t.y,
+      skinX: skinRoot.x,
+      skinY: skinRoot.y,
+      src: srcId,
+      air: this.airborne,
+      sockX: (neck?.ex ?? NaN) + sockBias,
+      sockY: neck?.ey ?? NaN,
+      capeRootX: pts[0]?.x ?? NaN,
+      capeRootY: pts[0]?.y ?? NaN,
+      capeTipX: tip?.x ?? NaN,
+      capeTipY: tip?.y ?? NaN,
+      camX: this.lastCam?.x ?? NaN,
+      camY: this.lastCam?.y ?? NaN,
+      scrX: rect ? rect.x + rect.width / 2 : NaN,
+      scrY: rect ? rect.y + rect.height / 2 : NaN,
+    }
+    arr.push(sample)
   }
 
   componentDidUpdate(prev: EngineLayerProps): void {
@@ -372,6 +419,7 @@ export class EngineLayer extends Component<EngineLayerProps> {
         const cx = inFlight ? (rt.transform.x + pt.x) / 2 : pt.x
         const cy = inFlight ? pt.y - 26 : pt.y - 40
         this.camOverride = true
+        this.lastCam = { x: cx, y: cy }
         this.props.onDashCam?.({ x: cx, y: cy, mult: c.mult, fast: c.fast })
       }),
       ctx.events.on('jump:launch', () => {
@@ -889,6 +937,7 @@ export class EngineLayer extends Component<EngineLayerProps> {
     this.airborne = false
     this.spin = 0
     this.camOverride = false
+    this.lastCam = null
     this.clearArc()
     this.props.onDashCam?.(null)
   }
