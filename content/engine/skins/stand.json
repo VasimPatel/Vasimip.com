@@ -1,0 +1,84 @@
+{
+  "schemaVersion": 2,
+  "id": "skin:stand",
+  "sources": [
+    "stand",
+    "idle-shuffle"
+  ],
+  "face": "parametric",
+  "groupAnim": {
+    "name": "idlesway",
+    "origin": "50% 96%"
+  },
+  "elements": [
+    {
+      "kind": "circle",
+      "cx": 2,
+      "cy": -30,
+      "r": 14,
+      "fill": "#fffdf6",
+      "stroke": "#1a1a1a",
+      "strokeWidth": 4
+    },
+    {
+      "kind": "path",
+      "d": "M-5,-36 l9,2.5 M9,-34 l9,-2.5",
+      "fill": "none",
+      "stroke": "#1a1a1a",
+      "strokeWidth": 2.6,
+      "linecap": "round"
+    },
+    {
+      "kind": "path",
+      "d": "M0,-16 L-2,16",
+      "fill": "none",
+      "stroke": "#1a1a1a",
+      "strokeWidth": 5.5,
+      "linecap": "round"
+    },
+    {
+      "kind": "path",
+      "d": "M0,-9 L15,-1 L6,14",
+      "fill": "none",
+      "stroke": "#1a1a1a",
+      "strokeWidth": 4.5,
+      "linecap": "round"
+    },
+    {
+      "kind": "path",
+      "d": "M-1,-9 L-15,3 L-11,17",
+      "fill": "none",
+      "stroke": "#1a1a1a",
+      "strokeWidth": 4.5,
+      "linecap": "round"
+    },
+    {
+      "kind": "circle",
+      "cx": -11,
+      "cy": 19,
+      "r": 4,
+      "fill": "#1a1a1a"
+    },
+    {
+      "kind": "path",
+      "d": "M-2,16 L11,33 L13,50 l11,2",
+      "fill": "none",
+      "stroke": "#1a1a1a",
+      "strokeWidth": 5,
+      "linecap": "round"
+    },
+    {
+      "kind": "path",
+      "d": "M-2,16 L-13,34 L-15,50 l-10,2",
+      "fill": "none",
+      "stroke": "#1a1a1a",
+      "strokeWidth": 5,
+      "linecap": "round"
+    }
+  ],
+  "head": {
+    "cx": 2,
+    "cy": -30,
+    "r": 14
+  }
+}

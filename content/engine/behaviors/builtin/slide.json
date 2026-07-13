@@ -2,23 +2,19 @@
   "schemaVersion": 2,
   "id": "builtin:slide",
   "steps": [
-    {
-      "verb": "strikePose",
-      "ref": "slide",
-      "holdMs": 300
-    },
-    {
-      "verb": "moveTo",
-      "target": "travel:to#interior"
-    }
+    { "verb": "sfx", "kind": "scrib" },
+    { "verb": "moveTo", "target": "travel:from#edge" },
+    { "verb": "camera", "to": "travel:to#interior", "mult": 1.12, "fast": true },
+    { "verb": "sfx", "kind": "scrape" },
+    { "verb": "strikePose", "ref": "slide", "holdMs": 520 },
+    { "verb": "jumpTo", "target": "travel:to#interior" },
+    { "verb": "sfx", "kind": "fx:shake" },
+    { "verb": "strikePose", "ref": "squash-land", "holdMs": 280 },
+    { "verb": "camera" },
+    { "verb": "wait", "ms": 260 }
   ],
   "cues": [
-    {
-      "at": "onArrive",
-      "do": {
-        "verb": "sfx",
-        "kind": "whoosh"
-      }
-    }
+    { "at": "onLaunch", "do": { "verb": "strikePose", "ref": "jump-tuck", "holdMs": 500 } },
+    { "at": "onLand", "do": { "verb": "sfx", "kind": "hop" } }
   ]
 }

@@ -129,6 +129,11 @@ export interface BehaviorState {
   runId: number
   /** monotonic count of locomotion.begin() calls this run-lifetime (see BehaviorFrame.moveSeq). */
   moveSeq: number
+  /** The run's watchdog time bound. REQUIRED for one-shot runs (doc = null →
+   * nothing to recompute from; a fresh runtime would otherwise restore budget 0
+   * and force-release on the next tick — review blocker). Optional so pre-parity
+   * snapshots (doc-bound, recomputable) restore unchanged. */
+  budget?: number
 }
 
 export interface BehaviorDeps {
@@ -153,6 +158,9 @@ export interface BehaviorDeps {
    * character runtime provides it — a bounded, decaying, collision-respecting
    * displacement). Without it, a self-impulse only moves the cosmetic secondary. */
   applyRootImpulse?: (vx: number, vy: number) => void
+  /** Set the character's horizontal facing (strikePose {face} — the v1 authored
+   * arrival facing). The character runtime provides it (transform owner). */
+  setFacing?: (face: 1 | -1) => void
   /** BEHAVIOR REGISTRY (the P8 replay contract): id → doc, immutable. Snapshots store
    * `behaviorId` + the frame stack; setState REBINDS the active doc through this
    * registry (an unknown id THROWS). Docs passed to run() are auto-registered. */
@@ -161,6 +169,11 @@ export interface BehaviorDeps {
 
 export interface BehaviorExecutor {
   run(doc: BehaviorDoc): void
+  /** Run an EPHEMERAL one-shot steps list (dynamic quips/beats whose text varies per
+   * invocation). Never touches the registry — snapshots store `behaviorId: null` plus
+   * the inline frame steps, so restore is exact and repeated one-shots cannot violate
+   * the registry identity contract. `label` is trace-only (events/reason). */
+  runOneShot(label: string, steps: Intent[]): void
   /** Advance the active step by one tick. Call AFTER locomotion.postBlend. */
   advance(): void
   readonly status: BehaviorStatus
@@ -274,6 +287,24 @@ export function createBehaviorExecutor(deps: BehaviorDeps): BehaviorExecutor {
     enterCurrent()
   }
 
+  /** One-shot run: interrupt semantics match run() (reset locomotion, fresh stack,
+   * watchdog re-armed), but the steps live INLINE in the frame and `doc` stays null —
+   * nothing is registered. The frame is a reaction frame (bus reactions don't stack
+   * inside it) that ends the run when it drains (`behavior:ended {reason: label}`). */
+  function runOneShot(label: string, steps: Intent[]): void {
+    if (status === 'running') {
+      emit('behavior:interrupted', { behaviorId: doc?.id ?? top()?.reason ?? '__one-shot', depth: stack.length })
+    }
+    locomotion.reset()
+    doc = null
+    status = 'running'
+    stack = [newFrame(steps.map((s) => structuredClone(s)), { isReaction: true, endAfter: true, reason: label })]
+    runId++
+    budget = sumBound(steps) + REACTION_ALLOWANCE_MS + 1500
+    emit('behavior:start', { behaviorId: label, oneShot: true })
+    enterCurrent()
+  }
+
   // ── enter / complete / drain (the cascade) ─────────────────────────────────────────
   /** Set up the current step of the TOP frame (first-tick side effects). Instantaneous
    * verbs cascade synchronously through complete(); timed/movement verbs yield to ticks. */
@@ -289,12 +320,14 @@ export function createBehaviorExecutor(deps: BehaviorDeps): BehaviorExecutor {
     const step = steps[f.index]
     switch (step.verb) {
       case 'idle':
+        blender.clearActing() // an explicit idle IS a new pose — release any persist
         blender.setSource(idleSource(), { durationMs: 200 })
         complete()
         break
       case 'playClip': {
         const clip = deps.clips[step.ref]
         if (!clip) return failStep(`unknown-clip:${step.ref}`)
+        blender.clearActing() // a step-level clip takes the base — no stale overlay
         blender.setSource(clip, { durationMs: step.blendMs ?? 200 })
         f.dwellMs = clip.loop ? STRIKE_HOLD_MS : Math.max(clipDuration(clip), STEP_MS)
         break
@@ -302,6 +335,18 @@ export function createBehaviorExecutor(deps: BehaviorDeps): BehaviorExecutor {
       case 'strikePose': {
         const pose = deps.poses[step.ref] ?? deps.clips[step.ref]
         if (!pose) return failStep(`unknown-pose:${step.ref}`)
+        // Authored facing (v1 arrival face — the legacy Fight faces LEFT).
+        if (step.face !== undefined) deps.setFacing?.(step.face)
+        if (step.hold === 'persist') {
+          // Persist-until-next-transition (the v1 arrival semantics): the pose rides
+          // the ACTING layer and the step completes IMMEDIATELY — the character is
+          // interactable (pokes, fidget gates see idle) while LOOKING like the pose.
+          // Released by the next movement/pose step or forceRelease, never a timer.
+          blender.setActing(pose as Pose | Clip, { durationMs: step.blendMs ?? 150, holdMs: 'persist' })
+          complete()
+          break
+        }
+        blender.clearActing() // a new pose supersedes any held one
         blender.setSource(pose as Pose | Clip, { durationMs: step.blendMs ?? 150 })
         f.dwellMs = step.holdMs ?? STRIKE_HOLD_MS
         if (f.dwellMs <= 0) complete()
@@ -322,7 +367,7 @@ export function createBehaviorExecutor(deps: BehaviorDeps): BehaviorExecutor {
         complete()
         break
       case 'say':
-        doSay(step.text)
+        doSay(step.text, step.holdMs)
         complete()
         break
       case 'sfx':
@@ -330,7 +375,7 @@ export function createBehaviorExecutor(deps: BehaviorDeps): BehaviorExecutor {
         complete()
         break
       case 'camera':
-        emit('intent:camera', { to: step.to, ms: step.ms })
+        emit('intent:camera', { to: step.to, ms: step.ms, mult: step.mult, fast: step.fast })
         complete()
         break
       case 'emit':
@@ -504,9 +549,10 @@ export function createBehaviorExecutor(deps: BehaviorDeps): BehaviorExecutor {
   }
 
   // ── say / impulse execution ───────────────────────────────────────────────────────
-  function doSay(text: string): void {
-    speech = { text, remainingMs: SAY_DURATION_MS }
-    emit('intent:say', { text, ms: SAY_DURATION_MS })
+  function doSay(text: string, holdMs?: number): void {
+    const ms = holdMs ?? SAY_DURATION_MS
+    speech = { text, remainingMs: ms }
+    emit('intent:say', { text, ms })
   }
 
   function doImpulse(step: Extract<Intent, { verb: 'impulse' }>): void {
@@ -548,14 +594,30 @@ export function createBehaviorExecutor(deps: BehaviorDeps): BehaviorExecutor {
 
     if (MOVEMENT.has(step.verb)) {
       if (!f.moveStarted) {
+        // A movement is "the next transition": a persist-held arrival pose releases
+        // here (v1 semantics — the pose survived pokes/quips but not real travel).
+        blender.clearActing()
         locomotion.begin(step as Intent & { verb: MovementVerb })
         f.moveStarted = true
         moveSeq++
         f.moveSeq = moveSeq
+        // Move-scoped ACTING pose (v1 rope/slide/tightrope crossings): the figure
+        // holds the art while the root travels; released when the move concludes
+        // (any terminal path funnels through the next enterCurrent/endBehavior,
+        // both of which clear or replace acting — plus the explicit clear below).
+        const actingRef = (step as { pose?: string }).pose
+        if (actingRef) {
+          const src = deps.poses[actingRef] ?? deps.clips[actingRef]
+          if (src) blender.setActing(src as Pose | Clip, { durationMs: 180, holdMs: 'persist' })
+        }
       }
       // Terminal solver status FIRST, timeout second: an arrival on the exact
       // timeout-boundary tick is an arrival, never a timeout.
       const st = locomotion.status
+      // A move-scoped acting pose releases the moment ITS move concludes — the
+      // next step may be a non-clearing beat (sfx/say) that must show the figure
+      // landing, not still frozen in the crossing art.
+      if (st !== 'running' && (step as { pose?: string }).pose) blender.clearActing()
       if (st === 'arrived') {
         if (!inReaction()) concludeArrived()
         else complete()
@@ -568,6 +630,9 @@ export function createBehaviorExecutor(deps: BehaviorDeps): BehaviorExecutor {
         endBehavior('halted', inReaction() ? 'reaction-movement-failed' : 'movement-failed')
       } else if (f.stepElapsedMs >= movementTimeout(step)) {
         // timeout: bounded even if the solver's own bounds somehow don't bite → give-up.
+        // A move-scoped acting pose leaves with its move here too (review: an empty
+        // onTimeout reaction would otherwise strand the crossing art persistently).
+        if ((step as { pose?: string }).pose) blender.clearActing()
         emit('intent:timeout', { step: f.index, verb: step.verb })
         if (!inReaction()) concludeTimeout('timeout')
         else endBehavior('halted', 'reaction-timeout')
@@ -627,6 +692,7 @@ export function createBehaviorExecutor(deps: BehaviorDeps): BehaviorExecutor {
     locomotion.reset()
     stack = []
     status = 'idle'
+    blender.clearActing({ durationMs: 120 })
     blender.setSource(idleSource(), { durationMs: 120 })
   }
 
@@ -677,28 +743,43 @@ export function createBehaviorExecutor(deps: BehaviorDeps): BehaviorExecutor {
     cues: () => doc?.cues ?? [],
     running: () => status === 'running',
     execCue: (intent) => {
-      // Cues run CONCURRENTLY (never on the step stack). say drives the bubble; the
-      // rest emit their trace event. Schema validation restricts cue verbs to EXACTLY
-      // this performance subset (CUE_VERBS) — the default arm is pure defense against
-      // hand-built docs that bypassed validation, and traces loudly rather than acts.
+      // Cues run CONCURRENTLY (never on the step stack). say drives the bubble;
+      // strikePose/playClip act on the blender's ACTING layer (parity recovery,
+      // Stage 2a — the review's core gap: these were trace-only, so vault/roll/
+      // swing/smash cues rendered nothing); sfx/camera emit for the site adapter.
+      // Schema validation restricts cue verbs to EXACTLY this performance subset
+      // (CUE_VERBS) — the default arm is pure defense against hand-built docs that
+      // bypassed validation, and traces loudly rather than acts.
       switch (intent.verb) {
         case 'say':
-          doSay(intent.text)
+          doSay(intent.text, intent.holdMs)
           break
         case 'sfx':
           emit('intent:sfx', { kind: intent.kind, cue: true })
           break
         case 'camera':
-          emit('intent:camera', { to: intent.to, ms: intent.ms, cue: true })
+          emit('intent:camera', { to: intent.to, ms: intent.ms, mult: intent.mult, fast: intent.fast, cue: true })
           break
-        case 'strikePose':
-          // Upper-body concurrent pose overlay is a P9 render concern; 7b records the
-          // milestone-scheduled cue as a trace event (the scheduling IS the deliverable).
-          emit('cue:strikePose', { ref: intent.ref })
+        case 'strikePose': {
+          const pose = deps.poses[intent.ref] ?? deps.clips[intent.ref]
+          if (pose) {
+            blender.setActing(pose as Pose | Clip, {
+              durationMs: intent.blendMs ?? 160,
+              holdMs: intent.hold === 'persist' ? 'persist' : (intent.holdMs ?? STRIKE_HOLD_MS),
+            })
+          }
+          emit('cue:strikePose', { ref: intent.ref, acted: pose !== undefined })
           break
-        case 'playClip':
-          emit('cue:playClip', { ref: intent.ref })
+        }
+        case 'playClip': {
+          const clip = deps.clips[intent.ref]
+          if (clip) {
+            // A cue clip plays ONCE over the movement (looping clips get one cycle).
+            blender.setActing(clip, { durationMs: intent.blendMs ?? 160, holdMs: Math.max(clipDuration(clip), STEP_MS) })
+          }
+          emit('cue:playClip', { ref: intent.ref, acted: clip !== undefined })
           break
+        }
         default:
           emit('cue:ignored', { verb: intent.verb })
       }
@@ -707,6 +788,7 @@ export function createBehaviorExecutor(deps: BehaviorDeps): BehaviorExecutor {
 
   return {
     run,
+    runOneShot,
     advance,
     get status() {
       return status
@@ -730,11 +812,15 @@ export function createBehaviorExecutor(deps: BehaviorDeps): BehaviorExecutor {
         speech: speech ? { ...speech } : null,
         runId,
         moveSeq,
+        budget,
       }
     },
     setState(s: BehaviorState) {
       if (s.behaviorId === null) {
         doc = null
+        // one-shot (docless) runs carry their budget in the snapshot; a pre-parity
+        // snapshot with a null doc is an idle state (budget irrelevant).
+        budget = s.budget ?? 0
       } else {
         const bound = registry.get(s.behaviorId)
         if (bound === undefined) {
@@ -743,7 +829,7 @@ export function createBehaviorExecutor(deps: BehaviorDeps): BehaviorExecutor {
           )
         }
         doc = bound
-        budget = computeBudget(bound)
+        budget = s.budget ?? computeBudget(bound)
       }
       status = s.status
       flags = { ...s.flags }

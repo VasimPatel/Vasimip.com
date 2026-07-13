@@ -1,0 +1,138 @@
+{
+  "schemaVersion": 2,
+  "id": "skin:hang",
+  "sources": [
+    "hang"
+  ],
+  "face": "baked",
+  "groupAnim": {
+    "name": "dangleswing",
+    "origin": "50% 4%"
+  },
+  "elements": [
+    {
+      "kind": "circle",
+      "cx": -2,
+      "cy": -66,
+      "r": 3.6,
+      "fill": "#1a1a1a"
+    },
+    {
+      "kind": "circle",
+      "cx": 10,
+      "cy": -66,
+      "r": 3.6,
+      "fill": "#1a1a1a"
+    },
+    {
+      "kind": "path",
+      "d": "M0,-10 L-4,-40 L-2,-64",
+      "fill": "none",
+      "stroke": "#1a1a1a",
+      "strokeWidth": 4.5,
+      "linecap": "round"
+    },
+    {
+      "kind": "path",
+      "d": "M3,-10 L8,-40 L10,-64",
+      "fill": "none",
+      "stroke": "#1a1a1a",
+      "strokeWidth": 4.5,
+      "linecap": "round"
+    },
+    {
+      "kind": "circle",
+      "cx": 3,
+      "cy": -28,
+      "r": 13,
+      "fill": "#fffdf6",
+      "stroke": "#1a1a1a",
+      "strokeWidth": 4
+    },
+    {
+      "kind": "path",
+      "d": "M-4,-37 l10,4 M17,-37 l-10,4",
+      "fill": "none",
+      "stroke": "#1a1a1a",
+      "strokeWidth": 2.6,
+      "linecap": "round"
+    },
+    {
+      "kind": "circle",
+      "cx": 1,
+      "cy": -30,
+      "r": 2.3,
+      "fill": "#1a1a1a"
+    },
+    {
+      "kind": "circle",
+      "cx": 12,
+      "cy": -30,
+      "r": 2.3,
+      "fill": "#1a1a1a"
+    },
+    {
+      "kind": "ellipse",
+      "cx": 6,
+      "cy": -20,
+      "rx": 2.4,
+      "ry": 3,
+      "fill": "none",
+      "stroke": "#1a1a1a",
+      "strokeWidth": 2.2
+    },
+    {
+      "kind": "path",
+      "d": "M1,-12 L-2,14",
+      "fill": "none",
+      "stroke": "#1a1a1a",
+      "strokeWidth": 5.5,
+      "linecap": "round"
+    },
+    {
+      "kind": "group",
+      "children": [
+        {
+          "kind": "group",
+          "children": [
+            {
+              "kind": "path",
+              "d": "M0,0 L7,16 L9,31 l10,2",
+              "fill": "none",
+              "stroke": "#1a1a1a",
+              "strokeWidth": 5,
+              "linecap": "round"
+            }
+          ],
+          "anim": {
+            "name": "kickl"
+          },
+          "origin": "15% 0%"
+        },
+        {
+          "kind": "group",
+          "children": [
+            {
+              "kind": "path",
+              "d": "M0,0 L-7,17 L-7,32 l-9,2",
+              "fill": "none",
+              "stroke": "#1a1a1a",
+              "strokeWidth": 5,
+              "linecap": "round"
+            }
+          ],
+          "anim": {
+            "name": "kickr"
+          },
+          "origin": "85% 0%"
+        }
+      ],
+      "transform": "translate(-2,14)"
+    }
+  ],
+  "head": {
+    "cx": 3,
+    "cy": -28,
+    "r": 13
+  }
+}

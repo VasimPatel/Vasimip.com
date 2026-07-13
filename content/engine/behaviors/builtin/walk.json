@@ -2,9 +2,9 @@
   "schemaVersion": 2,
   "id": "builtin:walk",
   "steps": [
-    {
-      "verb": "moveTo",
-      "target": "travel:to#interior"
-    }
+    { "verb": "sfx", "kind": "scrib" },
+    { "verb": "moveTo", "target": "travel:to#interior" },
+    { "verb": "strikePose", "ref": "squash-land", "holdMs": 220 },
+    { "verb": "wait", "ms": 320 }
   ]
 }

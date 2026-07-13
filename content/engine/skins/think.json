@@ -1,0 +1,149 @@
+{
+  "schemaVersion": 2,
+  "id": "skin:think",
+  "sources": [
+    "think"
+  ],
+  "face": "baked",
+  "groupAnim": {
+    "name": "idlesway",
+    "origin": "50% 96%"
+  },
+  "elements": [
+    {
+      "kind": "group",
+      "children": [
+        {
+          "kind": "circle",
+          "cx": 0,
+          "cy": 0,
+          "r": 3,
+          "fill": "#1a1a1a"
+        },
+        {
+          "kind": "circle",
+          "cx": 9,
+          "cy": -5,
+          "r": 3.6,
+          "fill": "#1a1a1a"
+        },
+        {
+          "kind": "circle",
+          "cx": 19,
+          "cy": -11,
+          "r": 4.2,
+          "fill": "#1a1a1a"
+        }
+      ],
+      "transform": "translate(20,-44)"
+    },
+    {
+      "kind": "group",
+      "children": [
+        {
+          "kind": "circle",
+          "cx": 2,
+          "cy": -30,
+          "r": 14,
+          "fill": "#fffdf6",
+          "stroke": "#1a1a1a",
+          "strokeWidth": 4
+        },
+        {
+          "kind": "path",
+          "d": "M-5,-36 l9,2.5 M9,-34 l9,-2.5",
+          "fill": "none",
+          "stroke": "#1a1a1a",
+          "strokeWidth": 2.6,
+          "linecap": "round"
+        },
+        {
+          "kind": "circle",
+          "cx": 1,
+          "cy": -30,
+          "r": 2,
+          "fill": "#1a1a1a"
+        },
+        {
+          "kind": "circle",
+          "cx": 12,
+          "cy": -30,
+          "r": 2,
+          "fill": "#1a1a1a"
+        },
+        {
+          "kind": "path",
+          "d": "M3,-21 q5,1.5 9,-.5",
+          "fill": "none",
+          "stroke": "#1a1a1a",
+          "strokeWidth": 2.6,
+          "linecap": "round"
+        }
+      ],
+      "anim": {
+        "name": "thinkchin"
+      },
+      "origin": "50% 100%"
+    },
+    {
+      "kind": "path",
+      "d": "M0,-16 L-2,16",
+      "fill": "none",
+      "stroke": "#1a1a1a",
+      "strokeWidth": 5.5,
+      "linecap": "round"
+    },
+    {
+      "kind": "path",
+      "d": "M1,-8 L12,-6 L9,-19",
+      "fill": "none",
+      "stroke": "#1a1a1a",
+      "strokeWidth": 4.5,
+      "linecap": "round"
+    },
+    {
+      "kind": "path",
+      "d": "M-1,-8 L-13,-2 L-6,8",
+      "fill": "none",
+      "stroke": "#1a1a1a",
+      "strokeWidth": 4.5,
+      "linecap": "round"
+    },
+    {
+      "kind": "path",
+      "d": "M-2,16 L-12,34 L-14,50 l-10,2",
+      "fill": "none",
+      "stroke": "#1a1a1a",
+      "strokeWidth": 5,
+      "linecap": "round"
+    },
+    {
+      "kind": "group",
+      "children": [
+        {
+          "kind": "group",
+          "children": [
+            {
+              "kind": "path",
+              "d": "M0,0 L11,17 L13,33 l11,2",
+              "fill": "none",
+              "stroke": "#1a1a1a",
+              "strokeWidth": 5,
+              "linecap": "round"
+            }
+          ],
+          "anim": {
+            "name": "thinktap"
+          },
+          "origin": "0% 0%"
+        }
+      ],
+      "transform": "translate(-2,16)"
+    }
+  ],
+  "head": {
+    "cx": 2,
+    "cy": -30,
+    "r": 14
+  }
+}

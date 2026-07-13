@@ -2,18 +2,10 @@
   "schemaVersion": 2,
   "id": "builtin:hop",
   "steps": [
-    {
-      "verb": "jumpTo",
-      "target": "travel:to#interior"
-    }
+    { "verb": "jumpTo", "target": "travel:to#interior" },
+    { "verb": "wait", "ms": 490 }
   ],
   "cues": [
-    {
-      "at": "onLaunch",
-      "do": {
-        "verb": "sfx",
-        "kind": "hop"
-      }
-    }
+    { "at": "onLaunch", "do": { "verb": "sfx", "kind": "hop" } }
   ]
 }

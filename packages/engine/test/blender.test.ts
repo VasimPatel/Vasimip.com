@@ -250,3 +250,60 @@ test('no-pop negative control: velocity-zeroing sabotage pops >= 3x the real ble
   )
   expect(sabotaged).toBeGreaterThanOrEqual(3 * real)
 })
+
+// ── the ACTING layer (parity Stage 2a + codex review fixes) ─────────────────
+test('acting hold is visible for exactly ceil(hold/STEP) ticks (no off-by-one)', () => {
+  const b = fresh()
+  b.setSource(walk) // clip base
+  for (let i = 0; i < 60; i++) b.tick()
+  b.setActing(cheer, { holdMs: STEP_MS }) // ONE tick of hold
+  expect(b.actingSource()?.id).toBe('cheer')
+  b.tick() // the single held tick — acting still owns the target
+  expect(b.actingSource()?.id).toBe('cheer')
+  b.tick() // expiry tick — released before sampling
+  expect(b.actingSource()).toBeNull()
+})
+
+test('acting-clip markers NEVER surface (launch binding cannot be spoofed)', () => {
+  const b = fresh()
+  b.setSource(stand)
+  b.setActing(jump, { holdMs: 4000 }) // the jump clip HAS a launch marker
+  const seen: string[] = []
+  for (let i = 0; i < 300; i++) seen.push(...b.tick().markers)
+  expect(seen).toEqual([]) // base is a static pose: zero markers despite acting jump
+})
+
+test("base setSource retargets do not stomp the acting layer's blend envelope", () => {
+  // Control: acting alone, measure how far joints move toward cheer in 12 ticks.
+  const run = (retargetBaseEveryTick: boolean): number => {
+    const b = fresh()
+    b.setSource(walk)
+    for (let i = 0; i < 60; i++) b.tick()
+    b.setActing(cheer, { durationMs: 160, holdMs: 5000 })
+    for (let i = 0; i < 12; i++) {
+      if (retargetBaseEveryTick) b.setSource(walk, { durationMs: 2000 }) // a slow base re-arm
+      b.tick()
+    }
+    const st = b.getState()
+    let err = 0
+    for (const id of JOINTS) err = Math.max(err, Math.abs(wrapPi(st.joints[id].angle - (cheer.angles[id] ?? 0))))
+    return err
+  }
+  const control = run(false)
+  const stomped = run(true)
+  // identical convergence — the base's 2000ms envelope must not slow acting's 160ms
+  expect(Math.abs(stomped - control)).toBeLessThan(1e-9)
+})
+
+test('persist acting survives base retargets and releases only on clearActing', () => {
+  const b = fresh()
+  b.setSource(stand)
+  b.setActing(cheer, { holdMs: 'persist' })
+  for (let i = 0; i < 600; i++) {
+    if (i % 7 === 0) b.setSource(i % 14 === 0 ? walk : stand) // base churn
+    b.tick()
+  }
+  expect(b.actingSource()?.id).toBe('cheer')
+  b.clearActing()
+  expect(b.actingSource()).toBeNull()
+})

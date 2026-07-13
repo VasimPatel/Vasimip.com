@@ -72,7 +72,10 @@ export function parseTargetRef(ref: string): ParsedTarget | null {
     const spot = hash > 0 ? rest.slice(hash + 1) : 'interior'
     // Spot vocabulary is CLOSED (review finding: an open spot string silently
     // resolved to interior — travel:to#roff must be a validation error).
-    if ((which === 'to' || which === 'from') && (spot === 'roof' || spot === 'interior')) {
+    // 'edge' (parity Stage 2c, owner-approved widening): the bound panel's
+    // standable edge on the side TOWARD the other bound panel — the legacy
+    // run-up target (vault/rope/slide/smash approach beats).
+    if ((which === 'to' || which === 'from') && (spot === 'roof' || spot === 'interior' || spot === 'edge')) {
       return { kind: 'travel', which, spot }
     }
     return null
@@ -123,16 +126,32 @@ export type IntentVerb = (typeof INTENT_VERBS)[number]
 export const MOVEMENT_VERBS = ['moveTo', 'jumpTo', 'flyTo', 'flyThrough'] as const
 export type MovementVerb = (typeof MOVEMENT_VERBS)[number]
 
-export type MoveIntent = { verb: MovementVerb; target: TargetRef; timeoutMs?: number }
+/** Movement widening (parity Stage 3/4, owner-approved in plan):
+ * `pose` — an ACTING pose held for the duration of THIS move (the v1 rope/slide
+ * crossings and tightrope walk: the root travels while the figure holds the art;
+ * released when the move concludes). `speed` — authored ground speed in px/s
+ * (the v1 motion tempo the 9a migration dropped; jumps ignore it). */
+export type MoveIntent = { verb: MovementVerb; target: TargetRef; timeoutMs?: number; pose?: string; speed?: number }
 
 export type Intent =
   | { verb: 'idle' }
   | MoveIntent
   | { verb: 'playClip'; ref: string; blendMs?: number }
-  | { verb: 'strikePose'; ref: string; blendMs?: number; holdMs?: number }
-  | { verb: 'say'; text: string }
+  /** `hold: 'persist'` (parity recovery, Stage 2a — owner-approved widening):
+   * the pose is struck onto the concurrent ACTING layer and stays until the next
+   * transition (movement step / new pose / force-release) instead of dwelling the
+   * behavior for holdMs — the v1 "arrival pose persists until the next transition"
+   * semantics, restored. holdMs is ignored when hold is present. */
+  /** `face` (Stage 4): authored facing applied when the pose strikes — the v1
+   * arrival `face` (legacy Fight faces LEFT), dropped by the 9a migration. */
+  | { verb: 'strikePose'; ref: string; blendMs?: number; holdMs?: number; hold?: 'persist'; face?: 1 | -1 }
+  /** `holdMs` (Stage 4): authored speech duration — the v1 say holdMs. */
+  | { verb: 'say'; text: string; holdMs?: number }
   | { verb: 'sfx'; kind: string }
-  | { verb: 'camera'; to?: TargetRef; ms?: number }
+  /** camera `mult`/`fast` (parity recovery, Stage 2a — owner-approved widening):
+   * the v1 authored zoom multiplier and tempo, dropped by the 9a migration. An
+   * omitted `to` means CLEAR — return the camera to panel focus. */
+  | { verb: 'camera'; to?: TargetRef; ms?: number; mult?: number; fast?: boolean }
   | { verb: 'wait'; ms: number }
   | { verb: 'emit'; emitter: string; count?: number }
   | { verb: 'impulse'; target: EntityRef; vec: [number, number] }
@@ -175,14 +194,37 @@ export interface Cue {
   do: Intent
 }
 
+/** Geometric gate (parity Stage 4, owner-approved widening) — the v1 ActionWhen
+ * restored: a behavior is only pool-eligible when the TRIP's shape passes. The
+ * evaluator needs a GeomCtx (the adapter's trip geometry); a geom gate with no
+ * context is FALSE (never silently pass a geometry test that wasn't run). */
+export interface GeomGate {
+  minDist?: number
+  maxDist?: number
+  minHoriz?: number
+  minVert?: number
+  vert?: 'up' | 'down'
+  fromPanel?: number[]
+}
+export interface GeomCtx {
+  dist: number
+  horiz: number
+  vert: number
+  /** Signed vertical delta (negative = destination above). */
+  dyv: number
+  fromPanel: number
+}
+
 /** Minimal boolean gate over the flag store (§5 `when?: GateExpr`). A gate is a
- * flag test or a boolean combination of gates. Evaluated against a character's flag
- * store (7b uses it to gate behavior selection; 7a validates + exposes an evaluator). */
+ * flag test, a geometry test, or a boolean combination. Evaluated against a
+ * character's flag store + an optional trip geometry (7b uses it to gate behavior
+ * selection; 7a validates + exposes an evaluator). */
 export type GateExpr =
   | { flag: string }
   | { not: GateExpr }
   | { and: GateExpr[] }
   | { or: GateExpr[] }
+  | { geom: GeomGate }
 
 export interface BehaviorDoc extends DocEnvelope {
   id: string
@@ -194,11 +236,23 @@ export interface BehaviorDoc extends DocEnvelope {
 
 /** Evaluate a GateExpr against a flag store (missing flag = false). Pure. Exposed so
  * the engine's `when?` check and 7b's selection logic share one implementation. */
-export function evalGate(expr: GateExpr, flags: Record<string, boolean>): boolean {
+export function evalGate(expr: GateExpr, flags: Record<string, boolean>, geom?: GeomCtx): boolean {
   if ('flag' in expr) return flags[expr.flag] === true
-  if ('not' in expr) return !evalGate(expr.not, flags)
-  if ('and' in expr) return expr.and.every((e) => evalGate(e, flags))
-  if ('or' in expr) return expr.or.some((e) => evalGate(e, flags))
+  if ('not' in expr) return !evalGate(expr.not, flags, geom)
+  if ('and' in expr) return expr.and.every((e) => evalGate(e, flags, geom))
+  if ('or' in expr) return expr.or.some((e) => evalGate(e, flags, geom))
+  if ('geom' in expr) {
+    if (!geom) return false // no trip context → the geometry test cannot pass
+    const g = expr.geom
+    if (g.minDist !== undefined && geom.dist < g.minDist) return false
+    if (g.maxDist !== undefined && geom.dist > g.maxDist) return false
+    if (g.minHoriz !== undefined && geom.horiz < g.minHoriz) return false
+    if (g.minVert !== undefined && geom.vert < g.minVert) return false
+    if (g.vert === 'up' && !(geom.dyv < 0)) return false
+    if (g.vert === 'down' && !(geom.dyv > 0)) return false
+    if (g.fromPanel !== undefined && !g.fromPanel.includes(geom.fromPanel)) return false
+    return true
+  }
   return false
 }
 
@@ -218,15 +272,15 @@ function rejectUnknownKeys(o: Record<string, unknown>, allowed: readonly string[
 /** Allowed fields per verb (closed schema — anything else is rejected). */
 const VERB_KEYS: Record<IntentVerb, readonly string[]> = {
   idle: ['verb'],
-  moveTo: ['verb', 'target', 'timeoutMs'],
-  jumpTo: ['verb', 'target', 'timeoutMs'],
-  flyTo: ['verb', 'target', 'timeoutMs'],
-  flyThrough: ['verb', 'target', 'timeoutMs'],
+  moveTo: ['verb', 'target', 'timeoutMs', 'pose', 'speed'],
+  jumpTo: ['verb', 'target', 'timeoutMs', 'pose', 'speed'],
+  flyTo: ['verb', 'target', 'timeoutMs', 'pose', 'speed'],
+  flyThrough: ['verb', 'target', 'timeoutMs', 'pose', 'speed'],
   playClip: ['verb', 'ref', 'blendMs'],
-  strikePose: ['verb', 'ref', 'blendMs', 'holdMs'],
-  say: ['verb', 'text'],
+  strikePose: ['verb', 'ref', 'blendMs', 'holdMs', 'hold', 'face'],
+  say: ['verb', 'text', 'holdMs'],
   sfx: ['verb', 'kind'],
-  camera: ['verb', 'to', 'ms'],
+  camera: ['verb', 'to', 'ms', 'mult', 'fast'],
   wait: ['verb', 'ms'],
   emit: ['verb', 'emitter', 'count'],
   impulse: ['verb', 'target', 'vec'],
@@ -263,6 +317,10 @@ function checkIntent(intent: unknown, path: string, issues: Issues): void {
       checkTarget(intent.target, `${path}.target`, issues)
       if (intent.timeoutMs !== undefined && (!isNum(intent.timeoutMs) || intent.timeoutMs <= 0))
         issues.push(`${path}.timeoutMs: must be a finite number > 0 when present`)
+      if (intent.pose !== undefined && (!isStr(intent.pose) || intent.pose.length === 0))
+        issues.push(`${path}.pose: must be a non-empty pose/clip ref when present`)
+      if (intent.speed !== undefined && (!isNum(intent.speed) || intent.speed <= 0))
+        issues.push(`${path}.speed: must be a finite number > 0 (px/s) when present`)
       break
     case 'playClip':
       if (!isStr(intent.ref) || intent.ref.length === 0) issues.push(`${path}.ref: required non-empty string`)
@@ -275,9 +333,15 @@ function checkIntent(intent: unknown, path: string, issues: Issues): void {
         issues.push(`${path}.blendMs: must be a finite number >= 0 when present`)
       if (intent.holdMs !== undefined && (!isNum(intent.holdMs) || intent.holdMs < 0))
         issues.push(`${path}.holdMs: must be a finite number >= 0 when present`)
+      if (intent.hold !== undefined && intent.hold !== 'persist')
+        issues.push(`${path}.hold: must be the literal 'persist' when present`)
+      if (intent.face !== undefined && intent.face !== 1 && intent.face !== -1)
+        issues.push(`${path}.face: must be 1 or -1 when present`)
       break
     case 'say':
       if (!isStr(intent.text)) issues.push(`${path}.text: required string`)
+      if (intent.holdMs !== undefined && (!isNum(intent.holdMs) || intent.holdMs <= 0))
+        issues.push(`${path}.holdMs: must be a finite number > 0 when present`)
       break
     case 'sfx':
       if (!isStr(intent.kind) || intent.kind.length === 0) issues.push(`${path}.kind: required non-empty string`)
@@ -286,6 +350,10 @@ function checkIntent(intent: unknown, path: string, issues: Issues): void {
       if (intent.to !== undefined) checkTarget(intent.to, `${path}.to`, issues)
       if (intent.ms !== undefined && (!isNum(intent.ms) || intent.ms < 0))
         issues.push(`${path}.ms: must be a finite number >= 0 when present`)
+      if (intent.mult !== undefined && (!isNum(intent.mult) || intent.mult <= 0))
+        issues.push(`${path}.mult: must be a finite number > 0 when present`)
+      if (intent.fast !== undefined && !isBool(intent.fast))
+        issues.push(`${path}.fast: must be a boolean when present`)
       break
     case 'wait':
       if (!isNum(intent.ms) || intent.ms < 0) issues.push(`${path}.ms: required finite number >= 0`)
@@ -342,7 +410,8 @@ export function checkReactions(reactions: unknown, base: string, issues: Issues)
   }
 }
 
-const GATE_KEYS = ['flag', 'not', 'and', 'or'] as const
+const GATE_KEYS = ['flag', 'not', 'and', 'or', 'geom'] as const
+const GEOM_KEYS = new Set(['minDist', 'maxDist', 'minHoriz', 'minVert', 'vert', 'fromPanel'])
 function checkGate(g: unknown, path: string, issues: Issues): void {
   if (!isRecord(g)) return void issues.push(`${path}: must be an object`)
   const keys = Object.keys(g)
@@ -360,6 +429,16 @@ function checkGate(g: unknown, path: string, issues: Issues): void {
   } else if ('or' in g) {
     if (!isArr(g.or) || g.or.length === 0) issues.push(`${path}.or: required non-empty array`)
     else g.or.forEach((e, i) => checkGate(e, `${path}.or[${i}]`, issues))
+  } else if ('geom' in g) {
+    const gg = g.geom
+    if (!isRecord(gg)) return void issues.push(`${path}.geom: must be an object`)
+    for (const k of Object.keys(gg)) if (!GEOM_KEYS.has(k)) issues.push(`${path}.geom.${k}: unknown key`)
+    for (const k of ['minDist', 'maxDist', 'minHoriz', 'minVert'] as const) {
+      if (gg[k] !== undefined && (!isNum(gg[k]) || (gg[k] as number) < 0)) issues.push(`${path}.geom.${k}: must be a number >= 0`)
+    }
+    if (gg.vert !== undefined && gg.vert !== 'up' && gg.vert !== 'down') issues.push(`${path}.geom.vert: must be 'up' or 'down'`)
+    if (gg.fromPanel !== undefined && (!isArr(gg.fromPanel) || !gg.fromPanel.every((n) => isNum(n) && Number.isInteger(n))))
+      issues.push(`${path}.geom.fromPanel: must be an array of integer panel indices`)
   }
 }
 

@@ -1,0 +1,268 @@
+{
+  "schemaVersion": 2,
+  "id": "skin:walk-mid",
+  "sources": [
+    "walk-mid",
+    "walk-cycle",
+    "__gait"
+  ],
+  "face": "baked",
+  "groupAnim": {
+    "name": "bobw"
+  },
+  "elements": [
+    {
+      "kind": "group",
+      "children": [
+        {
+          "kind": "group",
+          "children": [
+            {
+              "kind": "path",
+              "d": "M0,0 L1,14",
+              "fill": "none",
+              "stroke": "#1a1a1a",
+              "strokeWidth": 4,
+              "linecap": "round",
+              "opacity": 0.85
+            },
+            {
+              "kind": "group",
+              "children": [
+                {
+                  "kind": "group",
+                  "children": [
+                    {
+                      "kind": "path",
+                      "d": "M0,0 L2,14",
+                      "fill": "none",
+                      "stroke": "#1a1a1a",
+                      "strokeWidth": 4,
+                      "linecap": "round",
+                      "opacity": 0.85
+                    }
+                  ],
+                  "anim": {
+                    "name": "armfw",
+                    "delaySec": -0.34
+                  },
+                  "origin": "0% 0%"
+                }
+              ],
+              "transform": "translate(1,14)"
+            }
+          ],
+          "anim": {
+            "name": "armuw",
+            "delaySec": -0.34
+          },
+          "origin": "0% 0%"
+        }
+      ],
+      "transform": "translate(0,-10)"
+    },
+    {
+      "kind": "group",
+      "children": [
+        {
+          "kind": "group",
+          "children": [
+            {
+              "kind": "path",
+              "d": "M0,0 L2,18",
+              "fill": "none",
+              "stroke": "#1a1a1a",
+              "strokeWidth": 4.5,
+              "linecap": "round",
+              "opacity": 0.85
+            },
+            {
+              "kind": "group",
+              "children": [
+                {
+                  "kind": "group",
+                  "children": [
+                    {
+                      "kind": "path",
+                      "d": "M0,0 L1,16 l10,3",
+                      "fill": "none",
+                      "stroke": "#1a1a1a",
+                      "strokeWidth": 4.5,
+                      "linecap": "round",
+                      "opacity": 0.85
+                    }
+                  ],
+                  "anim": {
+                    "name": "shinw",
+                    "delaySec": -0.34
+                  },
+                  "origin": "0% 0%"
+                }
+              ],
+              "transform": "translate(2,18)"
+            }
+          ],
+          "anim": {
+            "name": "thighw",
+            "delaySec": -0.34
+          },
+          "origin": "0% 0%"
+        }
+      ],
+      "transform": "translate(-2,16)"
+    },
+    {
+      "kind": "path",
+      "d": "M0,-16 L-2,16",
+      "fill": "none",
+      "stroke": "#1a1a1a",
+      "strokeWidth": 5.5,
+      "linecap": "round"
+    },
+    {
+      "kind": "group",
+      "children": [
+        {
+          "kind": "group",
+          "children": [
+            {
+              "kind": "path",
+              "d": "M0,0 L2,18",
+              "fill": "none",
+              "stroke": "#1a1a1a",
+              "strokeWidth": 5,
+              "linecap": "round"
+            },
+            {
+              "kind": "group",
+              "children": [
+                {
+                  "kind": "group",
+                  "children": [
+                    {
+                      "kind": "path",
+                      "d": "M0,0 L1,16 l10,3",
+                      "fill": "none",
+                      "stroke": "#1a1a1a",
+                      "strokeWidth": 5,
+                      "linecap": "round"
+                    }
+                  ],
+                  "anim": {
+                    "name": "shinw"
+                  },
+                  "origin": "0% 0%"
+                }
+              ],
+              "transform": "translate(2,18)"
+            }
+          ],
+          "anim": {
+            "name": "thighw"
+          },
+          "origin": "0% 0%"
+        }
+      ],
+      "transform": "translate(-2,16)"
+    },
+    {
+      "kind": "group",
+      "children": [
+        {
+          "kind": "group",
+          "children": [
+            {
+              "kind": "path",
+              "d": "M0,0 L1,14",
+              "fill": "none",
+              "stroke": "#1a1a1a",
+              "strokeWidth": 4.5,
+              "linecap": "round"
+            },
+            {
+              "kind": "group",
+              "children": [
+                {
+                  "kind": "group",
+                  "children": [
+                    {
+                      "kind": "path",
+                      "d": "M0,0 L2,14",
+                      "fill": "none",
+                      "stroke": "#1a1a1a",
+                      "strokeWidth": 4.5,
+                      "linecap": "round"
+                    }
+                  ],
+                  "anim": {
+                    "name": "armfw"
+                  },
+                  "origin": "0% 0%"
+                }
+              ],
+              "transform": "translate(1,14)"
+            }
+          ],
+          "anim": {
+            "name": "armuw"
+          },
+          "origin": "0% 0%"
+        }
+      ],
+      "transform": "translate(0,-10)"
+    },
+    {
+      "kind": "group",
+      "children": [
+        {
+          "kind": "circle",
+          "cx": 2,
+          "cy": -30,
+          "r": 14,
+          "fill": "#fffdf6",
+          "stroke": "#1a1a1a",
+          "strokeWidth": 4
+        },
+        {
+          "kind": "path",
+          "d": "M-5,-36 l9,2.5 M9,-34 l9,-2.5",
+          "fill": "none",
+          "stroke": "#1a1a1a",
+          "strokeWidth": 2.6,
+          "linecap": "round"
+        },
+        {
+          "kind": "circle",
+          "cx": 0,
+          "cy": -29,
+          "r": 2,
+          "fill": "#1a1a1a"
+        },
+        {
+          "kind": "circle",
+          "cx": 11,
+          "cy": -29,
+          "r": 2,
+          "fill": "#1a1a1a"
+        },
+        {
+          "kind": "path",
+          "d": "M3,-21 q5,2.5 9,-1",
+          "fill": "none",
+          "stroke": "#1a1a1a",
+          "strokeWidth": 2.6,
+          "linecap": "round"
+        }
+      ],
+      "anim": {
+        "name": "headw"
+      },
+      "origin": "50% 100%"
+    }
+  ],
+  "head": {
+    "cx": 2,
+    "cy": -30,
+    "r": 14
+  }
+}

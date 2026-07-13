@@ -1,0 +1,135 @@
+{
+  "schemaVersion": 2,
+  "id": "skin:wallrun",
+  "sources": [
+    "wallrun"
+  ],
+  "face": "baked",
+  "elements": [
+    {
+      "kind": "group",
+      "children": [
+        {
+          "kind": "circle",
+          "cx": 2,
+          "cy": -30,
+          "r": 14,
+          "fill": "#fffdf6",
+          "stroke": "#1a1a1a",
+          "strokeWidth": 4
+        },
+        {
+          "kind": "path",
+          "d": "M-5,-37 l10,4 M18,-37 l-10,4",
+          "fill": "none",
+          "stroke": "#1a1a1a",
+          "strokeWidth": 2.6,
+          "linecap": "round"
+        },
+        {
+          "kind": "circle",
+          "cx": 1,
+          "cy": -29,
+          "r": 2,
+          "fill": "#1a1a1a"
+        },
+        {
+          "kind": "circle",
+          "cx": 12,
+          "cy": -29,
+          "r": 2,
+          "fill": "#1a1a1a"
+        },
+        {
+          "kind": "path",
+          "d": "M4,-21 q5,-2 9,0",
+          "fill": "none",
+          "stroke": "#1a1a1a",
+          "strokeWidth": 2.4,
+          "linecap": "round"
+        },
+        {
+          "kind": "path",
+          "d": "M0,-16 L-2,16",
+          "fill": "none",
+          "stroke": "#1a1a1a",
+          "strokeWidth": 5.5,
+          "linecap": "round"
+        },
+        {
+          "kind": "path",
+          "d": "M0,-9 L13,-3 L9,8",
+          "fill": "none",
+          "stroke": "#1a1a1a",
+          "strokeWidth": 4.5,
+          "linecap": "round"
+        },
+        {
+          "kind": "path",
+          "d": "M-1,-9 L-14,-14 L-9,-24",
+          "fill": "none",
+          "stroke": "#1a1a1a",
+          "strokeWidth": 4.5,
+          "linecap": "round"
+        },
+        {
+          "kind": "group",
+          "children": [
+            {
+              "kind": "group",
+              "children": [
+                {
+                  "kind": "path",
+                  "d": "M0,0 L4,17 L18,24 l9,-2",
+                  "fill": "none",
+                  "stroke": "#1a1a1a",
+                  "strokeWidth": 5,
+                  "linecap": "round"
+                }
+              ],
+              "anim": {
+                "name": "wallscramble"
+              },
+              "origin": "0% 0%"
+            },
+            {
+              "kind": "group",
+              "children": [
+                {
+                  "kind": "path",
+                  "d": "M0,0 L-2,18 L11,27 l9,-2",
+                  "fill": "none",
+                  "stroke": "#1a1a1a",
+                  "strokeWidth": 4.5,
+                  "linecap": "round",
+                  "opacity": 0.85
+                }
+              ],
+              "anim": {
+                "name": "wallscramble",
+                "delaySec": -0.2
+              },
+              "origin": "0% 0%"
+            }
+          ],
+          "transform": "translate(-2,16)"
+        },
+        {
+          "kind": "path",
+          "d": "M-16,38 l-12,6 M-4,44 l-10,6",
+          "fill": "none",
+          "stroke": "#1a1a1a",
+          "strokeWidth": 2,
+          "linecap": "round",
+          "opacity": 0.4
+        }
+      ],
+      "transform": "rotate(-52)"
+    }
+  ],
+  "head": {
+    "cx": 2,
+    "cy": -30,
+    "r": 14
+  }
+}

@@ -1,0 +1,121 @@
+{
+  "schemaVersion": 2,
+  "id": "skin:punch",
+  "sources": [
+    "punch"
+  ],
+  "face": "baked",
+  "elements": [
+    {
+      "kind": "group",
+      "children": [
+        {
+          "kind": "circle",
+          "cx": 2,
+          "cy": -30,
+          "r": 14,
+          "fill": "#fffdf6",
+          "stroke": "#1a1a1a",
+          "strokeWidth": 4
+        },
+        {
+          "kind": "path",
+          "d": "M-6,-38 l11,5 M17,-38 l-11,5",
+          "fill": "none",
+          "stroke": "#1a1a1a",
+          "strokeWidth": 2.8,
+          "linecap": "round"
+        },
+        {
+          "kind": "circle",
+          "cx": 0,
+          "cy": -28,
+          "r": 2,
+          "fill": "#1a1a1a"
+        },
+        {
+          "kind": "circle",
+          "cx": 11,
+          "cy": -28,
+          "r": 2,
+          "fill": "#1a1a1a"
+        },
+        {
+          "kind": "path",
+          "d": "M3,-20 h9",
+          "fill": "none",
+          "stroke": "#1a1a1a",
+          "strokeWidth": 2.6,
+          "linecap": "round"
+        },
+        {
+          "kind": "path",
+          "d": "M0,-16 L-3,16",
+          "fill": "none",
+          "stroke": "#1a1a1a",
+          "strokeWidth": 5.5,
+          "linecap": "round"
+        },
+        {
+          "kind": "path",
+          "d": "M-1,-9 L-13,-2 L-6,4",
+          "fill": "none",
+          "stroke": "#1a1a1a",
+          "strokeWidth": 4.5,
+          "linecap": "round"
+        },
+        {
+          "kind": "group",
+          "children": [
+            {
+              "kind": "group",
+              "children": [
+                {
+                  "kind": "path",
+                  "d": "M0,0 L14,-2 L29,-4",
+                  "fill": "none",
+                  "stroke": "#1a1a1a",
+                  "strokeWidth": 4.5,
+                  "linecap": "round"
+                },
+                {
+                  "kind": "circle",
+                  "cx": 31,
+                  "cy": -4,
+                  "r": 4.4,
+                  "fill": "#1a1a1a"
+                }
+              ],
+              "anim": {
+                "name": "punch1"
+              },
+              "origin": "0% 50%"
+            }
+          ],
+          "transform": "translate(1,-8)"
+        },
+        {
+          "kind": "path",
+          "d": "M-3,16 L12,24 L13,44 l11,2",
+          "fill": "none",
+          "stroke": "#1a1a1a",
+          "strokeWidth": 5,
+          "linecap": "round"
+        },
+        {
+          "kind": "path",
+          "d": "M-3,16 L-16,28 L-20,45 l-9,2",
+          "fill": "none",
+          "stroke": "#1a1a1a",
+          "strokeWidth": 5,
+          "linecap": "round"
+        }
+      ]
+    }
+  ],
+  "head": {
+    "cx": 2,
+    "cy": -30,
+    "r": 14
+  }
+}

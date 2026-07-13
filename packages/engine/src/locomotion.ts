@@ -72,6 +72,9 @@ const JUMP_LAND_TOL = 24
 const JUMP_REST_ARC = 42
 /** stopAt skin so a blocked capsule rests just outside the wall (no re-penetration). */
 const CAP_SKIN = 0.5
+/** Inset from a panel's wall for the travel:*#edge run-up spot (legacy ~6-8px
+ * edge targets, plus clearance for the capsule radius). */
+const EDGE_INSET = 14
 /** Motion-into-wall dot threshold (px²/tick) below which a hit is a slide, not a block. */
 const INTO_WALL_EPS = 1e-4
 /** The marker name a jump clip must carry at its launch frame. */
@@ -132,6 +135,10 @@ export interface LocomotionState {
   gFloorY: number
   gHipHeight: number
   gElapsedMs: number
+  /** Authored per-intent ground speed (px/s) — applies to LATER legs of a
+   * multi-leg route too, so it must survive a between-legs snapshot. Optional
+   * for pre-parity snapshots. */
+  speedOverride?: number | null
   // jump
   jPhase: JumpPhase
   jVx: number
@@ -351,6 +358,7 @@ export function createLocomotion(deps: LocomotionDeps): Locomotion {
   let gStartX = 0
   let gSpeed = 0
   let gDir: 1 | -1 = 1
+  let speedOverride: number | null = null
   let gFloorY = 0
   let gHipHeight = deps.hipHeight
   let gElapsedMs = 0
@@ -403,6 +411,19 @@ export function createLocomotion(deps: LocomotionDeps): Locomotion {
       if (!entity) return null
       const panel = cw.panels.find((p) => p.entity === entity)
       if (!panel) return null
+      if (parsed.spot === 'edge') {
+        // The panel's standable edge on the side TOWARD the other bound panel —
+        // the legacy run-up beat's target (edgeDx). Falls back to the interior
+        // spot when the edge point isn't supported (holes) or nothing is bound.
+        const otherId = parsed.which === 'to' ? travelCtx?.from : travelCtx?.to
+        const otherPanel = otherId ? cw.panels.find((p) => p.entity === otherId) : undefined
+        const box = panel.geom.box
+        const towardRight = otherPanel ? otherPanel.geom.spots.interior.x >= panel.geom.spots.interior.x : true
+        const ex = towardRight ? box.x + box.w - EDGE_INSET : box.x + EDGE_INSET
+        const ey = panel.geom.spots.interior.y
+        if (spotSupported(ex, ey)) return { x: ex, y: ey }
+        return { ...panel.geom.spots.interior }
+      }
       // The grammar closes the spot set — no silent fallback (review finding); and
       // a spot without a REAL platform under it is phantom geometry (deep-anchor
       // panels have no standable roof): resolve to the panel's SUPPORTED spot.
@@ -674,7 +695,7 @@ export function createLocomotion(deps: LocomotionDeps): Locomotion {
     gHipHeight = deps.hipHeight
     gStartX = t.x
     gDir = to.x >= t.x ? 1 : -1
-    gSpeed = walkSpeed * gDir
+    gSpeed = (speedOverride ?? walkSpeed) * gDir
     gElapsedMs = 0
     t.facing = gDir
     gait = createGait(rig, character, {
@@ -826,6 +847,10 @@ export function createLocomotion(deps: LocomotionDeps): Locomotion {
     pendingRef = intent.target
     replanCount = 0
     elapsedMs = 0
+    // Authored ground speed (parity Stage 3/4): the v1 motion tempo (rope 200,
+    // tightrope 200, custom actions 270-300 px/s). Cleared per begin; jumps
+    // ignore it (ballistics own air time).
+    speedOverride = (intent as { speed?: number }).speed ?? null
 
     // CAPABILITY GATING (model documented at GROUND_EDGES): each verb requires its
     // mode — a fly-only bird cannot walk/jump; a walker cannot fly.
@@ -1116,6 +1141,7 @@ export function createLocomotion(deps: LocomotionDeps): Locomotion {
 
   function reset(): void {
     travelCtx = null // stale context must never leak into a later behavior (review)
+    speedOverride = null
     mode = 'idle'
     status = 'idle'
     verb = null
@@ -1151,6 +1177,7 @@ export function createLocomotion(deps: LocomotionDeps): Locomotion {
       gFloorY,
       gHipHeight,
       gElapsedMs,
+      ...(speedOverride !== null ? { speedOverride } : {}),
       jPhase,
       jVx,
       jVy,
@@ -1183,6 +1210,7 @@ export function createLocomotion(deps: LocomotionDeps): Locomotion {
     gFloorY = s.gFloorY
     gHipHeight = s.gHipHeight
     gElapsedMs = s.gElapsedMs
+    speedOverride = s.speedOverride ?? null
     jPhase = s.jPhase
     jVx = s.jVx
     jVy = s.jVy

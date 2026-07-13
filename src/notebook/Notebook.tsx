@@ -9,6 +9,7 @@ import React, { type CSSProperties } from 'react'
 import type { Pose, HudTab, PageGeom } from './types'
 import { POKE, CHATTER, DROPS, POKEARC, FIDGETARC, type ArcKey } from './constants'
 import { AudioEngine, type SfxKind } from './audio'
+import { pick, chance, scalar, setReviewRoute, reviewHook, reviewLog } from './review'
 
 import CoverRenderer from './CoverRenderer'
 import PageRenderer from './PageRenderer'
@@ -162,6 +163,7 @@ export default class Notebook extends React.Component<NotebookProps, State> {
 
   componentDidMount() {
     this._tt = []
+    setReviewRoute(this.engineMode ? 'engine' : 'legacy')
     this._onR = () => {
       const vw = window.innerWidth || document.documentElement.clientWidth || 1280
       const vh = window.innerHeight || document.documentElement.clientHeight || 800
@@ -298,7 +300,19 @@ export default class Notebook extends React.Component<NotebookProps, State> {
   /** Live doc-swap (admin preview): kill any in-flight choreography, invalidate the
    *  geometry cache, clamp page/panel into the new doc's range, and settle Dash into a
    *  safe idle at the clamped anchor so no timer resolves against stale geometry. */
-  componentDidUpdate(prevProps: NotebookProps) {
+  componentDidUpdate(prevProps: NotebookProps, prevState: State) {
+    // Review timeline (parity harness): log the legacy actor's state transitions —
+    // pose / page / panel / camera-override / busy edges — so both routes produce
+    // one normalized timeline. No-op without the hook (one property read).
+    if (reviewHook()?.log && !this.engineMode) {
+      const s = this.state
+      if (s.pose !== prevState.pose) reviewLog('legacy', 'pose', { from: prevState.pose, to: s.pose, dx: Math.round(s.dx), dy: Math.round(s.dy) })
+      if (s.page !== prevState.page) reviewLog('legacy', 'page', { from: prevState.page, to: s.page })
+      if (s.panel !== prevState.panel) reviewLog('legacy', 'panel', { to: s.panel })
+      if (s.busy !== prevState.busy) reviewLog('legacy', 'busy', { busy: s.busy })
+      if (s.camo !== prevState.camo) reviewLog('legacy', 'camo', s.camo ? { cx: Math.round(s.camo.cx), cy: Math.round(s.camo.cy), mult: s.camo.mult, fast: s.camo.fast } : null)
+      if (s.react !== prevState.react && s.react) reviewLog('legacy', 'say', { text: s.react })
+    }
     if (prevProps.doc === this.props.doc) return
     this._runId++
     this._tt.forEach(clearTimeout)
@@ -358,7 +372,7 @@ export default class Notebook extends React.Component<NotebookProps, State> {
       }
     }
     const flourish = arrival?.flourish ?? s.page !== this.geom().length - 1
-    if (!skipF && !(arrival?.pose) && flourish && Math.random() < .24) {
+    if (!skipF && !(arrival?.pose) && flourish && chance('flourish.roll', .24)) {
       this.to(650, () => {
         const st = this.state
         if (st.pose === 'idle' && !st.busy && !st.dragging && !st.poking) this.flourish(pn)
@@ -369,7 +383,7 @@ export default class Notebook extends React.Component<NotebookProps, State> {
   flourish(pn: { h: number }) {
     const opts = ['knock', 'shove']
     if (pn.h < 190) opts.push('squish', 'squish')
-    let f = opts[Math.floor(Math.random() * opts.length)]
+    let f = pick('flourish.kind', opts)
     if (f === this._lastFl) f = opts[(opts.indexOf(f) + 1) % opts.length]
     this._lastFl = f
     if (f === 'squish') {
@@ -440,7 +454,7 @@ export default class Notebook extends React.Component<NotebookProps, State> {
       ? resolveTravelConfig(this.doc, pageDoc, pageDoc.panels[j])
       : {}
     const comboExcluded = !!cfg.builtins && !cfg.builtins.includes('combo')
-    if (dist > 380 && horiz > 240 && vert > 60 && Math.random() < .18 && this._lastMode !== 'combo' && !comboExcluded) {
+    if (dist > 380 && horiz > 240 && vert > 60 && chance('travel.combo', .18) && this._lastMode !== 'combo' && !comboExcluded) {
       this._lastMode = 'combo'
       this.comboTo(j, a, dir)
       return
@@ -466,7 +480,7 @@ export default class Notebook extends React.Component<NotebookProps, State> {
         for (let k = 0; k < weight; k++) pool.push('act:' + name)
       }
     }
-    let m = pool[Math.floor(Math.random() * pool.length)]
+    let m = pick('travel.mode', pool)
     if (m === this._lastMode) m = pool[(pool.indexOf(m) + 1) % pool.length]
     this._lastMode = m
     // (c) Dispatch: custom actions go through the interpreter; built-ins unchanged.
@@ -548,7 +562,7 @@ export default class Notebook extends React.Component<NotebookProps, State> {
     const A = this.geom()[s.page].panels[s.panel]
     const edgeDx = (dir === 1 ? A.x + A.w - 6 : A.x + 6) - 52
     const runD = Math.max(.28, Math.abs(edgeDx - s.dx) / 270)
-    const tPk = Math.random() < .3 ? 760 : 0
+    const tPk = chance('vault.peek', .3) ? 760 : 0
     const t0 = runD * 1000 + 40
     this.sfx('scrib')
     this.setState({ busy: true, panel: j, pose: 'walk', face: dir, fidget: null, dx: edgeDx, dtrans: 'left ' + runD + 's linear, opacity .25s' })
@@ -716,7 +730,7 @@ export default class Notebook extends React.Component<NotebookProps, State> {
     })
     this.to(dur * 1000 + 40, () => this.setState({ pose: 'land' }))
     this.to(dur * 1000 + 560, () => { this.panelPose(); this.setState({ busy: false }) })
-    if (dur > 1.0 && Math.random() < 0.28) {
+    if (dur > 1.0 && chance('walk.trip', 0.28)) {
       const tAt = dur * 1000 * 0.42, line = 'whoa—'
       this.to(tAt, () => { if (this.state.pose === 'walk') { this.sfx('hop'); this.setState({ pose: 'trip', react: line }) } })
       this.to(tAt + 520, () => { if (this.state.pose === 'trip') this.setState({ pose: 'walk' }); this.setState(st => (st.react === line ? { react: null } : null)) })
@@ -751,7 +765,7 @@ export default class Notebook extends React.Component<NotebookProps, State> {
     const s = this.state
     const a = this.anch(s.page, j)
     const dir = a.x >= s.dx ? 1 : -1
-    const hang = Math.random() < .25 && a.pn.ay <= a.pn.y + 6
+    const hang = chance('hop.hang', .25) && a.pn.ay <= a.pn.y + 6
     this.setState({ busy: true, windup: true, face: dir, fidget: null })
     this.to(180, () => {
       this.sfx('hop')
@@ -792,12 +806,18 @@ export default class Notebook extends React.Component<NotebookProps, State> {
     this.to(1660, () => { this.panelPose(); this.setState({ busy: false }) })
   }
 
-  flipTo(p: number) {
+  flipTo(p: number, landPanel = 0) {
     const s = this.state
     if (s.busy || s.dragging || p === s.page) return
     this.sfx('flip')
     const lo = Math.min(s.page, p), hi = Math.max(s.page, p) - 1
-    if (p === s.page + 1 && s.page > 0 && s.dop === 1 && Math.random() < .38) {
+    if (p === s.page + 1 && s.page > 0 && chance('flip.surf', .38)) {
+      // ONE surf roll for both routes (review: the engine branch falling through
+      // rolled a second legacy chance, inflating surf probability and running
+      // hidden legacy choreography in admin previews).
+      if (this.engineMode) {
+        this.engineRef?.surfNext() // the layer stages the ride-in after the flip
+      } else if (s.dop === 1) {
       const a = this.anch(p, 0)
       this.sfx('whoosh')
       this.setState({
@@ -811,18 +831,29 @@ export default class Notebook extends React.Component<NotebookProps, State> {
       this.to(1240, () => { this.setState({ pose: 'land' }); this.shakeCam() })
       this.to(1780, () => { this.panelPose(); this.setState({ busy: false }) })
       return
+      }
     }
-    this.setState({ busy: true, busyFlip: true, flipRange: [lo, hi], page: p, panel: 0, pose: 'hidden', dop: 0 })
+    this.setState({ busy: true, busyFlip: true, flipRange: [lo, hi], page: p, panel: landPanel, pose: 'hidden', dop: 0 })
     this.to(820, () => {
       this.setState({ busyFlip: false })
       if (p === 0) this.setState({ busy: false })
-      else this.enterPage()
+      else if (this.engineMode) {
+        // The engine layer stages its own entrance/landing (and keeps its OWN
+        // busy); legacy enterPage() would stomp `panel` back to 0 (review
+        // BLOCKER: back-nav landings focus the LAST panel) and run the hidden
+        // legacy walk-in against engine state.
+        this.setState({ busy: false })
+      } else this.enterPage()
     })
   }
 
   next() {
     const s = this.state
     if (s.busy || s.dragging) return
+    // Engine travels/stagings don't set Notebook busy — gate on the engine's own
+    // busy (review BLOCKER: repeated input / the autoplay interval could
+    // interrupt long performances mid-staging).
+    if (this.engineMode && this.engineRef?.busy()) return
     if (s.page === 0) { this.flipTo(1); return }
     const n = this.geom()[s.page].panels.length
     if (s.panel < n - 1) this.travel(s.panel + 1)
@@ -833,22 +864,26 @@ export default class Notebook extends React.Component<NotebookProps, State> {
   prev() {
     const s = this.state
     if (s.busy || s.dragging || s.page === 0) return
+    if (this.engineMode && this.engineRef?.busy()) return
     if (s.panel > 0) this.travel(s.panel - 1)
     else if (s.page === 1) this.flipTo(0)
     else if (this.engineMode) {
       if (this._backNavPending) return
-      const kind = Math.random() < 0.55 ? 'bomb' : 'poof'
+      const kind = chance('backnav.bomb', 0.55) ? 'bomb' : 'poof'
       const target = s.page - 1 // captured NOW (review: delayed done() re-read state)
+      // Legacy lands at the LAST panel of the previous page (bomb pop-out /
+      // poof reappear) — the engine stages the landing there via done().
+      const landing = Math.max(0, (this.geom()[target]?.panels.length ?? 1) - 1)
       this.ensureAC()
       if (this.engineRef) {
         this._backNavPending = true
-        this.engineRef.backNav(kind, () => {
+        this.engineRef.backNav(kind, landing, () => {
           this._backNavPending = false
-          if (this.state.page === s.page) this.flipTo(target) // superseded nav wins
+          if (this.state.page === s.page) this.flipTo(target, landing) // superseded nav wins
         })
       } else this.flipTo(target)
     }
-    else if (Math.random() < .55) this.bombBack()
+    else if (chance('backnav.bomb', .55)) this.bombBack()
     else this.poofBack()
   }
 
@@ -937,9 +972,9 @@ export default class Notebook extends React.Component<NotebookProps, State> {
     if (!standing) return
     this.ensureAC()
     this.sfx('hop')
-    const line = POKE[Math.floor(Math.random() * POKE.length)]
+    const line = pick('poke.line', POKE)
     const anims: ArcKey[] = ['hop', 'spin', 'wob']
-    this.setState({ poking: true, pokeAnim: anims[Math.floor(Math.random() * anims.length)], react: line, fidget: null })
+    this.setState({ poking: true, pokeAnim: pick('poke.arc', anims), react: line, fidget: null })
     this.to(680, () => this.setState({ poking: false }))
     this.to(1800, () => this.setState(st => (st.react === line ? { react: null } : null)))
   }
@@ -978,7 +1013,7 @@ export default class Notebook extends React.Component<NotebookProps, State> {
     })
     this.to(560, () => this.setState({ pose: 'land' }))
     this.to(1040, () => {
-      const line = DROPS[Math.floor(Math.random() * DROPS.length)]
+      const line = pick('drop.line', DROPS)
       this.panelPose()
       this.setState({ busy: false, react: line })
       this.to(1700, () => this.setState(st => (st.react === line ? { react: null } : null)))
@@ -991,9 +1026,9 @@ export default class Notebook extends React.Component<NotebookProps, State> {
       const s = this.state
       if (!s.busy && !s.dragging && !s.poking && s.dop === 1 && s.page > 0 && s.pose === 'idle') {
         const opts = ['hop', 'spin', 'wob', 'wave', 'sneeze', 'chat', 'chat']
-        const f = opts[Math.floor(Math.random() * opts.length)]
+        const f = pick('fidget.kind', opts)
         if (f === 'chat') {
-          const line = CHATTER[Math.floor(Math.random() * CHATTER.length)]
+          const line = pick('fidget.line', CHATTER)
           this.setState({ react: line })
           this.to(2100, () => this.setState(st => (st.react === line ? { react: null } : null)))
         } else if (f === 'wave') {
@@ -1012,7 +1047,7 @@ export default class Notebook extends React.Component<NotebookProps, State> {
         }
       }
       this.scheduleFidget()
-    }, 2800 + Math.random() * 3200)
+    }, scalar('fidget.delayMs', () => 2800 + Math.random() * 3200))
   }
 
   renderVals() {
@@ -1153,7 +1188,7 @@ export default class Notebook extends React.Component<NotebookProps, State> {
 
             {this.engineMode ? (
               this.state.page > 0 && (
-                <div style={{ position: 'absolute', inset: 0, zIndex: 60, pointerEvents: 'none', visibility: this.state.busy ? 'hidden' : 'visible' }}>
+                <div style={{ position: 'absolute', inset: 0, zIndex: 60, pointerEvents: 'none', visibility: this.state.busyFlip ? 'hidden' : 'visible' }}>
                   <EngineLayer
                     ref={(r) => { this.engineRef = r }}
                     doc={buildEngineDoc(this.doc)}
@@ -1162,7 +1197,29 @@ export default class Notebook extends React.Component<NotebookProps, State> {
                     onFlag={(flag, value) => this.setState((st) => ({ flags: { ...st.flags, [flag]: value } }))}
                     sfx={(kind) => this.engineSfx(kind)}
                     onPoke={() => { this.ensureAC(); this.sfx('hop') }}
-                    onDashCam={(p) => this.setState({ camo: p ? { cx: p.x, cy: p.y, mult: 0.92, fast: false } : null })}
+                    onDashCam={(p) => this.setState({ camo: p ? { cx: p.x, cy: p.y, mult: p.mult ?? 0.92, fast: p.fast ?? false } : null })}
+                    onFx={(fx) => {
+                      // The engine drives the SHARED overlays (legacy staging owns
+                      // their look; the engine owns the timing).
+                      const st: Partial<State> = {}
+                      if (fx.kind === 'bomb') {
+                        st.bombFlyOn = fx.on
+                        if (fx.on) { st.bombX = fx.x ?? 0; st.bombY = fx.y ?? 0 }
+                      } else if (fx.kind === 'boom') {
+                        st.boomOn = fx.on
+                        if (fx.on) { st.holeX = fx.x ?? 0; st.holeY = fx.y ?? 0 }
+                      } else if (fx.kind === 'hole') {
+                        st.holeOn = fx.on
+                        if (fx.on && fx.x !== undefined) { st.holeX = fx.x; st.holeY = fx.y ?? 0 }
+                      } else if (fx.kind === 'smoke') {
+                        st.smokeOn = fx.on
+                        if (fx.on) { st.smokeX = fx.x ?? 0; st.smokeY = fx.y ?? 0 }
+                      } else if (fx.kind === 'crack') {
+                        st.crackOn = fx.on
+                        if (fx.on) { st.crackX = fx.x ?? 0; st.crackY = fx.y ?? 0 }
+                      }
+                      this.setState(st as State)
+                    }}
                     dropLines={DROPS}
                     pokeLines={POKE}
                     chatterLines={CHATTER}
@@ -1171,6 +1228,7 @@ export default class Notebook extends React.Component<NotebookProps, State> {
               )
             ) : (
             <div
+              data-dash-actor
               onClick={v.onPoke}
               onMouseDown={v.onGrab}
               style={{ position: 'absolute', width: 104, height: 113, zIndex: 60, pointerEvents: 'auto', cursor: 'pointer', ...v.dashStyle }}

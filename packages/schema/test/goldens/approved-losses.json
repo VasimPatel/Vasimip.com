@@ -1,0 +1,25 @@
+{
+  "$comment": "Parity-recovery loss contract: every lossy note migrateNotebookV1 emits for the live notebook.json must match one of these approved classes (substring match); anything else fails the suite. Stage 4 eliminated the recoverable classes — what remains is either intentional or a documented equivalence.",
+  "approved": [
+    {
+      "match": "v1 ease/easeY dropped",
+      "why": "authored easing curves have no locomotion-solver home; speed/tempo ARE preserved ({speed}), and the solver's fixed profile is the documented equivalence",
+      "restoredBy": "n/a — accepted equivalence (Stage 5 tunes global motion feel)"
+    },
+    {
+      "match": "disabled by actionWeight 0",
+      "why": "owner-authored weight 0 = deliberately out of the pool (not a loss)",
+      "restoredBy": "n/a — intentional"
+    },
+    {
+      "match": "unmapped v1 target",
+      "why": "defensive: a target shape outside the v1 vocabulary coarsens to the destination anchor rather than crashing the migration",
+      "restoredBy": "n/a — defensive fallback (none occur in the live doc)"
+    },
+    {
+      "match": "camera focus",
+      "why": "defensive: raw {cx,cy} camera focus has no TargetRef home — approximated as the destination and reported (none occur in the live doc)",
+      "restoredBy": "n/a — defensive fallback"
+    }
+  ]
+}

@@ -42,7 +42,7 @@ await sleep(2600)
 // click disambiguation is actually exercised. Missing both = FAILURE.
 const pokeAt = await page.evaluate(() => {
   const el = document.querySelector('[data-dash-poke]') ||
-    document.querySelector('svg[viewBox="-60 -75 120 130"]')
+    document.querySelector('[data-dash-actor]')
   if (!el) return null
   const r = el.getBoundingClientRect()
   return { x: r.x + r.width / 2, y: r.y + r.height / 2 }
@@ -57,7 +57,7 @@ if (pokeAt.x >= 0 && pokeAt.x < 1440 && pokeAt.y >= 0 && pokeAt.y < 900) {
   // sequence on the element itself so the poke path still runs
   await page.evaluate(() => {
     const el = document.querySelector('[data-dash-poke]') ||
-      document.querySelector('svg[viewBox="-60 -75 120 130"]')
+      document.querySelector('[data-dash-actor]')
     for (const type of ['mousedown', 'mouseup', 'click'])
       el.dispatchEvent(new MouseEvent(type, { bubbles: true }))
   })
@@ -66,6 +66,35 @@ if (pokeAt.x >= 0 && pokeAt.x < 1440 && pokeAt.y >= 0 && pokeAt.y < 900) {
 await sleep(900)
 await page.screenshot({ path: `${OUT}/poke.png` })
 console.log('poked at', pokeAt)
+
+// LONG IDLE (parity Stage 0): sit through at least TWO fidget windows (2.8–6s
+// each — 13.5s covers two worst-case), then poke AGAIN and drag/drop, so repeated
+// dynamic quips (fidget chatter / poke / drop lines) exercise the one-shot path.
+// The review's live crash ('__fidget:chat already registered') fired exactly here.
+await sleep(13500)
+await page.screenshot({ path: `${OUT}/idle-fidgets.png` })
+const poke2 = await page.evaluate(() => {
+  const el = document.querySelector('[data-dash-poke]') ||
+    document.querySelector('[data-dash-actor]')
+  if (!el) return null
+  const r = el.getBoundingClientRect()
+  return { x: r.x + r.width / 2, y: r.y + r.height / 2 }
+})
+if (poke2 && poke2.x >= 0 && poke2.x < 1440 && poke2.y >= 0 && poke2.y < 900) {
+  await page.mouse.move(poke2.x, poke2.y)
+  await page.mouse.down()
+  await page.mouse.up()
+  await sleep(1200)
+  // real drag: press, travel past the threshold, release — lands a drop quip roll.
+  await page.mouse.move(poke2.x, poke2.y)
+  await page.mouse.down()
+  for (let i = 1; i <= 8; i++) await page.mouse.move(poke2.x + i * 14, poke2.y - i * 6)
+  await sleep(250)
+  await page.mouse.up()
+  await sleep(1600)
+  await page.screenshot({ path: `${OUT}/drag-drop.png` })
+  console.log('second poke + drag/drop done')
+}
 
 // BACK-NAV: click prev (◀) — triggers travel back, then bomb/poof between pages
 await clickHud('◀') // ◀

@@ -1,0 +1,134 @@
+{
+  "schemaVersion": 2,
+  "id": "skin:wave",
+  "sources": [
+    "wave"
+  ],
+  "face": "baked",
+  "groupAnim": {
+    "name": "idlesway",
+    "origin": "50% 96%"
+  },
+  "elements": [
+    {
+      "kind": "circle",
+      "cx": 2,
+      "cy": -30,
+      "r": 14,
+      "fill": "#fffdf6",
+      "stroke": "#1a1a1a",
+      "strokeWidth": 4
+    },
+    {
+      "kind": "path",
+      "d": "M-5,-36 l9,2.5 M9,-34 l9,-2.5",
+      "fill": "none",
+      "stroke": "#1a1a1a",
+      "strokeWidth": 2.6,
+      "linecap": "round"
+    },
+    {
+      "kind": "circle",
+      "cx": 0,
+      "cy": -29,
+      "r": 2,
+      "fill": "#1a1a1a"
+    },
+    {
+      "kind": "circle",
+      "cx": 11,
+      "cy": -29,
+      "r": 2,
+      "fill": "#1a1a1a"
+    },
+    {
+      "kind": "path",
+      "d": "M2,-21 q5,4 10,-1",
+      "fill": "none",
+      "stroke": "#1a1a1a",
+      "strokeWidth": 2.6,
+      "linecap": "round"
+    },
+    {
+      "kind": "path",
+      "d": "M0,-16 L-2,16",
+      "fill": "none",
+      "stroke": "#1a1a1a",
+      "strokeWidth": 5.5,
+      "linecap": "round"
+    },
+    {
+      "kind": "path",
+      "d": "M-1,-9 L-14,1 L-7,9",
+      "fill": "none",
+      "stroke": "#1a1a1a",
+      "strokeWidth": 4.5,
+      "linecap": "round"
+    },
+    {
+      "kind": "group",
+      "children": [
+        {
+          "kind": "path",
+          "d": "M0,0 L10,-10",
+          "fill": "none",
+          "stroke": "#1a1a1a",
+          "strokeWidth": 4.5,
+          "linecap": "round"
+        },
+        {
+          "kind": "group",
+          "children": [
+            {
+              "kind": "group",
+              "children": [
+                {
+                  "kind": "path",
+                  "d": "M0,0 L7,-11",
+                  "fill": "none",
+                  "stroke": "#1a1a1a",
+                  "strokeWidth": 4.5,
+                  "linecap": "round"
+                },
+                {
+                  "kind": "circle",
+                  "cx": 8,
+                  "cy": -13,
+                  "r": 3,
+                  "fill": "#1a1a1a"
+                }
+              ],
+              "anim": {
+                "name": "waveh"
+              },
+              "origin": "10% 90%"
+            }
+          ],
+          "transform": "translate(10,-10)"
+        }
+      ],
+      "transform": "translate(1,-10)"
+    },
+    {
+      "kind": "path",
+      "d": "M-2,16 L11,33 L13,50 l11,2",
+      "fill": "none",
+      "stroke": "#1a1a1a",
+      "strokeWidth": 5,
+      "linecap": "round"
+    },
+    {
+      "kind": "path",
+      "d": "M-2,16 L-13,34 L-15,50 l-10,2",
+      "fill": "none",
+      "stroke": "#1a1a1a",
+      "strokeWidth": 5,
+      "linecap": "round"
+    }
+  ],
+  "head": {
+    "cx": 2,
+    "cy": -30,
+    "r": 14
+  }
+}

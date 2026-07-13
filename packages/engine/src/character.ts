@@ -18,7 +18,7 @@
 // blender/secondary/verlet carry their OWN serializable state; this runtime's state
 // is {transform, locomotion, behavior(+flags), blender, blink}.
 
-import type { CharacterDoc, RigTemplate, Pose, Clip, BehaviorDoc } from '@dash/schema'
+import type { CharacterDoc, RigTemplate, Pose, Clip, BehaviorDoc, Intent } from '@dash/schema'
 import { solveFk, type SolvedSkeleton } from './fk'
 import { createBlender, type Blender, type BlenderState } from './blender'
 import { createControllerSet, type ControllerSet, type ControllerSetState } from './controllers/set'
@@ -127,6 +127,15 @@ export interface CharacterRuntime {
    * refs resolve against — applied AFTER the run's locomotion reset, so the
    * binding is atomic with the run (a reset clears any previous binding). */
   runBehavior(doc: BehaviorDoc, opts?: { travel?: { from?: string; to?: string } }): void
+  /** Run an ephemeral one-shot steps list (dynamic quips/beats — text varies per
+   * invocation) WITHOUT registering a behavior doc. See BehaviorExecutor.runOneShot. */
+  runOneShot(label: string, steps: Intent[]): void
+  /** Site-adapter acting: hold a pose/clip on the concurrent acting layer WITHOUT
+   * running a behavior (the legacy in-routine dice — walk-trip, hop-hang). Same
+   * semantics as a cue strikePose; unknown refs are a silent no-op. */
+  act(ref: string, opts?: { holdMs?: number | 'persist'; blendMs?: number }): void
+  /** Release an adapter-held acting pose (no-op when none). */
+  clearAct(): void
   getState(): CharacterState
   setState(s: CharacterState): void
   readonly transform: CharacterTransform
@@ -298,6 +307,9 @@ export function createCharacterRuntime(opts: CharacterRuntimeOptions): Character
     giveUp: opts.giveUp,
     resolveVerletBody,
     applyRootImpulse,
+    setFacing: (face) => {
+      transform.facing = face
+    },
     behaviors: opts.behaviors,
   })
 
@@ -350,7 +362,7 @@ export function createCharacterRuntime(opts: CharacterRuntimeOptions): Character
     // Pose registries are immutable content docs: reading face acting from the
     // registry (not the snapshot) is safe as long as callers never mutate poses
     // between getState/setState — the same contract clips already rely on.
-    const src = blender.currentSource()
+    const src = blender.actingSource() ?? blender.currentSource()
     const poseFace = src.kind === 'pose' ? (poses[src.id] as { face?: { brow?: FaceAux['brow']; mouth?: FaceAux['mouth']; intensity?: number } } | undefined)?.face : undefined
     if (poseFace) {
       if (poseFace.brow) lastFace = { ...lastFace, brow: poseFace.brow }
@@ -402,9 +414,23 @@ export function createCharacterRuntime(opts: CharacterRuntimeOptions): Character
     locomotion.setTravelContext(opts?.travel ?? null)
   }
 
+  function runOneShot(label: string, steps: Intent[]): void {
+    behavior.runOneShot(label, steps) // resets locomotion like run()
+    locomotion.setTravelContext(null)
+  }
+
+  function act(ref: string, o?: { holdMs?: number | 'persist'; blendMs?: number }): void {
+    const src = clips[ref] ?? poses[ref]
+    if (!src) return
+    blender.setActing(src, { durationMs: o?.blendMs ?? 160, holdMs: o?.holdMs ?? 'persist' })
+  }
+
   return {
     tick,
     runBehavior,
+    runOneShot,
+    act,
+    clearAct: () => blender.clearActing(),
     getState(): CharacterState {
       return {
         transform: { ...transform },
@@ -443,7 +469,9 @@ export function createCharacterRuntime(opts: CharacterRuntimeOptions): Character
     },
     solved: () => lastSolved,
     face: () => lastFace,
-    activeSource: () => blender.currentSource(),
+    // The VISIBLE identity: an acting overlay (cue pose, persist arrival) wins over
+    // the base — pose props (sword, spray can) and pose-scoped site acting ride it.
+    activeSource: () => blender.actingSource() ?? blender.currentSource(),
     capsule,
     overrides: () => secondary.overrides(),
     running: () => behavior.running(),

@@ -21,7 +21,6 @@ import {
   createContext,
   createMutableWorld,
   createVerletWorld,
-  sweptCapsuleVsSegments,
   STEP_MS,
   type CharacterRuntime,
   type EngineContext,
@@ -30,7 +29,8 @@ import {
 } from '../../../packages/engine/src/index'
 import { evalGate, type BehaviorDoc, type GateExpr } from '../../../packages/schema/src/index'
 import { createCharacterRenderer, type CharacterRenderer } from '../../../packages/renderer-svg/src/index'
-import type { EngineDoc } from './engineDoc'
+import { engineSkins, type EngineDoc } from './engineDoc'
+import { pick, chance, scalar, reviewHook, reviewLog } from '../review'
 
 export interface EngineLayerProps {
   /** The engine doc derived from the SAME v1 doc the site renders (hot-swappable). */
@@ -45,9 +45,13 @@ export interface EngineLayerProps {
   onHeading?(panelIdx: number): void
   /** The poke hitbox was clicked (the Notebook plays its sfx/AC ensure). */
   onPoke?(): void
-  /** Camera follow: Dash's live position while traveling; null = travel done
-   * (the Notebook returns the camera to panel focus). */
-  onDashCam?(p: { x: number; y: number } | null): void
+  /** Camera: Dash's live position while traveling (follow), or an AUTHORED shot
+   * (camera cue: mult = zoom multiplier, fast = tempo — the legacy camo). null =
+   * return to panel focus. */
+  onDashCam?(p: { x: number; y: number; mult?: number; fast?: boolean } | null): void
+  /** Visual effect overlays (bomb/boom/hole/smoke/crack) — the Notebook owns the
+   * shared overlay components; the engine drives them for its performances. */
+  onFx?(fx: { kind: 'bomb' | 'boom' | 'hole' | 'smoke' | 'crack'; on: boolean; x?: number; y?: number }): void
   /** Quips for the end of a drag (the legacy DROPS list) — spoken via the
    * engine's own bubble so positioning always tracks the figure. */
   dropLines?: string[]
@@ -110,6 +114,31 @@ export class EngineLayer extends Component<EngineLayerProps> {
   private fidgetTimer = 0
   /** Smoothed cursor-lean (rad) — the legacy .22s ease-out transition. */
   private lean = 0
+  /** An authored camera cue owns the shot (suppresses the follow cam). */
+  private camOverride = false
+  /** Scripted root motion (back-nav hop-to-hole) — render-layer, like drag. */
+  private scriptMove: { fromX: number; fromY: number; toX: number; toY: number; t0: number; dur: number; arcH: number } | null = null
+  /** Actor visibility (back-nav dive/poof vanish). */
+  private actorHidden = false
+  private actorHiddenApplied = false
+  /** The NEXT enterPage's staging (back-nav landings replace the entrance stroll). */
+  private pendingEntrance: { kind: 'bombPop' | 'poofIn' | 'surfIn'; panel: number } | null = null
+
+  /** The next forward flip rides in surfing (legacy 38% page-surf variant). */
+  surfNext(): void {
+    this.pendingEntrance = { kind: 'surfIn', panel: 0 }
+  }
+  /** Back-nav timeline timers (cancellable as a set). */
+  private backNavTimers: number[] = []
+  /** The panel the current travel departed from (camera midpoint framing). */
+  private travelFrom = 0
+  /** Back-nav staging window: busy() holds and fidgets stay quiet until then. */
+  private stagingUntil = 0
+  /** The hop-hang variant rolled for the in-flight travel. */
+  private pendingHang = false
+  /** Adapter speech (trip 'whoa—', hang 'hup—') — shown when the engine bubble
+   * is otherwise silent; a real say wins. */
+  private bubbleNote: { text: string; until: number } | null = null
 
   private cancelBackNav(): void {
     this.backNavCancel?.()
@@ -148,23 +177,47 @@ export class EngineLayer extends Component<EngineLayerProps> {
       }
       this.lean += (leanTarget - this.lean) * 0.08
       // Pose props (sword, spray can) ride the active strikePose; the fight pose
-      // also shuffles the whole figure (the legacy fightshift cycle).
+      // also shuffles the whole figure (the legacy fightshift cycle). With a SKIN
+      // active the drawing carries its own props/acting — the renderer suppresses
+      // the rig figure and prop layer itself.
       const src = s.rt.activeSource()
       const activePose = src.kind === 'pose' ? this.docV2.poses[src.id] : undefined
       this.syncPoseAct(src.kind === 'pose' ? src.id : null)
+      const cap = s.rt.capsule()
+      // A skinned source carries its own internal animation (the tuck skin's
+      // tuckspin already rotates) — the render-layer roll spin would double it.
+      const skinned = EngineLayer.SKINNED.has(src.id)
       this.renderer.render(solved, s.rt.face(), s.rt.overrides(), {
         flourish: s.rt.flourish(),
-        spin: this.rolling && this.airborne ? this.spin : 0,
+        spin: this.rolling && this.airborne && !skinned ? this.spin : 0,
         accessories: s.rt.accessories.map((a) => a.points()),
         pupilScale: 1 + 0.55 * near, // legacy eyeR 2 → 3.1 at the cursor
         lean: this.lean,
         props: (activePose as { props?: never[] } | undefined)?.props,
+        skinId: src.id,
+        skinRoot: { x: s.rt.transform.x, y: Math.max(cap.y0, cap.y1) + cap.r },
+        facing: s.rt.transform.facing as 1 | -1,
       })
 
       // Camera follows Dash while a travel is in flight (throttled ~9 ticks; the
-      // Notebook's CSS cam transition glides between updates).
-      if (this.travelDest != null && ++this.camTick % 9 === 0) {
+      // Notebook's CSS cam transition glides between updates) — unless an
+      // AUTHORED camera cue owns the shot (cleared by cue or behavior end).
+      if (this.travelDest != null && !this.camOverride && ++this.camTick % 9 === 0) {
         this.props.onDashCam?.({ x: s.rt.transform.x, y: s.rt.transform.y })
+      }
+      // Scripted root motion (back-nav hop-to-hole): a render-layer arc, exactly
+      // like the drag's direct transform drive.
+      if (this.scriptMove) {
+        const m = this.scriptMove
+        const k = Math.min(1, (performance.now() - m.t0) / m.dur)
+        const t = s.rt.transform
+        t.x = m.fromX + (m.toX - m.fromX) * k
+        t.y = m.fromY + (m.toY - m.fromY) * k - m.arcH * 4 * k * (1 - k)
+        if (k >= 1) this.scriptMove = null
+      }
+      if (this.actorHidden !== this.actorHiddenApplied && this.svgRef.current) {
+        this.svgRef.current.style.opacity = this.actorHidden ? '0' : '1'
+        this.actorHiddenApplied = this.actorHidden
       }
       this.drawBubble()
       // DRAG: while grabbed, the transform follows the cursor (page coords from
@@ -209,6 +262,15 @@ export class EngineLayer extends Component<EngineLayerProps> {
     this.onDragBlur = null
     this.dragging = false
     this.cancelBackNav()
+    // Back-nav landing timers belong to the OLD scene — a navigation during the
+    // pop-in/reappear staging must not fire them against the new runtime.
+    for (const t of this.backNavTimers) window.clearTimeout(t)
+    this.backNavTimers = []
+    this.scriptMove = null
+    this.actorHidden = false
+    this.actorHiddenApplied = false
+    this.stagingUntil = 0
+    if (this.svgRef.current) this.svgRef.current.style.opacity = '1'
     this.clearTravel()
     for (const off of this.scene?.offs ?? []) off()
     this.scene?.rt.dispose()
@@ -230,7 +292,7 @@ export class EngineLayer extends Component<EngineLayerProps> {
     if (!svg || !pw) return
     this.teardown()
 
-    const ctx = createContext({ seed: (Math.random() * 0xffffffff) >>> 0 })
+    const ctx = createContext({ seed: reviewHook()?.seed ?? (Math.random() * 0xffffffff) >>> 0 })
     const verlet = createVerletWorld()
     const dash = this.dash
     const rig = this.rigDoc
@@ -254,7 +316,13 @@ export class EngineLayer extends Component<EngineLayerProps> {
 
     // Enter at the first panel's interior spot, feet on its line.
     const first = pw.world.entities.find((e) => e.components.surface)
-    const spot = this.panelSpot(pageIdx, 0) ?? { x: 120, y: 300 }
+    // Back-nav landings (bomb pop-out / poof reappear) spawn at the LANDING
+    // panel (legacy: the last panel of the previous page); everything else
+    // spawns at panel 0 for the entrance stroll.
+    const pe = this.pendingEntrance
+    this.pendingEntrance = null
+    const spawnPanel = pe ? Math.max(0, Math.min((this.docV2.pages[pageIdx]?.panels.length ?? 1) - 1, pe.panel)) : 0
+    const spot = this.panelSpot(pageIdx, spawnPanel) ?? { x: 120, y: 300 }
     rt.transform.x = spot.x
     const cap = rt.capsule()
     rt.transform.y += spot.y - (cap.y1 + cap.r)
@@ -273,7 +341,39 @@ export class EngineLayer extends Component<EngineLayerProps> {
         const { flag, value } = p as { flag: string; value?: boolean }
         this.props.onFlag(flag, value ?? true)
       }),
-      ctx.events.on('intent:sfx', (p) => this.props.sfx((p as { kind: string }).kind)),
+      ctx.events.on('intent:sfx', (p) => {
+        const kind = (p as { kind: string }).kind
+        // fx sounds carry their VISUALS now (review: audio announced effects that
+        // never appeared) — crack/smoke overlays spawn at Dash, legacy-timed.
+        if (kind === 'fx:crack') {
+          const c = rt.capsule()
+          this.props.onFx?.({ kind: 'crack', on: true, x: rt.transform.x + rt.transform.facing * 30, y: Math.max(c.y0, c.y1) + c.r - 55 })
+          this.backNavTimers.push(window.setTimeout(() => this.props.onFx?.({ kind: 'crack', on: false }), 1650))
+        } else if (kind === 'fx:smoke') {
+          const c = rt.capsule()
+          this.props.onFx?.({ kind: 'smoke', on: true, x: rt.transform.x, y: Math.max(c.y0, c.y1) + c.r - 53 })
+          this.backNavTimers.push(window.setTimeout(() => this.props.onFx?.({ kind: 'smoke', on: false }), 700))
+        }
+        this.props.sfx(kind)
+      }),
+      // Camera cues (parity Stage 2c): authored shots override the follow cam.
+      // A travel-bound target in flight frames the MIDPOINT of Dash and the
+      // destination (the legacy vault/rope composition); omitted `to` = clear.
+      ctx.events.on('intent:camera', (p) => {
+        const c = p as { to?: string; mult?: number; fast?: boolean }
+        if (!c.to) {
+          this.camOverride = false
+          this.props.onDashCam?.(null)
+          return
+        }
+        const pt = this.resolveCamTarget(c.to)
+        if (!pt) return
+        const inFlight = this.travelDest != null
+        const cx = inFlight ? (rt.transform.x + pt.x) / 2 : pt.x
+        const cy = inFlight ? pt.y - 26 : pt.y - 40
+        this.camOverride = true
+        this.props.onDashCam?.({ x: cx, y: cy, mult: c.mult, fast: c.fast })
+      }),
       ctx.events.on('jump:launch', () => {
         this.airborne = true
       }),
@@ -288,19 +388,37 @@ export class EngineLayer extends Component<EngineLayerProps> {
       }),
       ctx.events.on('behavior:complete', () => {
         this.travelDest = null
+        this.camOverride = false
         this.props.onDashCam?.(null)
+        if (this.pendingHang) {
+          this.pendingHang = false
+          this.hangStaging() // ends with chainArrival
+          return
+        }
         this.chainArrival()
       }),
-      ctx.events.on('behavior:ended', () => this.recoverOrArrive()),
+      // One-shot endings (reason = our '__' labels: staged landing beats, quips,
+      // flourishes) must NOT chain arrivals/recovery — the staged timeline owns
+      // that moment (review: a landing one-shot consumed the arrival early and
+      // the timer's later chainArrival double-ran the flourish roll).
+      ctx.events.on('behavior:ended', (p) => {
+        if (String((p as { reason?: string }).reason ?? '').startsWith('__')) return
+        this.recoverOrArrive()
+      }),
       ctx.events.on('behavior:halted', () => this.recoverOrArrive()),
     ]
 
     this.scene = { ctx, verlet, mw, rt, pageIdx, offs }
-    this.currentPanel = 0
+    this.currentPanel = spawnPanel
+    // Review surface: the engine's own event trace, exposed for the parity harness
+    // (normalized timeline). Only present when the review hook is installed.
+    if (reviewHook()) {
+      ;(window as unknown as { __dashEngineTrace?: () => readonly unknown[] }).__dashEngineTrace = () => ctx.events.trace()
+    }
     // Face-level calibration: the head bone's world angle in the rest pose.
     const stand = this.docV2.poses.stand?.angles ?? {}
     const faceRestAngle = (stand.pelvis ?? 0) + (stand.neck ?? 0) + (stand.head ?? 0)
-    this.renderer = createCharacterRenderer(svg, dash, rig, { faceRestAngle })
+    this.renderer = createCharacterRenderer(svg, dash, rig, { faceRestAngle, skins: engineSkins })
     // Wrap the renderer group so the legacy CSS keyframe arcs (pokehop, spin360,
     // pokewob, fidgethop — already in styles.css) can play on the whole figure
     // without fighting the renderer's own squash/spin/lean transform.
@@ -314,11 +432,77 @@ export class EngineLayer extends Component<EngineLayerProps> {
     }
     this.makeBubble(svg)
 
+    this.pendingArrival = this.arrivalId(pageIdx, spawnPanel)
+
+    // Back-nav landing staging (legacy bombBack 3300–4230 / poofBack 1520–2150,
+    // offsets re-based to the page-turn moment done() fired at).
+    if (pe?.kind === 'bombPop') {
+      this.actorHidden = true
+      this.stagingUntil = performance.now() + 1800
+      const at = (ms: number, fn: () => void): void => {
+        this.backNavTimers.push(window.setTimeout(fn, ms))
+      }
+      at(870, () => {
+        this.props.onFx?.({ kind: 'hole', on: true, x: spot.x, y: spot.y })
+        this.actorHidden = false
+        this.props.sfx('hop')
+        rt.runOneShot('__backnav:pop', [{ verb: 'strikePose', ref: 'jump-tuck', holdMs: 560 }])
+        this.playArc('pop', false)
+      })
+      at(1470, () => {
+        rt.runOneShot('__backnav:popland', [{ verb: 'strikePose', ref: 'squash-land', holdMs: 300 }])
+        ctx.events.emit('jump:land', { characterId: this.dash.id }) // squash ring
+      })
+      at(1800, () => {
+        this.props.onFx?.({ kind: 'hole', on: false })
+        this.chainArrival()
+      })
+      return
+    }
+    if (pe?.kind === 'surfIn') {
+      // Legacy page-surf: Dash rides the flip in, hangs above the anchor in the
+      // surf art, then drops with a tuck and lands (legacy 880/1240/1780 beats,
+      // re-based to the flip's end — the engine actor shows post-busyFlip).
+      this.stagingUntil = performance.now() + 1000
+      const t0 = rt.transform
+      t0.y -= 96
+      rt.act('surf', { holdMs: 'persist' })
+      const at = (ms: number, fn: () => void): void => {
+        this.backNavTimers.push(window.setTimeout(fn, ms))
+      }
+      at(60, () => {
+        this.props.sfx('hop')
+        rt.act('jump-tuck', { holdMs: 400 })
+        this.scriptMove = { fromX: t0.x, fromY: t0.y, toX: t0.x, toY: t0.y + 96, t0: performance.now(), dur: 340, arcH: 0 }
+      })
+      at(420, () => {
+        rt.clearAct()
+        rt.runOneShot('__surf:land', [{ verb: 'strikePose', ref: 'squash-land', holdMs: 280 }])
+        this.props.sfx('fx:shake')
+      })
+      at(960, () => this.chainArrival())
+      return
+    }
+    if (pe?.kind === 'poofIn') {
+      this.actorHidden = true
+      this.stagingUntil = performance.now() + 1500
+      const at = (ms: number, fn: () => void): void => {
+        this.backNavTimers.push(window.setTimeout(fn, ms))
+      }
+      at(870, () => this.props.onFx?.({ kind: 'smoke', on: true, x: spot.x, y: spot.y - 53 }))
+      at(1010, () => {
+        this.actorHidden = false
+        rt.runOneShot('__backnav:poofland', [{ verb: 'strikePose', ref: 'squash-land', holdMs: 300 }])
+      })
+      at(1350, () => this.chainArrival())
+      at(1500, () => this.props.onFx?.({ kind: 'smoke', on: false }))
+      return
+    }
+
     // Entrance: the legacy Dash STROLLS IN from the panel's left edge before the
     // arrival plays (enterPage ran him in from offscreen at 1.25s). Engine-native:
     // spawn at the left end of panel 0's support line, walk to the anchor. Short
     // lines (< 60 px of walk) skip the stroll — a two-step shuffle reads as jitter.
-    this.pendingArrival = this.arrivalId(pageIdx, 0)
     const pn0 = this.docV2.pages[pageIdx]?.panels[0]
     const walkDoc = this.docV2.behaviors['builtin:walk']
     const entryDist = pn0 ? spot.x - (pn0.x + 10) : 0
@@ -337,18 +521,131 @@ export class EngineLayer extends Component<EngineLayerProps> {
   travelTo(panelIdx: number): void {
     const s = this.scene
     if (!s) return
+    const doc = this.pickTravel(s.pageIdx, panelIdx)
+    this.startTravel(doc, panelIdx)
+  }
+
+  /** Shared travel launch (nav + the admin/harness testBehavior): poof interception,
+   * the legacy in-routine variant dice (trip/hang), and the behavior run itself. */
+  private startTravel(doc: BehaviorDoc, panelIdx: number): void {
+    const s = this.scene
+    if (!s) return
     const pageIdx = s.pageIdx
     const fromId = `panel:${pageIdx}:${this.currentPanel}`
     const toId = `panel:${pageIdx}:${panelIdx}`
-    const doc = this.pickTravel(pageIdx, panelIdx)
+    // POOF is code choreography (legacy poofTo): vanish + teleport + reappear —
+    // there is no teleport verb, deliberately (the sim never cheats; the ADAPTER
+    // may, exactly like legacy CSS did).
+    if (doc.id === 'builtin:poof') {
+      this.poofTravel(panelIdx)
+      return
+    }
+    // clearTravel FIRST — it nulls pendingArrival (review BLOCKER: the old order
+    // set the arrival and then wiped it, so travel arrivals never played).
+    this.clearTravel()
+    this.travelFrom = this.currentPanel
     this.pendingArrival = this.arrivalId(pageIdx, panelIdx)
     this.currentPanel = panelIdx
-    this.clearTravel()
     this.travelDest = panelIdx
     this.rolling = doc.id === 'builtin:roll' || doc.id === 'builtin:hop' || doc.id === 'builtin:combo'
     this.spin = 0
     this.props.onHeading?.(panelIdx)
+
+    // Legacy in-routine variants (adapter dice, review-forceable):
+    // walk TRIP — 28% on walks longer than a second, at 42% of the stroll.
+    const from = this.panelSpot(pageIdx, this.travelFrom)
+    const to = this.panelSpot(pageIdx, panelIdx)
+    if (doc.id === 'builtin:walk' && from && to) {
+      const durMs = (Math.hypot(to.x - from.x, to.y - from.y) / 111.6) * 1000
+      if (durMs > 1000 && chance('walk.trip', 0.28)) {
+        this.backNavTimers.push(
+          window.setTimeout(() => {
+            if (this.travelDest === panelIdx && s.rt.running() && !this.airborne) {
+              this.props.sfx('hop')
+              s.rt.act('trip', { holdMs: 520 })
+              this.bubbleNote = { text: 'whoa—', until: performance.now() + 900 }
+            }
+          }, durMs * 0.42),
+        )
+      }
+    }
+    // hop HANG — 25% when the destination anchor hugs the panel top.
+    const pn = this.docV2.pages[pageIdx]?.panels[panelIdx]
+    this.pendingHang = doc.id === 'builtin:hop' && !!pn && pn.anchor.dy <= 6 && chance('hop.hang', 0.25)
+
     s.rt.runBehavior(doc, { travel: { from: fromId, to: toId } })
+  }
+
+  /** Legacy poofTo: smoke → vanish (150) → TELEPORT under cover (520) → smoke at
+   * the destination (620) → reappear + land (760) → arrival (1240); smoke clears
+   * at 1350. Render-layer teleport, like the legacy CSS version. */
+  private poofTravel(destIdx: number): void {
+    const s = this.scene
+    if (!s) return
+    const pageIdx = s.pageIdx
+    const spot = this.panelSpot(pageIdx, destIdx)
+    if (!spot) return
+    this.clearTravel() // FIRST — it nulls pendingArrival (same review blocker)
+    this.travelFrom = this.currentPanel
+    this.pendingArrival = this.arrivalId(pageIdx, destIdx)
+    this.currentPanel = destIdx
+    this.stagingUntil = performance.now() + 1350
+    this.props.onHeading?.(destIdx)
+    const t = s.rt.transform
+    const cap = s.rt.capsule()
+    const gy = Math.max(cap.y0, cap.y1) + cap.r
+    this.props.sfx('flip')
+    this.props.onFx?.({ kind: 'smoke', on: true, x: t.x, y: gy - 53 })
+    const at = (ms: number, fn: () => void): void => {
+      this.backNavTimers.push(window.setTimeout(fn, ms))
+    }
+    at(150, () => {
+      this.actorHidden = true
+    })
+    at(520, () => {
+      this.props.onFx?.({ kind: 'smoke', on: false })
+      t.x = spot.x
+      const c2 = s.rt.capsule()
+      t.y += spot.y - (Math.max(c2.y0, c2.y1) + c2.r)
+    })
+    at(620, () => {
+      this.props.onFx?.({ kind: 'smoke', on: true, x: spot.x, y: spot.y - 53 })
+      this.props.sfx('flip')
+    })
+    at(760, () => {
+      this.actorHidden = false
+      s.rt.runOneShot('__poof:land', [{ verb: 'strikePose', ref: 'squash-land', holdMs: 300 }])
+      this.props.sfx('poof')
+    })
+    at(1240, () => this.chainArrival())
+    at(1350, () => this.props.onFx?.({ kind: 'smoke', on: false }))
+  }
+
+  /** Legacy hop-hang: land under the lip, dangle with kicking legs and a 'hup—',
+   * then pull up, tuck, and settle — staged AFTER the hop behavior completes. */
+  private hangStaging(): void {
+    const s = this.scene
+    if (!s) return
+    const t = s.rt.transform
+    this.stagingUntil = performance.now() + 1950
+    this.props.sfx('hop')
+    this.props.sfx('fx:shake')
+    this.scriptMove = { fromX: t.x, fromY: t.y, toX: t.x, toY: t.y + 102, t0: performance.now(), dur: 130, arcH: 0 }
+    s.rt.act('hang', { holdMs: 'persist' })
+    this.bubbleNote = { text: 'hup—', until: performance.now() + 900 }
+    const at = (ms: number, fn: () => void): void => {
+      this.backNavTimers.push(window.setTimeout(fn, ms))
+    }
+    at(970, () => {
+      this.props.sfx('whoosh')
+      s.rt.act('jump-tuck', { holdMs: 440 })
+      this.scriptMove = { fromX: t.x, fromY: t.y, toX: t.x, toY: t.y - 102, t0: performance.now(), dur: 400, arcH: 0 }
+    })
+    at(1410, () => {
+      s.rt.clearAct()
+      s.rt.runOneShot('__hang:land', [{ verb: 'strikePose', ref: 'squash-land', holdMs: 280 }])
+    })
+    at(1950, () => this.chainArrival())
   }
 
   /** A travel run blocked/failed → the legacy escape hatch: POOF. Smoke, teleport
@@ -358,6 +655,7 @@ export class EngineLayer extends Component<EngineLayerProps> {
     if (!s) return
     const dest = this.travelDest
     this.travelDest = null
+    this.camOverride = false
     this.props.onDashCam?.(null)
     if (dest != null) {
       const spot = this.panelSpot(s.pageIdx, dest)
@@ -372,10 +670,26 @@ export class EngineLayer extends Component<EngineLayerProps> {
     this.chainArrival()
   }
 
-  /** Back-nav spectacle (legacy bombBack/poofBack): play a quick beat, then
-   * `done()` (the Notebook flips the page). Never wedges: done is also called on
-   * ended/halted, and a 1.4s timer is the belt-and-braces. */
-  backNav(kind: 'bomb' | 'poof', done: () => void): void {
+  /** Resolve a camera-cue TargetRef against the live scene (the common refs the
+   * authored shots use — travel:to/from spots and panel anchors). */
+  private resolveCamTarget(ref: string): { x: number; y: number } | null {
+    const s = this.scene
+    if (!s) return null
+    if (ref.startsWith('travel:')) {
+      const which = ref.slice('travel:'.length).split('#')[0]
+      const idx = which === 'to' ? (this.travelDest ?? this.currentPanel) : this.travelFrom
+      return this.panelSpot(s.pageIdx, idx)
+    }
+    if (ref === 'entity:dash') return { x: s.rt.transform.x, y: s.rt.transform.y }
+    return null
+  }
+
+  /** Back-nav spectacle — the FULL legacy staging (parity Stage 2c). The engine
+   * owns the character beats and drives the Notebook's shared overlays through
+   * onFx; `done()` fires at the legacy page-turn moment (bomb 2430ms / poof
+   * 650ms) and the landing plays via pendingEntrance in the next enterPage.
+   * `landingPanel` is the last panel of the TARGET page (legacy lands there). */
+  backNav(kind: 'bomb' | 'poof', landingPanel: number, done: () => void): void {
     const s = this.scene
     if (!s) {
       done()
@@ -383,44 +697,95 @@ export class EngineLayer extends Component<EngineLayerProps> {
     }
     this.cancelBackNav() // supersession: a new back-nav cancels the previous
     this.clearArc()
+    const at = (ms: number, fn: () => void): void => {
+      this.backNavTimers.push(window.setTimeout(fn, ms))
+    }
     let called = false
     const fire = (): void => {
       if (called) return
       called = true
-      offA()
-      offB()
       this.backNavCancel = null
       done()
     }
-    const offA = s.ctx.events.on('behavior:complete', fire)
-    const offB = s.ctx.events.on('behavior:ended', fire)
-    const timer = window.setTimeout(fire, 1400)
     this.backNavCancel = () => {
       called = true
-      offA()
-      offB()
-      window.clearTimeout(timer)
+      for (const t of this.backNavTimers) window.clearTimeout(t)
+      this.backNavTimers = []
+      this.scriptMove = null
+      this.actorHidden = false
+      this.pendingEntrance = null
+      this.props.onFx?.({ kind: 'bomb', on: false })
+      this.props.onFx?.({ kind: 'boom', on: false })
+      this.props.onFx?.({ kind: 'hole', on: false })
+      this.props.onFx?.({ kind: 'smoke', on: false })
       this.backNavCancel = null
     }
-    const doc =
-      kind === 'bomb'
-        ? ({ schemaVersion: 2, id: '__backnav:bomb', steps: [
-            { verb: 'strikePose', ref: 'throw', holdMs: 380 },
-            { verb: 'sfx', kind: 'boom' },
-          ] } as never)
-        : ({ schemaVersion: 2, id: '__backnav:poof', steps: [
-            { verb: 'sfx', kind: 'fx:smoke' },
-            { verb: 'strikePose', ref: 'sneeze', holdMs: 240 },
-            { verb: 'sfx', kind: 'poof' },
-          ] } as never)
-    s.rt.runBehavior(doc)
+
+    const t = s.rt.transform
+    const cap = s.rt.capsule()
+    const gx = t.x
+    const gy = Math.max(cap.y0, cap.y1) + cap.r
+    this.stagingUntil = performance.now() + (kind === 'bomb' ? 2430 : 650)
+
+    if (kind === 'bomb') {
+      // Legacy bombBack: throw 300 → bomb arc 580 → boom+hole 950 → hop 1300 →
+      // dive 1850 → page turn 2430 (pop-in + land play on the landing page).
+      const dirT = gx > 460 ? -1 : 1
+      const txp = Math.max(90, Math.min(830, gx + dirT * 175))
+      t.facing = dirT
+      s.rt.runOneShot('__backnav:throw', [{ verb: 'strikePose', ref: 'throw', holdMs: 320 }])
+      this.props.sfx('scrib')
+      at(300, () => this.props.onFx?.({ kind: 'bomb', on: true, x: gx + dirT * 14, y: gy - 75 }))
+      at(360, () => this.props.onFx?.({ kind: 'bomb', on: true, x: txp, y: gy - 12 }))
+      at(950, () => {
+        this.props.onFx?.({ kind: 'bomb', on: false })
+        this.props.onFx?.({ kind: 'boom', on: true, x: txp, y: gy })
+        this.props.onFx?.({ kind: 'hole', on: true, x: txp, y: gy })
+        this.props.sfx('boom')
+      })
+      at(1300, () => {
+        this.props.sfx('hop')
+        s.rt.runOneShot('__backnav:tuck', [{ verb: 'strikePose', ref: 'jump-tuck', holdMs: 620 }])
+        this.scriptMove = { fromX: t.x, fromY: t.y, toX: txp, toY: t.y, t0: performance.now(), dur: 500, arcH: 46 }
+      })
+      at(1850, () => {
+        this.playArc('dive', false)
+      })
+      at(2350, () => {
+        this.actorHidden = true
+      })
+      at(2430, () => {
+        this.props.onFx?.({ kind: 'boom', on: false })
+        this.props.onFx?.({ kind: 'hole', on: false })
+        this.pendingEntrance = { kind: 'bombPop', panel: landingPanel }
+        this.props.sfx('flip')
+        fire()
+      })
+    } else {
+      // Legacy poofBack: smoke 0 → vanish 140 → page turn 650 (smoke + reappear
+      // play on the landing page).
+      this.props.sfx('flip')
+      this.props.onFx?.({ kind: 'smoke', on: true, x: gx, y: gy - 53 })
+      at(140, () => {
+        this.actorHidden = true
+      })
+      at(650, () => {
+        this.props.onFx?.({ kind: 'smoke', on: false })
+        this.pendingEntrance = { kind: 'poofIn', panel: landingPanel }
+        this.props.sfx('flip')
+        fire()
+      })
+    }
   }
 
   /** Dev-hook surface (admin Test buttons + harness): run a specific behavior id
-   * toward the farthest panel, exactly like the legacy hooks did. */
+   * toward the farthest panel, exactly like the legacy hooks did. Goes through
+   * startTravel so the variant dice (trip/hang/peek) and poof choreography run
+   * identically to organic navigation — the harness reviews the REAL paths. */
   testBehavior(behaviorId: string): boolean {
     const s = this.scene
-    const doc = this.docV2.behaviors[behaviorId]
+    const base = this.docV2.behaviors[behaviorId]
+    const doc = base ? this.applyVariant(base) : base
     if (!s || !doc) return false
     const pageIdx = s.pageIdx
     const panels = this.docV2.pages[pageIdx]?.panels ?? []
@@ -433,19 +798,12 @@ export class EngineLayer extends Component<EngineLayerProps> {
       const d = sp ? Math.abs(sp.x - here.x) : -1
       if (d > farD) { farD = d; far = i }
     })
-    const fromId = `panel:${pageIdx}:${this.currentPanel}`
-    const toId = `panel:${pageIdx}:${far}`
-    this.clearTravel()
-    this.travelDest = far
-    this.rolling = doc.id === 'builtin:roll' || doc.id === 'builtin:hop' || doc.id === 'builtin:combo'
-    this.pendingArrival = this.arrivalId(pageIdx, far)
-    this.currentPanel = far
-    s.rt.runBehavior(doc, { travel: { from: fromId, to: toId } })
+    this.startTravel(doc, far)
     return true
   }
 
   busy(): boolean {
-    return this.scene?.rt.running() ?? false
+    return (this.scene?.rt.running() ?? false) || performance.now() < this.stagingUntil
   }
 
   poke(): void {
@@ -456,13 +814,13 @@ export class EngineLayer extends Component<EngineLayerProps> {
     for (const a of s.rt.accessories) s.verlet.applyImpulse(a.bodyId, 120, -100)
     // The legacy reaction: a random whole-figure arc + a quip — only when he's
     // actually standing around (legacy gated pokes on `standing`).
-    if (!s.rt.running() && !this.dragging && !this.airborne) {
+    if (!s.rt.running() && !this.dragging && !this.airborne && performance.now() >= this.stagingUntil) {
       const arcs: Array<'hop' | 'spin' | 'wob'> = ['hop', 'spin', 'wob']
-      this.playArc(arcs[Math.floor(Math.random() * arcs.length)], false)
+      this.playArc(pick('poke.arc', arcs), false)
       const lines = this.props.pokeLines
       if (lines && lines.length > 0) {
-        const line = lines[Math.floor(Math.random() * lines.length)]
-        s.rt.runBehavior({ schemaVersion: 2, id: '__poke:quip', steps: [{ verb: 'say', text: line }] } as never)
+        const line = pick('poke.line', lines)
+        s.rt.runOneShot('__poke:quip', [{ verb: 'say', text: line }])
       }
     }
   }
@@ -481,7 +839,10 @@ export class EngineLayer extends Component<EngineLayerProps> {
 
   private beginDrag(e: { clientX: number; clientY: number }): void {
     const s = this.scene
-    if (!s || this.dragging) return
+    // No grabs during staged spectacles (back-nav/poof/hang landings) — a drag
+    // would fight the timeline's scripted motion (review blocker; legacy gated
+    // grabs on busy the same way).
+    if (!s || this.dragging || performance.now() < this.stagingUntil) return
     this.dragging = true
     this.dragMoved = false
     this.dragStart = { x: e.clientX, y: e.clientY }
@@ -511,6 +872,10 @@ export class EngineLayer extends Component<EngineLayerProps> {
     this.clearTravel()
     if (s.rt.running()) s.rt.forceRelease()
     s.ctx.events.emit('expression:poke', { characterId: this.dash.id })
+    // The legacy grab staging: dangle art (kicking legs) + the protest quip.
+    this.props.sfx('hop')
+    s.rt.act('dangle', { holdMs: 'persist' })
+    this.bubbleNote = { text: 'hey!! down!!', until: performance.now() + 1100 }
   }
 
   /** Centralized travel/flight teardown: camera released, spin/roll cleared,
@@ -519,9 +884,11 @@ export class EngineLayer extends Component<EngineLayerProps> {
   private clearTravel(): void {
     this.travelDest = null
     this.pendingArrival = null
+    this.pendingHang = false // a superseded hop must not attach hang staging later
     this.rolling = false
     this.airborne = false
     this.spin = 0
+    this.camOverride = false
     this.clearArc()
     this.props.onDashCam?.(null)
   }
@@ -534,15 +901,19 @@ export class EngineLayer extends Component<EngineLayerProps> {
 
   /** Pose-scoped whole-figure acting: the legacy Fight shuffles (fightshift) for
    * as long as the pose holds. Uses the same wrapper as the one-shot arcs — a
-   * running behavior means no fidget/poke arc can race it. */
+   * running behavior means no fidget/poke arc can race it. SKINNED poses carry
+   * their own groupAnim (the fight skin fightshifts itself) — the wrapper act is
+   * the rig-figure fallback only, or it would double the shuffle. */
   private static POSE_ACTS: Record<string, string> = {
     fight: 'fightshift 2.6s ease-in-out infinite',
   }
 
+  private static SKINNED = new Set(engineSkins.docs.flatMap((d) => d.sources))
+
   private actPose: string | null = null
 
   private syncPoseAct(poseId: string | null): void {
-    const anim = poseId ? EngineLayer.POSE_ACTS[poseId] : undefined
+    const anim = poseId && !EngineLayer.SKINNED.has(poseId) ? EngineLayer.POSE_ACTS[poseId] : undefined
     const want = anim ? poseId : null
     if (this.actPose === want) return
     const w = this.arcWrap
@@ -572,30 +943,51 @@ export class EngineLayer extends Component<EngineLayerProps> {
     if (!s) return
     // A stationary grab is a CLICK — no settle/thud/quip; the click handler pokes.
     if (!this.dragMoved) return
-    // Settle to the nearest support below. forceRelease() early-returns when no
-    // behavior is running (the grab already released it), so the layer probes
-    // for itself; a drop into the void poofs home to the current panel.
-    const cap = s.rt.capsule()
-    const PROBE = 2200
-    const hit = sweptCapsuleVsSegments(cap, 0, PROBE, s.mw.collision().segments)
-    if (hit) {
-      s.rt.transform.y += hit.t * PROBE - 0.5
-    } else {
-      const spot = this.panelSpot(s.pageIdx, this.currentPanel)
-      if (spot) {
-        this.props.sfx('fx:smoke')
-        s.rt.transform.x = spot.x
-        const c2 = s.rt.capsule()
-        s.rt.transform.y += spot.y - (c2.y1 + c2.r)
+    // THE LEGACY RELEASE (Stage 6): pick the NEAREST panel anchor, throw a 550ms
+    // tuck return arc at it, land with the squash ring, re-run the panel arrival
+    // (legacy panelPose — once-flags gate replays), and ALWAYS deliver a DROPS
+    // quip. A drop into the void can't happen: the nearest anchor is the target.
+    const t = s.rt.transform
+    const pageIdx = s.pageIdx
+    const panels = this.docV2.pages[pageIdx]?.panels ?? []
+    let best = this.currentPanel
+    let bd = Infinity
+    panels.forEach((_, i) => {
+      const sp = this.panelSpot(pageIdx, i)
+      const d = sp ? Math.hypot(sp.x - t.x, sp.y - t.y) : Infinity
+      if (d < bd) {
+        bd = d
+        best = i
       }
+    })
+    const spot = this.panelSpot(pageIdx, best)
+    if (!spot) return
+    this.currentPanel = best
+    this.pendingArrival = this.arrivalId(pageIdx, best)
+    this.stagingUntil = performance.now() + 1100
+    this.props.sfx('hop')
+    s.rt.act('jump-tuck', { holdMs: 560 })
+    const cap = s.rt.capsule()
+    const footY = Math.max(cap.y0, cap.y1) + cap.r
+    this.scriptMove = { fromX: t.x, fromY: t.y, toX: spot.x, toY: t.y + (spot.y - footY), t0: performance.now(), dur: 550, arcH: 26 }
+    const at = (ms: number, fn: () => void): void => {
+      this.backNavTimers.push(window.setTimeout(fn, ms))
     }
-    s.ctx.events.emit('jump:land', { characterId: this.dash.id }) // squash flourish
-    this.props.sfx('thud')
-    const lines = this.props.dropLines
-    if (this.dragMoved && lines && lines.length > 0 && s.ctx.rng.float() < 0.6) {
-      const line = lines[s.ctx.rng.int(0, lines.length)]
-      s.rt.runBehavior({ schemaVersion: 2, id: '__drop:quip', steps: [{ verb: 'say', text: line }] } as never)
-    }
+    at(560, () => {
+      s.rt.clearAct()
+      s.rt.runOneShot('__drop:land', [{ verb: 'strikePose', ref: 'squash-land', holdMs: 300 }])
+      s.ctx.events.emit('jump:land', { characterId: this.dash.id }) // squash flourish
+      this.props.sfx('thud')
+    })
+    at(1040, () => {
+      this.chainArrival()
+      const lines = this.props.dropLines
+      if (lines && lines.length > 0) {
+        // the site bubble (non-interrupting) — the arrival may be speaking too,
+        // and legacy showed the drop quip regardless.
+        this.bubbleNote = { text: pick('drop.line', lines), until: performance.now() + 1700 }
+      }
+    })
   }
 
   // ── charm layer (render-only; replays the legacy keyframes verbatim) ─────────
@@ -615,18 +1007,22 @@ export class EngineLayer extends Component<EngineLayerProps> {
 
   /** Play a one-shot legacy arc on the whole figure. Timings verbatim from
    * POKEARC/FIDGETARC in constants.ts; origins at the live figure points. */
-  private playArc(kind: 'hop' | 'spin' | 'wob', fidget: boolean): void {
+  private playArc(kind: 'hop' | 'spin' | 'wob' | 'dive' | 'pop', fidget: boolean): void {
     const w = this.arcWrap
     const pts = this.figurePoints()
     if (!w || !pts) return
     const spec =
       kind === 'spin'
         ? { origin: pts.mid, anim: `spin360 ${fidget ? '.6s' : '.55s'} cubic-bezier(.5,.1,.4,1)`, ms: fidget ? 650 : 600 }
-        : kind === 'hop'
-          ? fidget
-            ? { origin: pts.ground, anim: 'fidgethop .7s cubic-bezier(.4,.1,.3,1)', ms: 750 }
-            : { origin: pts.ground, anim: 'pokehop .5s cubic-bezier(.4,.1,.3,1)', ms: 550 }
-          : { origin: pts.ground, anim: `pokewob ${fidget ? '.7s' : '.65s'} ease-in-out`, ms: fidget ? 750 : 700 }
+        : kind === 'dive'
+          ? { origin: pts.mid, anim: 'diveout .55s ease-in forwards', ms: 560 }
+          : kind === 'pop'
+            ? { origin: pts.ground, anim: 'popout .6s cubic-bezier(.3,.7,.4,1)', ms: 620 }
+            : kind === 'hop'
+              ? fidget
+                ? { origin: pts.ground, anim: 'fidgethop .7s cubic-bezier(.4,.1,.3,1)', ms: 750 }
+                : { origin: pts.ground, anim: 'pokehop .5s cubic-bezier(.4,.1,.3,1)', ms: 550 }
+              : { origin: pts.ground, anim: `pokewob ${fidget ? '.7s' : '.65s'} ease-in-out`, ms: fidget ? 750 : 700 }
     window.clearTimeout(this.arcTimer)
     w.style.transformBox = 'view-box'
     w.style.transformOrigin = spec.origin
@@ -646,31 +1042,36 @@ export class EngineLayer extends Component<EngineLayerProps> {
       const s = this.scene
       // props.page is the ENGINE page index (0-based content page — the layer is
       // never mounted on the cover), so no page gate: scene + rest state suffice.
-      const idle = !!s && !s.rt.running() && !this.dragging && !this.airborne
+      // Legacy gate: fidgets fire only from PLAIN idle (`pose === 'idle'`) — a
+      // persist-held arrival pose (fight/spray/think) suppresses them; a wave/
+      // sneeze strikePose would otherwise release the held stance.
+      const src = s?.rt.activeSource()
+      const plainIdle = !!src && (src.kind === 'clip' || src.id === 'stand')
+      const idle = !!s && !s.rt.running() && !this.dragging && !this.airborne && plainIdle && performance.now() >= this.stagingUntil
       if (idle && s) {
         const opts = ['hop', 'spin', 'wob', 'wave', 'sneeze', 'chat', 'chat']
-        const f = opts[Math.floor(Math.random() * opts.length)]
+        const f = pick('fidget.kind', opts)
         if (f === 'chat') {
           const lines = this.props.chatterLines
           if (lines && lines.length > 0) {
-            const line = lines[Math.floor(Math.random() * lines.length)]
-            s.rt.runBehavior({ schemaVersion: 2, id: '__fidget:chat', steps: [{ verb: 'say', text: line }] } as never)
+            const line = pick('fidget.line', lines)
+            s.rt.runOneShot('__fidget:chat', [{ verb: 'say', text: line }])
           }
         } else if (f === 'wave') {
-          s.rt.runBehavior({ schemaVersion: 2, id: '__fidget:wave', steps: [{ verb: 'strikePose', ref: 'wave', holdMs: 1200 }] } as never)
+          s.rt.runOneShot('__fidget:wave', [{ verb: 'strikePose', ref: 'wave', holdMs: 1200 }])
         } else if (f === 'sneeze') {
           this.props.sfx('scrib')
-          s.rt.runBehavior({ schemaVersion: 2, id: '__fidget:sneeze', steps: [
+          s.rt.runOneShot('__fidget:sneeze', [
             { verb: 'say', text: 'ah— ah— CHOO!' },
             { verb: 'strikePose', ref: 'sneeze', holdMs: 700 },
-          ] } as never)
+          ])
         } else {
           if (f === 'hop') this.props.sfx('hop')
           this.playArc(f as 'hop' | 'spin' | 'wob', true)
         }
       }
       this.scheduleFidget()
-    }, 2800 + Math.random() * 3200)
+    }, scalar('fidget.delayMs', () => 2800 + Math.random() * 3200))
   }
 
   // ── internals ────────────────────────────────────────────────────────────────
@@ -680,14 +1081,75 @@ export class EngineLayer extends Component<EngineLayerProps> {
 
   private chainArrival(): void {
     const s = this.scene
-    if (!s || !this.pendingArrival) return
-    const doc = this.docV2.behaviors[this.pendingArrival]
+    if (!s) return
+    const arrivalId = this.pendingArrival
     this.pendingArrival = null
-    if (!doc) return
-    // when-gates consult the SITE flags (the flag store of record in 9b).
-    const gate = (doc as { when?: GateExpr }).when
-    if (gate && !evalGate(gate, this.props.flags)) return
-    s.rt.runBehavior(doc)
+    const doc = arrivalId ? this.docV2.behaviors[arrivalId] : undefined
+    if (doc) {
+      // when-gates consult the SITE flags (the flag store of record in 9b).
+      const gate = (doc as { when?: GateExpr }).when
+      if (!gate || evalGate(gate, this.props.flags)) s.rt.runBehavior(doc)
+    }
+    this.scheduleFlourish()
+  }
+
+  /** The legacy arrival FLOURISH (Stage 4): 650ms after settling on a panel with
+   * no arrival pose, a 24% roll plays knock / shove / squish (squish only fits
+   * short panels). Gated exactly like legacy: authored arrival.flourish wins,
+   * else "not the last page"; still-idle checks before playing. */
+  private lastFlourish: string | null = null
+
+  private scheduleFlourish(): void {
+    const s = this.scene
+    if (!s) return
+    const pageIdx = s.pageIdx
+    const pn = this.docV2.pages[pageIdx]?.panels[this.currentPanel]
+    if (!pn) return
+    const allow = pn.arrival?.flourish ?? pageIdx !== this.docV2.pages.length - 1
+    if (pn.arrival?.hasPose || !allow || !chance('flourish.roll', 0.24)) return
+    this.backNavTimers.push(
+      window.setTimeout(() => {
+        const src = s.rt.activeSource()
+        const plainIdle = src.kind === 'clip' || src.id === 'stand'
+        if (s.rt.running() || this.dragging || this.airborne || !plainIdle || performance.now() < this.stagingUntil) return
+        const opts = ['knock', 'shove']
+        if (pn.h < 190) opts.push('squish', 'squish')
+        let f = pick('flourish.kind', opts)
+        if (f === this.lastFlourish) f = opts[(opts.indexOf(f) + 1) % opts.length]
+        this.lastFlourish = f
+        if (f === 'squish') {
+          this.props.sfx('hop')
+          this.bubbleNote = { text: 'snug fit.', until: performance.now() + 1700 }
+          this.playSquish()
+        } else if (f === 'knock') {
+          s.rt.runOneShot('__flourish:knock', [{ verb: 'strikePose', ref: 'knock', holdMs: 1000 }])
+          this.backNavTimers.push(window.setTimeout(() => this.props.sfx('fx:jitPage'), 240))
+          this.backNavTimers.push(window.setTimeout(() => { this.props.sfx('fx:jitPage'); this.props.sfx('fx:shake') }, 580))
+        } else {
+          const sdir: 1 | -1 = s.rt.transform.x > 460 ? -1 : 1
+          s.rt.transform.facing = sdir
+          this.props.sfx('scrape')
+          s.rt.runOneShot('__flourish:shove', [{ verb: 'strikePose', ref: 'shove', holdMs: 1450 }])
+          this.backNavTimers.push(window.setTimeout(() => this.props.sfx('fx:pageShove'), 120))
+        }
+      }, 650),
+    )
+  }
+
+  /** The legacy squish flourish (squishpop on the whole figure). */
+  private playSquish(): void {
+    const w = this.arcWrap
+    const pts = this.figurePoints()
+    if (!w || !pts) return
+    window.clearTimeout(this.arcTimer)
+    w.style.transformBox = 'view-box'
+    w.style.transformOrigin = pts.ground
+    w.style.animation = 'none'
+    void w.getBoundingClientRect()
+    w.style.animation = 'squishpop .95s cubic-bezier(.3,.5,.4,1)'
+    this.arcTimer = window.setTimeout(() => {
+      w.style.animation = ''
+    }, 980)
   }
 
   private panelSpot(pageIdx: number, panelIdx: number): { x: number; y: number } | null {
@@ -697,41 +1159,90 @@ export class EngineLayer extends Component<EngineLayerProps> {
   }
 
   /** Behaviors whose movement is a jump (can cross gaps/heights ground can't). */
-  private static JUMPY = new Set(['builtin:hop', 'builtin:roll', 'builtin:vault', 'builtin:swing', 'builtin:smash', 'builtin:poof', 'builtin:combo'])
+  /** The last travel mode run — the legacy anti-repeat memory. */
+  private lastMode: string | null = null
 
   private pickTravel(pageIdx: number, destIdx: number): BehaviorDoc {
     const s = this.scene!
-    // Geometry heuristics (the legacy travel() logic, which lived in CODE and was
-    // not migratable data): a trip with real height/width needs a jump-capable
-    // behavior; a flat stroll can use anything.
-    const from = this.panelSpot(pageIdx, this.currentPanel)
-    const to = this.panelSpot(pageIdx, destIdx)
-    const needsAir = !!from && !!to && (Math.abs(to.y - from.y) > 24 || Math.abs(to.x - from.x) > 200)
-    // v1 semantics: the DESTINATION panel's (merged) pool governs the trip.
-    let pool = this.docV2.pages[pageIdx]?.panels[destIdx]?.travel?.pool
+    // THE LEGACY travel() SELECTION (Stage 3): geometry pools by the trip's shape,
+    // the 18% combo gate for big diagonal trips, the authored allow-list filter,
+    // weighted custom actions, and the anti-repeat rule — verbatim from
+    // Notebook.travel(), with the deterministic rng doing the rolling.
+    const to = this.panelSpot(pageIdx, destIdx) ?? { x: s.rt.transform.x, y: s.rt.transform.y }
+    const cap = s.rt.capsule()
+    const dxv = to.x - s.rt.transform.x
+    const dyv = to.y - (Math.max(cap.y0, cap.y1) + cap.r)
+    const horiz = Math.abs(dxv)
+    const vert = Math.abs(dyv)
+    const dist = Math.hypot(dxv, dyv)
     const fallback = this.docV2.behaviors['builtin:hop'] ?? this.docV2.behaviors['builtin:walk']
-    if (pool && needsAir) {
-      const airy = pool.filter((e) => EngineLayer.JUMPY.has(e.behaviorId))
-      if (airy.length > 0) pool = airy
-    }
-    if (!pool || pool.length === 0) {
-      // No authored pool → the classic default: the full builtin set (air-filtered).
-      let ids = Object.keys(this.docV2.behaviors).filter((id) => id.startsWith('builtin:'))
-      if (needsAir) ids = ids.filter((id) => EngineLayer.JUMPY.has(id))
-      const id = ids[s.ctx.rng.int(0, ids.length)]
-      return this.docV2.behaviors[id] ?? fallback
-    }
-    const entries: string[] = []
-    for (const e of pool) {
+
+    // The authored pool (migrated v1 allow-list + weighted actions). Action
+    // when-gates evaluate against flags AND the trip geometry (Stage 4: the v1
+    // geometric gates — the tightrope only offers itself on long flat trips).
+    const geomCtx = { dist, horiz, vert, dyv, fromPanel: this.currentPanel }
+    const authored = this.docV2.pages[pageIdx]?.panels[destIdx]?.travel?.pool
+    const allowed = new Set<string>()
+    const actionEntries: string[] = []
+    for (const e of authored ?? []) {
       const doc = this.docV2.behaviors[e.behaviorId]
       if (!doc) continue
-      const gate = (doc as { when?: GateExpr }).when
-      if (gate && !evalGate(gate, this.props.flags)) continue
-      const w = Math.max(1, Math.floor(e.weight ?? 1))
-      for (let k = 0; k < w; k++) entries.push(e.behaviorId)
+      if (e.behaviorId.startsWith('builtin:')) allowed.add(e.behaviorId)
+      else {
+        const gate = (doc as { when?: GateExpr }).when
+        if (gate && !evalGate(gate, this.props.flags, geomCtx)) continue
+        const w = Math.max(0, Math.floor(e.weight ?? 1))
+        for (let k = 0; k < w; k++) actionEntries.push(e.behaviorId)
+      }
     }
+
+    // Combo gate (legacy: big diagonal trips, 18%, never twice in a row).
+    const comboOk = (allowed.size === 0 || allowed.has('builtin:combo')) && this.docV2.behaviors['builtin:combo']
+    if (dist > 380 && horiz > 240 && vert > 60 && comboOk && this.lastMode !== 'builtin:combo' && chance('travel.combo', 0.18)) {
+      reviewLog('engine', 'pick', { key: 'travel.mode', value: 'builtin:combo' })
+      this.lastMode = 'builtin:combo'
+      return this.docV2.behaviors['builtin:combo']
+    }
+
+    // Geometry pools — the legacy shape → verb mapping, weights via repetition.
+    let modes: string[]
+    if (vert > 110) modes = dyv < 0 ? ['wallrun', 'wallrun', 'swing', 'hop', 'poof'] : ['slide', 'slide', 'swing', 'hop', 'roll']
+    else if (horiz > 430) modes = ['swing', 'rope', 'rope', 'vault', 'poof']
+    else if (horiz > 250) modes = ['vault', 'vault', 'rope', 'swing', 'walk', 'smash']
+    else modes = ['walk', 'vault', 'hop', 'roll', 'smash', 'walk']
+    let entries = modes.map((m) => `builtin:${m}`).filter((id) => this.docV2.behaviors[id])
+    if (allowed.size > 0) {
+      const filtered = entries.filter((id) => allowed.has(id))
+      if (filtered.length > 0) entries = filtered // an author error never empties the pool
+    }
+    entries = [...entries, ...actionEntries]
     if (entries.length === 0) return fallback
-    return this.docV2.behaviors[entries[s.ctx.rng.int(0, entries.length)]] ?? fallback
+
+    let id = this.forcedTravel(entries) ?? entries[s.ctx.rng.int(0, entries.length)]
+    if (id === this.lastMode) id = entries[(entries.indexOf(id) + 1) % entries.length] // anti-repeat
+    reviewLog('engine', 'pick', { key: 'travel.mode', value: id })
+    this.lastMode = id
+    return this.applyVariant(this.docV2.behaviors[id] ?? fallback)
+  }
+
+  /** Variant docs are adapter-rolled AFTER the pool pick (never pool members —
+   * the geometry pools enumerate base modes only): the legacy in-routine dice,
+   * all review-forceable. */
+  private applyVariant(doc: BehaviorDoc): BehaviorDoc {
+    if (doc.id === 'builtin:vault' && this.docV2.behaviors['builtin:vault-peek'] && chance('vault.peek', 0.3)) {
+      return this.docV2.behaviors['builtin:vault-peek']
+    }
+    return doc
+  }
+
+  /** Review-only travel forcing: 'travel.mode' may name a bare mode ('vault') or a
+   * full behavior id ('builtin:vault' / 'act:tightrope'). Returns null unforced or
+   * when the forced id isn't in the candidate list (the real pool still governs). */
+  private forcedTravel(candidates: readonly string[]): string | null {
+    const f = reviewHook()?.force?.['travel.mode']
+    if (f === undefined) return null
+    const want = String(f)
+    return candidates.find((id) => id === want || id === `builtin:${want}` || id === `act:${want}`) ?? null
   }
 
   private makeBubble(svg: SVGSVGElement): void {
@@ -757,7 +1268,13 @@ export class EngineLayer extends Component<EngineLayerProps> {
     const s = this.scene
     const b = this.bubble
     if (!s || !b) return
-    const sp = s.rt.speech()
+    let sp = s.rt.speech()
+    // Adapter quips (trip 'whoa—', hang 'hup—') fill in when the engine bubble
+    // is silent; a real behavior say always wins.
+    if (!sp && this.bubbleNote) {
+      if (performance.now() < this.bubbleNote.until) sp = { text: this.bubbleNote.text, remainingMs: 1 }
+      else this.bubbleNote = null
+    }
     if (!sp) {
       b.style.display = 'none'
       return

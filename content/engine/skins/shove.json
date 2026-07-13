@@ -1,0 +1,102 @@
+{
+  "schemaVersion": 2,
+  "id": "skin:shove",
+  "sources": [
+    "shove"
+  ],
+  "face": "baked",
+  "groupAnim": {
+    "name": "shovepush",
+    "origin": "50% 96%"
+  },
+  "elements": [
+    {
+      "kind": "circle",
+      "cx": 12,
+      "cy": -22,
+      "r": 13,
+      "fill": "#fffdf6",
+      "stroke": "#1a1a1a",
+      "strokeWidth": 4
+    },
+    {
+      "kind": "path",
+      "d": "M5,-29 l9,3 M19,-27 l9,-3",
+      "fill": "none",
+      "stroke": "#1a1a1a",
+      "strokeWidth": 2.6,
+      "linecap": "round"
+    },
+    {
+      "kind": "path",
+      "d": "M10,-21 l6,1 M12,-14 h8",
+      "fill": "none",
+      "stroke": "#1a1a1a",
+      "strokeWidth": 2.4,
+      "linecap": "round"
+    },
+    {
+      "kind": "path",
+      "d": "M8,-10 L-8,18",
+      "fill": "none",
+      "stroke": "#1a1a1a",
+      "strokeWidth": 5.5,
+      "linecap": "round"
+    },
+    {
+      "kind": "path",
+      "d": "M9,-8 L26,-6 L38,-4",
+      "fill": "none",
+      "stroke": "#1a1a1a",
+      "strokeWidth": 4.5,
+      "linecap": "round"
+    },
+    {
+      "kind": "path",
+      "d": "M38,-10 l1,12",
+      "fill": "none",
+      "stroke": "#1a1a1a",
+      "strokeWidth": 3.6,
+      "linecap": "round"
+    },
+    {
+      "kind": "path",
+      "d": "M6,-4 L22,0 L34,3",
+      "fill": "none",
+      "stroke": "#1a1a1a",
+      "strokeWidth": 4.5,
+      "linecap": "round",
+      "opacity": 0.85
+    },
+    {
+      "kind": "path",
+      "d": "M34,-2 l1,11",
+      "fill": "none",
+      "stroke": "#1a1a1a",
+      "strokeWidth": 3.4,
+      "linecap": "round",
+      "opacity": 0.85
+    },
+    {
+      "kind": "path",
+      "d": "M-8,18 L2,34 L4,50 l11,2",
+      "fill": "none",
+      "stroke": "#1a1a1a",
+      "strokeWidth": 5,
+      "linecap": "round"
+    },
+    {
+      "kind": "path",
+      "d": "M-8,18 L-24,28 L-28,48 l-10,3",
+      "fill": "none",
+      "stroke": "#1a1a1a",
+      "strokeWidth": 5,
+      "linecap": "round"
+    }
+  ],
+  "head": {
+    "cx": 12,
+    "cy": -22,
+    "r": 13
+  }
+}
