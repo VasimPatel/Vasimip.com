@@ -21,7 +21,6 @@ import {
   createContext,
   createMutableWorld,
   createVerletWorld,
-  sweptCapsuleVsSegments,
   STEP_MS,
   type CharacterRuntime,
   type EngineContext,
@@ -861,6 +860,10 @@ export class EngineLayer extends Component<EngineLayerProps> {
     this.clearTravel()
     if (s.rt.running()) s.rt.forceRelease()
     s.ctx.events.emit('expression:poke', { characterId: this.dash.id })
+    // The legacy grab staging: dangle art (kicking legs) + the protest quip.
+    this.props.sfx('hop')
+    s.rt.act('dangle', { holdMs: 'persist' })
+    this.bubbleNote = { text: 'hey!! down!!', until: performance.now() + 1100 }
   }
 
   /** Centralized travel/flight teardown: camera released, spin/roll cleared,
@@ -927,30 +930,51 @@ export class EngineLayer extends Component<EngineLayerProps> {
     if (!s) return
     // A stationary grab is a CLICK — no settle/thud/quip; the click handler pokes.
     if (!this.dragMoved) return
-    // Settle to the nearest support below. forceRelease() early-returns when no
-    // behavior is running (the grab already released it), so the layer probes
-    // for itself; a drop into the void poofs home to the current panel.
-    const cap = s.rt.capsule()
-    const PROBE = 2200
-    const hit = sweptCapsuleVsSegments(cap, 0, PROBE, s.mw.collision().segments)
-    if (hit) {
-      s.rt.transform.y += hit.t * PROBE - 0.5
-    } else {
-      const spot = this.panelSpot(s.pageIdx, this.currentPanel)
-      if (spot) {
-        this.props.sfx('fx:smoke')
-        s.rt.transform.x = spot.x
-        const c2 = s.rt.capsule()
-        s.rt.transform.y += spot.y - (c2.y1 + c2.r)
+    // THE LEGACY RELEASE (Stage 6): pick the NEAREST panel anchor, throw a 550ms
+    // tuck return arc at it, land with the squash ring, re-run the panel arrival
+    // (legacy panelPose — once-flags gate replays), and ALWAYS deliver a DROPS
+    // quip. A drop into the void can't happen: the nearest anchor is the target.
+    const t = s.rt.transform
+    const pageIdx = s.pageIdx
+    const panels = this.docV2.pages[pageIdx]?.panels ?? []
+    let best = this.currentPanel
+    let bd = Infinity
+    panels.forEach((_, i) => {
+      const sp = this.panelSpot(pageIdx, i)
+      const d = sp ? Math.hypot(sp.x - t.x, sp.y - t.y) : Infinity
+      if (d < bd) {
+        bd = d
+        best = i
       }
+    })
+    const spot = this.panelSpot(pageIdx, best)
+    if (!spot) return
+    this.currentPanel = best
+    this.pendingArrival = this.arrivalId(pageIdx, best)
+    this.stagingUntil = performance.now() + 1100
+    this.props.sfx('hop')
+    s.rt.act('jump-tuck', { holdMs: 560 })
+    const cap = s.rt.capsule()
+    const footY = Math.max(cap.y0, cap.y1) + cap.r
+    this.scriptMove = { fromX: t.x, fromY: t.y, toX: spot.x, toY: t.y + (spot.y - footY), t0: performance.now(), dur: 550, arcH: 26 }
+    const at = (ms: number, fn: () => void): void => {
+      this.backNavTimers.push(window.setTimeout(fn, ms))
     }
-    s.ctx.events.emit('jump:land', { characterId: this.dash.id }) // squash flourish
-    this.props.sfx('thud')
-    const lines = this.props.dropLines
-    if (this.dragMoved && lines && lines.length > 0 && s.ctx.rng.float() < 0.6) {
-      const line = lines[s.ctx.rng.int(0, lines.length)]
-      s.rt.runOneShot('__drop:quip', [{ verb: 'say', text: line }])
-    }
+    at(560, () => {
+      s.rt.clearAct()
+      s.rt.runOneShot('__drop:land', [{ verb: 'strikePose', ref: 'squash-land', holdMs: 300 }])
+      s.ctx.events.emit('jump:land', { characterId: this.dash.id }) // squash flourish
+      this.props.sfx('thud')
+    })
+    at(1040, () => {
+      this.chainArrival()
+      const lines = this.props.dropLines
+      if (lines && lines.length > 0) {
+        // the site bubble (non-interrupting) — the arrival may be speaking too,
+        // and legacy showed the drop quip regardless.
+        this.bubbleNote = { text: pick('drop.line', lines), until: performance.now() + 1700 }
+      }
+    })
   }
 
   // ── charm layer (render-only; replays the legacy keyframes verbatim) ─────────
