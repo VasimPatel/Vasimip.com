@@ -47,6 +47,8 @@ export type EndpointOverrides = Record<string, { ex: number; ey: number }>
 export interface RenderExtras {
   /** Squash/stretch scales from the engine flourish (default 1,1 = off). */
   flourish?: { sx: number; sy: number }
+  /** Whole-figure spin (rad) about the root — the airborne roll (render-layer). */
+  spin?: number
   /** Accessory ribbon point chains (e.g. the bandana), root→tip, world space. */
   accessories?: ReadonlyArray<ReadonlyArray<{ x: number; y: number }>>
 }
@@ -327,8 +329,21 @@ export function createCharacterRenderer(
       const root = solved.bones[rootIndex]
       const rootX = root ? root.ox : 0
       const fl = extras?.flourish
-      if (fl && (Math.abs(fl.sx - 1) > 0.004 || Math.abs(fl.sy - 1) > 0.004)) {
-        group.style.transform = `translate(${rootX}px, ${groundY}px) scale(${fl.sx}, ${fl.sy}) translate(${-rootX}px, ${-groundY}px)`
+      const spin = extras?.spin ?? 0
+      const hasScale = !!fl && (Math.abs(fl.sx - 1) > 0.004 || Math.abs(fl.sy - 1) > 0.004)
+      if (hasScale || Math.abs(spin) > 0.01) {
+        // Two independent pivots: squash scales about the GROUND point (feet stay
+        // planted — the documented flourish contract) while spin rotates about the
+        // figure centre so the roll reads as a tumble, not a ground-pinned sweep.
+        const midY = groundY - 55
+        const parts: string[] = []
+        if (hasScale && fl) {
+          parts.push(`translate(${rootX}px, ${groundY}px)`, `scale(${fl.sx}, ${fl.sy})`, `translate(${-rootX}px, ${-groundY}px)`)
+        }
+        if (Math.abs(spin) > 0.01) {
+          parts.push(`translate(${rootX}px, ${midY}px)`, `rotate(${spin}rad)`, `translate(${-rootX}px, ${-midY}px)`)
+        }
+        group.style.transform = parts.join(' ')
       } else if (group.style.transform) {
         group.style.transform = ''
       }

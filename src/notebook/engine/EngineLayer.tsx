@@ -21,6 +21,7 @@ import {
   createContext,
   createMutableWorld,
   createVerletWorld,
+  sweptCapsuleVsSegments,
   STEP_MS,
   type CharacterRuntime,
   type EngineContext,
@@ -44,6 +45,12 @@ export interface EngineLayerProps {
   onHeading?(panelIdx: number): void
   /** The poke hitbox was clicked (the Notebook plays its sfx/AC ensure). */
   onPoke?(): void
+  /** Camera follow: Dash's live position while traveling; null = travel done
+   * (the Notebook returns the camera to panel focus). */
+  onDashCam?(p: { x: number; y: number } | null): void
+  /** Quips for the end of a drag (the legacy DROPS list) — spoken via the
+   * engine's own bubble so positioning always tracks the figure. */
+  dropLines?: string[]
 }
 
 interface Scene {
@@ -80,6 +87,21 @@ export class EngineLayer extends Component<EngineLayerProps> {
   /** Destination of the in-flight travel run — poof-recovery lands here if the
    * picked behavior blocks/fails (the legacy poof teleport, driver-owned). */
   private travelDest: number | null = null
+  /** Camera-follow throttle + airborne-roll state (render-layer charm). */
+  private camTick = 0
+  private rolling = false
+  private airborne = false
+  private spin = 0
+  private dragging = false
+  private dragMoved = false
+  private dragStart: { x: number; y: number } | null = null
+  private onDragUp: ((e: MouseEvent) => void) | null = null
+  private onDragBlur: (() => void) | null = null
+  private backNavCancel: (() => void) | null = null
+
+  private cancelBackNav(): void {
+    this.backNavCancel?.()
+  }
 
   componentDidMount(): void {
     this.enterPage(this.props.page)
@@ -96,12 +118,33 @@ export class EngineLayer extends Component<EngineLayerProps> {
         s.rt.tick()
         s.verlet.step()
         s.mw.stepMutations()
+        // The legacy roll: spin the tuck through the arc (~1 turn / 600ms) —
+        // advanced PER SIM TICK so rotation speed is refresh-rate independent.
+        if (this.rolling && this.airborne) this.spin += (Math.PI * 2 * STEP_MS) / 600
       }
       this.renderer.render(s.rt.solved(), s.rt.face(), s.rt.overrides(), {
         flourish: s.rt.flourish(),
+        spin: this.rolling && this.airborne ? this.spin : 0,
         accessories: s.rt.accessories.map((a) => a.points()),
       })
+      // Camera follows Dash while a travel is in flight (throttled ~9 ticks; the
+      // Notebook's CSS cam transition glides between updates).
+      if (this.travelDest != null && ++this.camTick % 9 === 0) {
+        this.props.onDashCam?.({ x: s.rt.transform.x, y: s.rt.transform.y })
+      }
       this.drawBubble()
+      // DRAG: while grabbed, the transform follows the cursor (page coords from
+      // the Notebook's look feed) with a light ease; the verlet secondary and
+      // bandana trail it for free — the legacy grab, reborn on physics.
+      if (this.dragging && this.dragMoved && this.look) {
+        const t = s.rt.transform
+        const ease = 0.45
+        const nx = t.x + (this.look.x - t.x) * ease
+        const ny = t.y + (this.look.y - 24 - t.y) * ease
+        if (Math.abs(nx - t.x) + Math.abs(ny - t.y) > 0.8) this.dragMoved = true
+        t.x = nx
+        t.y = ny
+      }
       // Poke hitbox tracks the figure (the wrapper must NOT catch page-wide
       // clicks — review finding: it swallowed the cover's open handler).
       if (this.pokeBox) {
@@ -124,6 +167,13 @@ export class EngineLayer extends Component<EngineLayerProps> {
   }
 
   private teardown(): void {
+    if (this.onDragUp) window.removeEventListener('mouseup', this.onDragUp)
+    if (this.onDragBlur) window.removeEventListener('blur', this.onDragBlur)
+    this.onDragUp = null
+    this.onDragBlur = null
+    this.dragging = false
+    this.cancelBackNav()
+    this.clearTravel()
     for (const off of this.scene?.offs ?? []) off()
     this.scene?.rt.dispose()
     this.renderer?.destroy()
@@ -184,8 +234,21 @@ export class EngineLayer extends Component<EngineLayerProps> {
         this.props.onFlag(flag, value ?? true)
       }),
       ctx.events.on('intent:sfx', (p) => this.props.sfx((p as { kind: string }).kind)),
+      ctx.events.on('jump:launch', () => {
+        this.airborne = true
+      }),
+      ctx.events.on('jump:land', () => {
+        this.airborne = false
+        this.spin = 0
+      }),
+      ctx.events.on('behavior:interrupted', () => {
+        this.airborne = false
+        this.rolling = false
+        this.spin = 0
+      }),
       ctx.events.on('behavior:complete', () => {
         this.travelDest = null
+        this.props.onDashCam?.(null)
         this.chainArrival()
       }),
       ctx.events.on('behavior:ended', () => this.recoverOrArrive()),
@@ -212,7 +275,10 @@ export class EngineLayer extends Component<EngineLayerProps> {
     const doc = this.pickTravel(pageIdx, panelIdx)
     this.pendingArrival = this.arrivalId(pageIdx, panelIdx)
     this.currentPanel = panelIdx
+    this.clearTravel()
     this.travelDest = panelIdx
+    this.rolling = doc.id === 'builtin:roll' || doc.id === 'builtin:hop' || doc.id === 'builtin:combo'
+    this.spin = 0
     this.props.onHeading?.(panelIdx)
     s.rt.runBehavior(doc, { travel: { from: fromId, to: toId } })
   }
@@ -224,6 +290,7 @@ export class EngineLayer extends Component<EngineLayerProps> {
     if (!s) return
     const dest = this.travelDest
     this.travelDest = null
+    this.props.onDashCam?.(null)
     if (dest != null) {
       const spot = this.panelSpot(s.pageIdx, dest)
       if (spot) {
@@ -237,6 +304,80 @@ export class EngineLayer extends Component<EngineLayerProps> {
     this.chainArrival()
   }
 
+  /** Back-nav spectacle (legacy bombBack/poofBack): play a quick beat, then
+   * `done()` (the Notebook flips the page). Never wedges: done is also called on
+   * ended/halted, and a 1.4s timer is the belt-and-braces. */
+  backNav(kind: 'bomb' | 'poof', done: () => void): void {
+    const s = this.scene
+    if (!s) {
+      done()
+      return
+    }
+    this.cancelBackNav() // supersession: a new back-nav cancels the previous
+    let called = false
+    const fire = (): void => {
+      if (called) return
+      called = true
+      offA()
+      offB()
+      this.backNavCancel = null
+      done()
+    }
+    const offA = s.ctx.events.on('behavior:complete', fire)
+    const offB = s.ctx.events.on('behavior:ended', fire)
+    const timer = window.setTimeout(fire, 1400)
+    this.backNavCancel = () => {
+      called = true
+      offA()
+      offB()
+      window.clearTimeout(timer)
+      this.backNavCancel = null
+    }
+    const doc =
+      kind === 'bomb'
+        ? ({ schemaVersion: 2, id: '__backnav:bomb', steps: [
+            { verb: 'strikePose', ref: 'throw', holdMs: 380 },
+            { verb: 'sfx', kind: 'boom' },
+          ] } as never)
+        : ({ schemaVersion: 2, id: '__backnav:poof', steps: [
+            { verb: 'sfx', kind: 'fx:smoke' },
+            { verb: 'strikePose', ref: 'sneeze', holdMs: 240 },
+            { verb: 'sfx', kind: 'poof' },
+          ] } as never)
+    s.rt.runBehavior(doc)
+  }
+
+  /** Dev-hook surface (admin Test buttons + harness): run a specific behavior id
+   * toward the farthest panel, exactly like the legacy hooks did. */
+  testBehavior(behaviorId: string): boolean {
+    const s = this.scene
+    const doc = this.docV2.behaviors[behaviorId]
+    if (!s || !doc) return false
+    const pageIdx = s.pageIdx
+    const panels = this.docV2.pages[pageIdx]?.panels ?? []
+    if (panels.length === 0) return false
+    const here = this.panelSpot(pageIdx, this.currentPanel) ?? { x: s.rt.transform.x, y: s.rt.transform.y }
+    let far = 0
+    let farD = -1
+    panels.forEach((_, i) => {
+      const sp = this.panelSpot(pageIdx, i)
+      const d = sp ? Math.abs(sp.x - here.x) : -1
+      if (d > farD) { farD = d; far = i }
+    })
+    const fromId = `panel:${pageIdx}:${this.currentPanel}`
+    const toId = `panel:${pageIdx}:${far}`
+    this.clearTravel()
+    this.travelDest = far
+    this.pendingArrival = this.arrivalId(pageIdx, far)
+    this.currentPanel = far
+    s.rt.runBehavior(doc, { travel: { from: fromId, to: toId } })
+    return true
+  }
+
+  busy(): boolean {
+    return this.scene?.rt.running() ?? false
+  }
+
   poke(): void {
     const s = this.scene
     if (!s) return
@@ -247,6 +388,86 @@ export class EngineLayer extends Component<EngineLayerProps> {
 
   setLook(x: number, y: number): void {
     this.look = { x, y }
+  }
+
+  /** The Notebook forwards raw client coords so the drag can detect real pointer
+   * movement while in flight (page-coord look alone can't — review blocker). */
+  notePointer(clientX: number, clientY: number): void {
+    if (this.dragging && this.dragStart && !this.dragMoved) {
+      if (Math.hypot(clientX - this.dragStart.x, clientY - this.dragStart.y) > 5) this.dragMoved = true
+    }
+  }
+
+  private beginDrag(e: { clientX: number; clientY: number }): void {
+    const s = this.scene
+    if (!s || this.dragging) return
+    this.dragging = true
+    this.dragMoved = false
+    this.dragStart = { x: e.clientX, y: e.clientY }
+    // A grab interrupts whatever he was doing — safely; travel/camera state must
+    // not survive the interruption (review: stuck camo/spin).
+    this.clearTravel()
+    if (s.rt.running()) s.rt.forceRelease()
+    s.ctx.events.emit('expression:poke', { characterId: this.dash.id })
+    this.onDragUp = (ev) => {
+      // A real drag = the POINTER moved (review blocker: measuring Dash's easing
+      // misclassified stationary clicks as drags and suppressed pokes).
+      if (this.dragStart && Math.hypot(ev.clientX - this.dragStart.x, ev.clientY - this.dragStart.y) > 5) {
+        this.dragMoved = true
+      }
+      this.endDrag()
+    }
+    this.onDragBlur = () => this.endDrag()
+    window.addEventListener('mouseup', this.onDragUp)
+    window.addEventListener('blur', this.onDragBlur)
+  }
+
+  /** Centralized travel/flight teardown: camera released, spin/roll cleared. */
+  private clearTravel(): void {
+    this.travelDest = null
+    this.pendingArrival = null
+    this.rolling = false
+    this.airborne = false
+    this.spin = 0
+    this.props.onDashCam?.(null)
+  }
+
+  private endDrag(): void {
+    if (this.onDragUp) window.removeEventListener('mouseup', this.onDragUp)
+    if (this.onDragBlur) window.removeEventListener('blur', this.onDragBlur)
+    this.onDragUp = null
+    this.onDragBlur = null
+    this.dragStart = null
+    if (!this.dragging) return
+    this.dragging = false
+    const s = this.scene
+    if (!s) return
+    // A stationary grab is a CLICK — no settle/thud/quip; the click handler pokes.
+    if (!this.dragMoved) return
+    // Settle to the nearest support below. forceRelease() early-returns when no
+    // behavior is running (the grab already released it), so the layer probes
+    // for itself; a drop into the void poofs home to the current panel.
+    const cap = s.rt.capsule()
+    const PROBE = 2200
+    const hit = sweptCapsuleVsSegments(cap, 0, PROBE, s.mw.collision().segments)
+    if (hit) {
+      s.rt.transform.y += hit.t * PROBE - 0.5
+    } else {
+      const spot = this.panelSpot(s.pageIdx, this.currentPanel)
+      if (spot) {
+        this.props.sfx('fx:smoke')
+        s.rt.transform.x = spot.x
+        const c2 = s.rt.capsule()
+        s.rt.transform.y += spot.y - (c2.y1 + c2.r)
+      }
+    }
+    s.ctx.events.emit('jump:land', { characterId: this.dash.id }) // squash flourish
+    this.props.sfx('thud')
+    const lines = this.props.dropLines
+    if (this.dragMoved && lines && lines.length > 0 && s.ctx.rng.float() < 0.6) {
+      const line = lines[s.ctx.rng.int(0, lines.length)]
+      s.rt.runBehavior({ schemaVersion: 2, id: '__drop:quip', steps: [{ verb: 'say', text: line }] } as never)
+    }
   }
 
   // ── internals ────────────────────────────────────────────────────────────────
@@ -366,8 +587,14 @@ export class EngineLayer extends Component<EngineLayerProps> {
         />
         <div
           ref={(r) => { this.pokeBox = r }}
-          onClick={() => { this.props.onPoke?.(); this.poke() }}
-          style={{ position: 'absolute', left: 0, top: 0, width: 92, height: 130, pointerEvents: 'auto', cursor: 'pointer' }}
+          data-dash-poke
+          onMouseDown={(e) => { e.preventDefault(); this.beginDrag(e) }}
+          onClick={() => {
+            if (this.dragMoved) { this.dragMoved = false; return } // a drag, not a poke
+            this.props.onPoke?.()
+            this.poke()
+          }}
+          style={{ position: 'absolute', left: 0, top: 0, width: 92, height: 130, pointerEvents: 'auto', cursor: 'grab' }}
         />
       </div>
     )
