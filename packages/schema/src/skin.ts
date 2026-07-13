@@ -92,6 +92,11 @@ export interface PoseSkinDoc {
    * 'parametric': the drawing omits the face and the engine face (pupil dilation,
    * blink, look-at, brows) renders on the head anchor (the idle/stand skins). */
   face?: 'baked' | 'parametric'
+  /** Authored stride distance in px (quality Q1): when present, EVERY keyframe
+   * animation in this skin is PHASE-DRIVEN — the renderer sets animation time
+   * from traveled-distance / strideLen instead of wall-clock, locking contact
+   * beats to world motion (the walk skin). Absent → decorative wall-clock. */
+  strideLen?: number
   /** Whole-figure animation (legacy top-group anims like fightshift/idlesway). */
   groupAnim?: { name: string; delaySec?: number; origin?: string }
   elements: SkinElement[]
@@ -103,7 +108,7 @@ export interface PoseSkinDoc {
 const FRAME_KEYS = new Set(['translate', 'rotate', 'scale', 'opacity'])
 const KEYFRAME_KEYS = new Set(['duration', 'ease', 'iterations', 'fill', 'frames'])
 const KEYFRAMES_DOC_KEYS = new Set(['schemaVersion', 'id', 'keyframes'])
-const POSE_SKIN_KEYS = new Set(['schemaVersion', 'id', 'sources', 'head', 'face', 'groupAnim', 'elements'])
+const POSE_SKIN_KEYS = new Set(['schemaVersion', 'id', 'sources', 'head', 'face', 'groupAnim', 'elements', 'strideLen'])
 const HEAD_KEYS = new Set(['cx', 'cy', 'r'])
 const GROUP_ANIM_KEYS = new Set(['name', 'delaySec', 'origin'])
 const PAINT_KEYS = ['fill', 'stroke', 'strokeWidth', 'linecap', 'opacity']
@@ -226,6 +231,8 @@ const poseSkinChecks: Check[] = [
     }
     if (doc.face !== undefined && doc.face !== 'baked' && doc.face !== 'parametric')
       issues.push("face: must be 'baked' or 'parametric' when present")
+    if (doc.strideLen !== undefined && (!isNum(doc.strideLen) || doc.strideLen <= 0))
+      issues.push('strideLen: must be a finite number > 0 when present')
     if (doc.groupAnim !== undefined) {
       const g = doc.groupAnim
       if (!isRecord(g) || !isStr(g.name)) issues.push('groupAnim: must be { name, delaySec?, origin? }')

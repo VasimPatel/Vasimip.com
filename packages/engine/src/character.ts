@@ -148,6 +148,11 @@ export interface CharacterRuntime {
   activeSource(): { kind: 'pose' | 'clip'; id: string }
   /** Current world collision capsule. */
   capsule(): Capsule
+  /** Presentation contract (quality Q1): where the VISIBLE figure anchors and
+   * how far it has walked. `supportY` is the support line while ground-moving —
+   * a skinned renderer must anchor there, never to the bobbing hip/capsule;
+   * `groundDistance` feeds the distance-locked walk phase. */
+  presentation(): { x: number; y: number; supportY: number | null; facing: 1 | -1; groundDistance: number; groundMoving: boolean }
   /** Verlet endpoint overrides for the renderer (secondary follow-through). */
   overrides(): Record<string, { ex: number; ey: number }>
   /** A behavior is in progress. 7b's watchdog force-release wraps this. */
@@ -472,6 +477,10 @@ export function createCharacterRuntime(opts: CharacterRuntimeOptions): Character
     // The VISIBLE identity: an acting overlay (cue pose, persist arrival) wins over
     // the base — pose props (sword, spray can) and pose-scoped site acting ride it.
     activeSource: () => blender.actingSource() ?? blender.currentSource(),
+    presentation() {
+      const lp = locomotion.presentation()
+      return { x: transform.x, y: transform.y, supportY: lp.supportY, facing: transform.facing, groundDistance: lp.groundDistance, groundMoving: lp.groundMoving }
+    },
     capsule,
     overrides: () => secondary.overrides(),
     running: () => behavior.running(),

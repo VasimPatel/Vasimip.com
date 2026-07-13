@@ -194,7 +194,14 @@ export class EngineLayer extends Component<EngineLayerProps> {
       // Q0 negative control: injected root stepping — the motion metrics must
       // catch exactly this class of defect (review-forced, never organic).
       const negStep = reviewHook()?.force?.['negctl.step'] ? (this.simTicks & 8 ? 4 : -4) : 0
-      const skinRoot = { x: s.rt.transform.x, y: Math.max(cap.y0, cap.y1) + cap.r + negStep }
+      // Q1 — ONE visible locomotion authority: while ground-moving, the skin
+      // anchors to the SUPPORT LINE (never the bobbing hip/capsule — the skin's
+      // own bobw is the only bob) and its walk cycle is PHASE-LOCKED to distance
+      // traveled over the drawing's authored stride.
+      const pres = s.rt.presentation()
+      const skinRoot = { x: pres.x, y: (pres.supportY ?? Math.max(cap.y0, cap.y1) + cap.r) + negStep }
+      const stride = EngineLayer.STRIDES.get(src.id)
+      const phase = stride && pres.groundMoving ? (pres.groundDistance / stride) % 1 : undefined
       this.renderer.render(solved, s.rt.face(), s.rt.overrides(), {
         flourish: s.rt.flourish(),
         spin: this.rolling && this.airborne && !skinned ? this.spin : 0,
@@ -205,6 +212,7 @@ export class EngineLayer extends Component<EngineLayerProps> {
         skinId: src.id,
         skinRoot,
         facing: s.rt.transform.facing as 1 | -1,
+        phase,
       })
       if (reviewHook()?.motion) this.recordMotion(s, solved, skinRoot, src.id)
 
@@ -958,6 +966,11 @@ export class EngineLayer extends Component<EngineLayerProps> {
   }
 
   private static SKINNED = new Set(engineSkins.docs.flatMap((d) => d.sources))
+
+  /** Source id → authored stride (px) for phase-driven skins (Q1). */
+  private static STRIDES = new Map(
+    engineSkins.docs.filter((d) => d.strideLen !== undefined).flatMap((d) => d.sources.map((s) => [s, d.strideLen as number] as const)),
+  )
 
   private actPose: string | null = null
 

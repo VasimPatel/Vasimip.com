@@ -78,6 +78,11 @@ export interface RenderExtras {
   skinRoot?: { x: number; y: number }
   /** Horizontal facing (1 right, −1 left) — mirrors the skin art. */
   facing?: 1 | -1
+  /** Distance-locked gait phase (0..1) for PHASE-DRIVEN skins (docs carrying
+   * `strideLen`): every keyframe animation in such a skin is a paused WAAPI
+   * animation whose currentTime is set from this each frame — contact beats
+   * ride world motion, not wall-clock (quality Q1). Undefined → contact frame. */
+  phase?: number
 }
 
 export interface CharacterRenderer {
@@ -346,8 +351,14 @@ export function createCharacterRenderer(
   // everything via the outer renderer group.
   const skinBySource = new Map<string, PoseSkinDoc>()
   for (const doc of opts?.skins?.docs ?? []) for (const s of doc.sources) skinBySource.set(s, doc)
-  const skinGroups = new Map<string, { outer: SVGGElement; doc: PoseSkinDoc }>()
-  let activeSkin: { outer: SVGGElement; doc: PoseSkinDoc } | null = null
+  interface SkinEntry {
+    outer: SVGGElement
+    doc: PoseSkinDoc
+    /** Paused WAAPI animations for phase-driven skins (strideLen docs). */
+    phaseAnims: Array<{ anim: Animation; durMs: number; offsetMs: number }>
+  }
+  const skinGroups = new Map<string, SkinEntry>()
+  let activeSkin: SkinEntry | null = null
   const skinLayer = document.createElementNS(SVG_NS, 'g') as SVGGElement
   if (faceGroup) group.insertBefore(skinLayer, faceGroup)
   else group.appendChild(skinLayer)
@@ -370,7 +381,44 @@ export function createCharacterRenderer(
     return parts.join(' ')
   }
 
-  function buildSkinElement(e: SkinElement): SVGElement {
+  /** WAAPI keyframes from skin data — the SAME numbers the CSS synthesis uses,
+   * so a phase-driven animation and its wall-clock twin are pixel-identical. */
+  function waapiFrames(k: SkinKeyframe): Keyframe[] {
+    const stops = Object.entries(k.frames)
+      .map(([off, f]) => ({ off: Number(off) / 100, f }))
+      .sort((a, b) => a.off - b.off)
+    return stops.map(({ off, f }) => {
+      const parts: string[] = []
+      if (f.translate) parts.push(`translate(${f.translate[0]}px, ${f.translate[1]}px)`)
+      if (f.rotate !== undefined) parts.push(`rotate(${f.rotate}deg)`)
+      if (f.scale) parts.push(`scale(${f.scale[0]}, ${f.scale[1]})`)
+      const kf: Keyframe = { offset: off, easing: k.ease ?? 'ease-in-out' }
+      if (parts.length > 0) kf.transform = parts.join(' ')
+      if (f.opacity !== undefined) kf.opacity = f.opacity
+      return kf
+    })
+  }
+
+  /** Attach an animation to a skin element: phase-driven skins get a PAUSED
+   * WAAPI instance (currentTime set per frame from the gait phase); decorative
+   * skins keep the CSS wall-clock shorthand. A negative legacy delay shifts the
+   * cycle start (CSS -0.34s == 340ms into the loop). */
+  function attachAnim(el: SVGElement, name: string, delaySec: number | undefined, collector: SkinEntry['phaseAnims'] | null): void {
+    const k = opts?.skins?.keyframes[name]
+    if (!k) return
+    if (collector) {
+      const durMs = k.duration * 1000
+      const anim = el.animate(waapiFrames(k), { duration: durMs, iterations: Infinity })
+      anim.pause()
+      anim.currentTime = 0
+      const offsetMs = ((-(delaySec ?? 0) * 1000) % durMs + durMs) % durMs
+      collector.push({ anim, durMs, offsetMs })
+    } else {
+      el.style.animation = animShorthand(name, delaySec)
+    }
+  }
+
+  function buildSkinElement(e: SkinElement, collector: SkinEntry['phaseAnims'] | null): SVGElement {
     if (e.kind === 'group') {
       const g = document.createElementNS(SVG_NS, 'g') as SVGGElement
       if (e.transform) {
@@ -382,12 +430,12 @@ export function createCharacterRenderer(
       if (e.anim) {
         g.style.transformBox = 'fill-box'
         if (e.origin) g.style.transformOrigin = e.origin
-        g.style.animation = animShorthand(e.anim.name, e.anim.delaySec)
+        attachAnim(g, e.anim.name, e.anim.delaySec, collector)
       } else if (e.origin) {
         g.style.transformBox = 'fill-box'
         g.style.transformOrigin = e.origin
       }
-      for (const c of e.children) g.appendChild(buildSkinElement(c))
+      for (const c of e.children) g.appendChild(buildSkinElement(c, collector))
       return g
     }
     let el: SVGElement
@@ -423,21 +471,22 @@ export function createCharacterRenderer(
     return el
   }
 
-  function skinGroupFor(doc: PoseSkinDoc): { outer: SVGGElement; doc: PoseSkinDoc } {
+  function skinGroupFor(doc: PoseSkinDoc): SkinEntry {
     const cached = skinGroups.get(doc.id)
     if (cached) return cached
     const outer = document.createElementNS(SVG_NS, 'g') as SVGGElement
     const inner = document.createElementNS(SVG_NS, 'g') as SVGGElement
+    const entry: SkinEntry = { outer, doc, phaseAnims: [] }
+    const collector = doc.strideLen !== undefined ? entry.phaseAnims : null
     if (doc.groupAnim) {
       inner.style.transformBox = 'fill-box'
       inner.style.transformOrigin = doc.groupAnim.origin ?? '50% 88%'
-      inner.style.animation = animShorthand(doc.groupAnim.name, doc.groupAnim.delaySec)
+      attachAnim(inner, doc.groupAnim.name, doc.groupAnim.delaySec, collector)
     }
-    for (const e of doc.elements) inner.appendChild(buildSkinElement(e))
+    for (const e of doc.elements) inner.appendChild(buildSkinElement(e, collector))
     outer.appendChild(inner)
     outer.style.display = 'none'
     skinLayer.appendChild(outer)
-    const entry = { outer, doc }
     skinGroups.set(doc.id, entry)
     return entry
   }
@@ -455,7 +504,7 @@ export function createCharacterRenderer(
   /** Swap the visible skin (or back to the rig). display:none unloads CSS
    * animations, so re-showing a cached skin RESTARTS them from 0 — the same
    * behavior as the legacy React component remount. */
-  function swapSkin(next: { outer: SVGGElement; doc: PoseSkinDoc } | null): void {
+  function swapSkin(next: SkinEntry | null): void {
     if (activeSkin === next) return
     if (activeSkin) activeSkin.outer.style.display = 'none'
     activeSkin = next
@@ -668,6 +717,14 @@ export function createCharacterRenderer(
           'transform',
           `translate(${sr.x},${sr.y}) scale(${SKIN_SX * facing},${SKIN_SY}) translate(0,${-SKIN_FOOT_Y})`,
         )
+        // Phase-driven skins: one motion clock — set every paused animation's
+        // currentTime from the distance-locked gait phase (quality Q1).
+        if (activeSkin.phaseAnims.length > 0) {
+          const phase = extras.phase ?? 0
+          for (const pa of activeSkin.phaseAnims) {
+            pa.anim.currentTime = (phase * pa.durMs + pa.offsetMs) % pa.durMs
+          }
+        }
       }
 
       // Accessory ribbons (engine-owned cape — drawn under skins AND rig).

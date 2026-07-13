@@ -270,6 +270,10 @@ function prune(elements, warn) {
 // Per-pose hand fixups: the parametric-face poses (legacy Idle/Spray track the
 // cursor with their eyes) hand their face to the ENGINE face (pupil dilation,
 // blink, look-at, pose-face brows/mouth); their baked smirk/eyes drop here.
+// Authored stride distances (quality Q1): the walk drawing covers this many px
+// of ground per 0.8s cycle at the legacy 190 px/s pace (190 / 1.25 cycles/s).
+const STRIDES = { Walk: 152 }
+
 const FIXUPS = {
   Idle: {
     face: 'parametric',
@@ -389,6 +393,7 @@ for (const file of files) {
     elements,
   }
   applyFixups(base, skin, warn)
+  if (STRIDES[base]) skin.strideLen = STRIDES[base]
   // head anchor AFTER fixups (Idle's head is re-injected there)
   const head = findHead(skin.elements)
   if (head) skin.head = head
@@ -409,7 +414,12 @@ for (const file of files) {
   console.log(`✓ ${base} → skins/${sources[0]}.json (${JSON.stringify(skin).length}b)${warns.length ? '  ⚠ ' + warns.join('; ') : ''}`)
 }
 
-// the shared keyframes table: only the names skins actually use
+// the shared keyframes table: only the names skins actually use. A FILTERED run
+// (pose args) must not clobber the full table — skip the write entirely.
+if (only.length > 0) {
+  console.log(`\n${skinsWritten} skins updated (filtered run — keyframes.json left untouched)`)
+  process.exit(0)
+}
 const keyframes = {}
 for (const name of [...usedAnims].sort()) {
   const frames = rawFrames[name]
