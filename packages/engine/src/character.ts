@@ -115,8 +115,10 @@ export interface CharacterState {
   recoilVx: number
   /** The runtime-owned watchdog's window (latch + elapsed), so restore keeps it coherent. */
   watchdog: WatchdogState
-  /** Squash/stretch flourish spring (charm) — optional for pre-charm snapshots. */
-  squash?: { sx: number; sy: number; vx: number; vy: number }
+  /** Squash/stretch flourish spring (charm) — optional for pre-charm snapshots.
+   * `hold` is the windup's held crouch target (parity pass) — a serializer that
+   * drops it would restore a mid-anticipation snapshot un-crouched. */
+  squash?: { sx: number; sy: number; vx: number; vy: number; hold?: { sx: number; sy: number } | null }
 }
 
 export interface CharacterRuntime {
@@ -313,6 +315,7 @@ export function createCharacterRuntime(opts: CharacterRuntimeOptions): Character
 
   function forceRelease(): void {
     behavior.forceRelease()
+    flourish.releaseHold() // a release mid-anticipation must drop the held crouch
     recoilVx = 0
     settleToSupport()
   }

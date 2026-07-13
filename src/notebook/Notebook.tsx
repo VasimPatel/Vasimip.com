@@ -406,6 +406,15 @@ export default class Notebook extends React.Component<NotebookProps, State> {
 
   /** Engine sfx kinds → the AudioEngine vocabulary (fx:* approximated until 9c). */
   private engineSfx(kind: string) {
+    // The migration expresses v1 fx steps as sfx intents — the sound maps here,
+    // and the legacy PAGE VISUAL replays alongside it (review: engine mode played
+    // a whoosh with no shove/jitter/shake).
+    if (kind === 'fx:pageShove') {
+      const dir = this.engineRef && this.state.dx > 460 ? -1 : 1
+      this.setState({ pageShove: dir * 34 })
+      this.to(1000, () => this.setState({ pageShove: 0 }))
+    } else if (kind === 'fx:jitPage') this.jitPage()
+    else if (kind === 'fx:shake') this.shakeCam()
     const map: Record<string, SfxKind> = { 'fx:smoke': 'whoosh', 'fx:crack': 'crack', 'fx:shake': 'boom', 'fx:jitPage': 'scrib', 'fx:pageShove': 'whoosh', poof: 'whoosh', thud: 'knock' }
     const k = (map[kind] ?? kind) as SfxKind
     if ((SFX_KINDS as readonly string[]).includes(k)) this.sfx(k)

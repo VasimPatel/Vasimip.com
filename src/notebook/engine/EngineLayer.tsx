@@ -317,7 +317,7 @@ export class EngineLayer extends Component<EngineLayerProps> {
       rt.transform.x = pn0.x + 10
       rt.transform.facing = 1
       this.travelDest = 0
-      this.props.sfx('fx:jitPage')
+      this.props.sfx('scrib')
       rt.runBehavior(walkDoc, { travel: { from: `panel:${pageIdx}:0`, to: `panel:${pageIdx}:0` } })
       return
     }
@@ -373,6 +373,7 @@ export class EngineLayer extends Component<EngineLayerProps> {
       return
     }
     this.cancelBackNav() // supersession: a new back-nav cancels the previous
+    this.clearArc()
     let called = false
     const fire = (): void => {
       if (called) return
@@ -465,7 +466,7 @@ export class EngineLayer extends Component<EngineLayerProps> {
    * movement while in flight (page-coord look alone can't — review blocker). */
   notePointer(clientX: number, clientY: number): void {
     if (this.dragging && this.dragStart && !this.dragMoved) {
-      if (Math.hypot(clientX - this.dragStart.x, clientY - this.dragStart.y) > 5) this.dragMoved = true
+      if (Math.hypot(clientX - this.dragStart.x, clientY - this.dragStart.y) > 5) this.dragBecameReal()
     }
   }
 
@@ -475,16 +476,12 @@ export class EngineLayer extends Component<EngineLayerProps> {
     this.dragging = true
     this.dragMoved = false
     this.dragStart = { x: e.clientX, y: e.clientY }
-    // A grab interrupts whatever he was doing — safely; travel/camera state must
-    // not survive the interruption (review: stuck camo/spin).
-    this.clearTravel()
-    if (s.rt.running()) s.rt.forceRelease()
-    s.ctx.events.emit('expression:poke', { characterId: this.dash.id })
+    // NOTHING is interrupted yet — a mid-jump CLICK must not cancel the trip
+    // (review: pointer-down cleared travel before click/drag were distinguished).
+    // The interruption happens in dragBecameReal(), on real pointer movement.
     this.onDragUp = (ev) => {
-      // A real drag = the POINTER moved (review blocker: measuring Dash's easing
-      // misclassified stationary clicks as drags and suppressed pokes).
       if (this.dragStart && Math.hypot(ev.clientX - this.dragStart.x, ev.clientY - this.dragStart.y) > 5) {
-        this.dragMoved = true
+        this.dragBecameReal()
       }
       this.endDrag()
     }
@@ -493,14 +490,36 @@ export class EngineLayer extends Component<EngineLayerProps> {
     window.addEventListener('blur', this.onDragBlur)
   }
 
-  /** Centralized travel/flight teardown: camera released, spin/roll cleared. */
+  /** The grab crossed the drag threshold — NOW it interrupts travel/behaviors
+   * (idempotent; called from notePointer or the mouseup distance check). */
+  private dragBecameReal(): void {
+    const s = this.scene
+    if (this.dragMoved || !s) {
+      this.dragMoved = true
+      return
+    }
+    this.dragMoved = true
+    this.clearTravel()
+    if (s.rt.running()) s.rt.forceRelease()
+    s.ctx.events.emit('expression:poke', { characterId: this.dash.id })
+  }
+
+  /** Centralized travel/flight teardown: camera released, spin/roll cleared,
+   * any in-flight fidget/poke arc stopped (review: a wrapper animation kept
+   * rotating about its OLD world origin while Dash flew elsewhere). */
   private clearTravel(): void {
     this.travelDest = null
     this.pendingArrival = null
     this.rolling = false
     this.airborne = false
     this.spin = 0
+    this.clearArc()
     this.props.onDashCam?.(null)
+  }
+
+  private clearArc(): void {
+    window.clearTimeout(this.arcTimer)
+    if (this.arcWrap) this.arcWrap.style.animation = ''
   }
 
   private endDrag(): void {
@@ -602,7 +621,7 @@ export class EngineLayer extends Component<EngineLayerProps> {
         } else if (f === 'wave') {
           s.rt.runBehavior({ schemaVersion: 2, id: '__fidget:wave', steps: [{ verb: 'strikePose', ref: 'wave', holdMs: 1200 }] } as never)
         } else if (f === 'sneeze') {
-          this.props.sfx('fx:jitPage')
+          this.props.sfx('scrib')
           s.rt.runBehavior({ schemaVersion: 2, id: '__fidget:sneeze', steps: [
             { verb: 'say', text: 'ah— ah— CHOO!' },
             { verb: 'strikePose', ref: 'sneeze', holdMs: 700 },
