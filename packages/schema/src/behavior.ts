@@ -437,8 +437,8 @@ function checkGate(g: unknown, path: string, issues: Issues): void {
       if (gg[k] !== undefined && (!isNum(gg[k]) || (gg[k] as number) < 0)) issues.push(`${path}.geom.${k}: must be a number >= 0`)
     }
     if (gg.vert !== undefined && gg.vert !== 'up' && gg.vert !== 'down') issues.push(`${path}.geom.vert: must be 'up' or 'down'`)
-    if (gg.fromPanel !== undefined && (!isArr(gg.fromPanel) || !gg.fromPanel.every((n) => isNum(n))))
-      issues.push(`${path}.geom.fromPanel: must be an array of numbers`)
+    if (gg.fromPanel !== undefined && (!isArr(gg.fromPanel) || !gg.fromPanel.every((n) => isNum(n) && Number.isInteger(n))))
+      issues.push(`${path}.geom.fromPanel: must be an array of integer panel indices`)
   }
 }
 

@@ -99,7 +99,25 @@ export interface PoseSkinDoc {
 
 // ── validation ────────────────────────────────────────────────────────────────
 
+// Closed shapes (review: open skin schemas let typoed fields validate silently).
 const FRAME_KEYS = new Set(['translate', 'rotate', 'scale', 'opacity'])
+const KEYFRAME_KEYS = new Set(['duration', 'ease', 'iterations', 'fill', 'frames'])
+const KEYFRAMES_DOC_KEYS = new Set(['schemaVersion', 'id', 'keyframes'])
+const POSE_SKIN_KEYS = new Set(['schemaVersion', 'id', 'sources', 'head', 'face', 'groupAnim', 'elements'])
+const HEAD_KEYS = new Set(['cx', 'cy', 'r'])
+const GROUP_ANIM_KEYS = new Set(['name', 'delaySec', 'origin'])
+const PAINT_KEYS = ['fill', 'stroke', 'strokeWidth', 'linecap', 'opacity']
+const ELEMENT_KEYS: Record<string, Set<string>> = {
+  path: new Set(['kind', 'd', ...PAINT_KEYS]),
+  circle: new Set(['kind', 'cx', 'cy', 'r', ...PAINT_KEYS]),
+  ellipse: new Set(['kind', 'cx', 'cy', 'rx', 'ry', ...PAINT_KEYS]),
+  rect: new Set(['kind', 'x', 'y', 'w', 'h', 'rx', ...PAINT_KEYS]),
+  group: new Set(['kind', 'anim', 'origin', 'transform', 'children']),
+}
+
+function rejectUnknown(obj: Record<string, unknown>, allowed: Set<string>, path: string, issues: Issues): void {
+  for (const k of Object.keys(obj)) if (!allowed.has(k)) issues.push(`${path}.${k}: unknown key`)
+}
 
 function checkFrame(f: unknown, path: string, issues: Issues): void {
   if (!isRecord(f)) return void issues.push(`${path}: must be an object`)
@@ -115,6 +133,7 @@ function checkFrame(f: unknown, path: string, issues: Issues): void {
 
 function checkKeyframe(k: unknown, path: string, issues: Issues): void {
   if (!isRecord(k)) return void issues.push(`${path}: must be an object`)
+  rejectUnknown(k, KEYFRAME_KEYS, path, issues)
   if (!isNum(k.duration) || k.duration <= 0) issues.push(`${path}.duration: required seconds > 0`)
   if (k.ease !== undefined && !isStr(k.ease)) issues.push(`${path}.ease: must be a string`)
   if (k.iterations !== undefined && k.iterations !== 'infinite' && (!isNum(k.iterations) || k.iterations <= 0 || !Number.isInteger(k.iterations)))
@@ -142,6 +161,7 @@ function checkPaint(e: Record<string, unknown>, path: string, issues: Issues): v
 
 function checkElement(e: unknown, path: string, issues: Issues, depth: number): void {
   if (!isRecord(e)) return void issues.push(`${path}: must be an object`)
+  if (typeof e.kind === 'string' && ELEMENT_KEYS[e.kind]) rejectUnknown(e, ELEMENT_KEYS[e.kind], path, issues)
   switch (e.kind) {
     case 'path':
       if (!isStr(e.d) || e.d.length === 0) issues.push(`${path}.d: required non-empty string`)
@@ -180,7 +200,8 @@ function checkElement(e: unknown, path: string, issues: Issues, depth: number): 
 
 const keyframesChecks: Check[] = [
   (doc, issues) => {
-    if (!isNum(doc.schemaVersion)) issues.push('schemaVersion: required number')
+    rejectUnknown(doc, KEYFRAMES_DOC_KEYS, 'doc', issues)
+    if (doc.schemaVersion !== 2) issues.push('schemaVersion: must be 2')
     if (!isStr(doc.id) || doc.id.length === 0) issues.push('id: required non-empty string')
     if (!isRecord(doc.keyframes)) return void issues.push('keyframes: required record')
     for (const [name, k] of Object.entries(doc.keyframes)) {
@@ -192,7 +213,8 @@ const keyframesChecks: Check[] = [
 
 const poseSkinChecks: Check[] = [
   (doc, issues) => {
-    if (!isNum(doc.schemaVersion)) issues.push('schemaVersion: required number')
+    rejectUnknown(doc, POSE_SKIN_KEYS, 'doc', issues)
+    if (doc.schemaVersion !== 2) issues.push('schemaVersion: must be 2')
     if (!isStr(doc.id) || !(doc.id as string).startsWith('skin:')) issues.push("id: required, must start with 'skin:'")
     if (!isArr(doc.sources) || doc.sources.length === 0 || !(doc.sources as unknown[]).every((s) => isStr(s) && s.length > 0))
       issues.push('sources: required non-empty array of pose/clip ids')
@@ -200,6 +222,7 @@ const poseSkinChecks: Check[] = [
       const h = doc.head
       if (!isRecord(h) || !isNum(h.cx) || !isNum(h.cy) || !isNum(h.r) || (h.r as number) <= 0)
         issues.push('head: must be { cx, cy, r } with r > 0')
+      else rejectUnknown(h, HEAD_KEYS, 'head', issues)
     }
     if (doc.face !== undefined && doc.face !== 'baked' && doc.face !== 'parametric')
       issues.push("face: must be 'baked' or 'parametric' when present")
@@ -207,6 +230,7 @@ const poseSkinChecks: Check[] = [
       const g = doc.groupAnim
       if (!isRecord(g) || !isStr(g.name)) issues.push('groupAnim: must be { name, delaySec?, origin? }')
       else {
+        rejectUnknown(g, GROUP_ANIM_KEYS, 'groupAnim', issues)
         if (g.delaySec !== undefined && !isNum(g.delaySec)) issues.push('groupAnim.delaySec: must be a number')
         if (g.origin !== undefined && !isStr(g.origin)) issues.push('groupAnim.origin: must be a string')
       }

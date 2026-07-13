@@ -397,7 +397,14 @@ export class EngineLayer extends Component<EngineLayerProps> {
         }
         this.chainArrival()
       }),
-      ctx.events.on('behavior:ended', () => this.recoverOrArrive()),
+      // One-shot endings (reason = our '__' labels: staged landing beats, quips,
+      // flourishes) must NOT chain arrivals/recovery — the staged timeline owns
+      // that moment (review: a landing one-shot consumed the arrival early and
+      // the timer's later chainArrival double-ran the flourish roll).
+      ctx.events.on('behavior:ended', (p) => {
+        if (String((p as { reason?: string }).reason ?? '').startsWith('__')) return
+        this.recoverOrArrive()
+      }),
       ctx.events.on('behavior:halted', () => this.recoverOrArrive()),
     ]
 
@@ -533,10 +540,12 @@ export class EngineLayer extends Component<EngineLayerProps> {
       this.poofTravel(panelIdx)
       return
     }
+    // clearTravel FIRST — it nulls pendingArrival (review BLOCKER: the old order
+    // set the arrival and then wiped it, so travel arrivals never played).
+    this.clearTravel()
     this.travelFrom = this.currentPanel
     this.pendingArrival = this.arrivalId(pageIdx, panelIdx)
     this.currentPanel = panelIdx
-    this.clearTravel()
     this.travelDest = panelIdx
     this.rolling = doc.id === 'builtin:roll' || doc.id === 'builtin:hop' || doc.id === 'builtin:combo'
     this.spin = 0
@@ -576,10 +585,10 @@ export class EngineLayer extends Component<EngineLayerProps> {
     const pageIdx = s.pageIdx
     const spot = this.panelSpot(pageIdx, destIdx)
     if (!spot) return
+    this.clearTravel() // FIRST — it nulls pendingArrival (same review blocker)
     this.travelFrom = this.currentPanel
     this.pendingArrival = this.arrivalId(pageIdx, destIdx)
     this.currentPanel = destIdx
-    this.clearTravel()
     this.stagingUntil = performance.now() + 1350
     this.props.onHeading?.(destIdx)
     const t = s.rt.transform
@@ -830,7 +839,10 @@ export class EngineLayer extends Component<EngineLayerProps> {
 
   private beginDrag(e: { clientX: number; clientY: number }): void {
     const s = this.scene
-    if (!s || this.dragging) return
+    // No grabs during staged spectacles (back-nav/poof/hang landings) — a drag
+    // would fight the timeline's scripted motion (review blocker; legacy gated
+    // grabs on busy the same way).
+    if (!s || this.dragging || performance.now() < this.stagingUntil) return
     this.dragging = true
     this.dragMoved = false
     this.dragStart = { x: e.clientX, y: e.clientY }
@@ -872,6 +884,7 @@ export class EngineLayer extends Component<EngineLayerProps> {
   private clearTravel(): void {
     this.travelDest = null
     this.pendingArrival = null
+    this.pendingHang = false // a superseded hop must not attach hang staging later
     this.rolling = false
     this.airborne = false
     this.spin = 0

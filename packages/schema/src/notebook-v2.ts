@@ -95,6 +95,9 @@ function checkPanel(x: unknown, path: string, issues: Issues, behaviorIds: Set<s
   if (x.arrival !== undefined) {
     if (!isRecord(x.arrival) || !isStr(x.arrival.behaviorId)) issues.push(`${path}.arrival: must be { behaviorId }`)
     else {
+      for (const k of Object.keys(x.arrival)) {
+        if (k !== 'behaviorId' && k !== 'flourish' && k !== 'hasPose') issues.push(`${path}.arrival.${k}: unknown key`)
+      }
       if (!behaviorIds.has(x.arrival.behaviorId)) {
         issues.push(`${path}.arrival.behaviorId: references unknown behavior ${JSON.stringify(x.arrival.behaviorId)}`)
       }
@@ -111,6 +114,9 @@ function checkPanel(x: unknown, path: string, issues: Issues, behaviorIds: Set<s
       x.travel.pool.forEach((e, i) => {
         if (!isRecord(e) || !isStr(e.behaviorId)) issues.push(`${path}.travel.pool[${i}]: must be { behaviorId, weight? }`)
         else {
+          for (const k of Object.keys(e)) {
+            if (k !== 'behaviorId' && k !== 'weight') issues.push(`${path}.travel.pool[${i}].${k}: unknown key`)
+          }
           if (!behaviorIds.has(e.behaviorId)) {
             issues.push(`${path}.travel.pool[${i}].behaviorId: references unknown behavior ${JSON.stringify(e.behaviorId)}`)
           }
@@ -197,6 +203,11 @@ export function tryValidateNotebookV2(
             }
             if (it.verb === 'playClip' && isStr(it.ref) && !clipIds.has(it.ref)) {
               issues.push(`${p}: playClip references unknown clip ${JSON.stringify(it.ref)}`)
+            }
+            // move-scoped acting pose (Stage 3/4 widening) — same rules as
+            // strikePose refs: unknown = validation error, never silent no-op.
+            if ((it.verb === 'moveTo' || it.verb === 'jumpTo' || it.verb === 'flyTo' || it.verb === 'flyThrough') && isStr(it.pose) && !poseIds.has(it.pose) && !clipIds.has(it.pose)) {
+              issues.push(`${p}: move pose references unknown pose/clip ${JSON.stringify(it.pose)}`)
             }
             if (it.verb === 'branchOnFlag') {
               walkIntents(it.then, `${p}.then`)

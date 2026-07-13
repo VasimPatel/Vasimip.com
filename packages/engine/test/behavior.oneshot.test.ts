@@ -108,6 +108,11 @@ test('snapshot mid-one-shot restores onto a fresh runtime with an empty registry
   r2.rt.setState(snap) // would throw "not in the registry" if one-shots stored an id
   driveToCompletion(r2)
   expect(r2.rt.running()).toBe(false)
+  // The snapshot carries the one-shot's BUDGET (review blocker: a fresh runtime
+  // restored budget 0 and the watchdog force-released on the next tick).
+  expect(eventsOf(r2, 'watchdog:forced-release').length).toBe(0)
+  // …and the restored run actually FINISHED its steps (the strikePose completed).
+  expect(eventsOf(r2, 'behavior:ended').length).toBe(1)
 })
 
 test('a one-shot interrupts a running movement like run() does', () => {

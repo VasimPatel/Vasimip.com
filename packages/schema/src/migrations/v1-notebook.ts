@@ -152,8 +152,13 @@ export function migrateNotebookV1(
           break
         case 'cam': {
           // v1 camera focus vocabulary → TargetRefs: 'dash' frames the character,
-          // 'target' frames the destination, 'midpoint' IS the in-flight framing
-          // the adapter applies to travel targets. mult/fast carry through.
+          // 'target' frames the destination, 'mid(point)' IS the in-flight framing
+          // the adapter applies to travel targets. Raw {cx,cy} focus has no
+          // ref-shaped home → approximate + REPORT (the honesty contract).
+          // mult/fast carry through.
+          if (s.on !== 'dash' && s.on !== 'target' && s.on !== 'mid' && s.on !== 'midpoint') {
+            report.lossy.push(`${sw}.on: camera focus ${JSON.stringify(s.on)} approximated as travel:to#interior`)
+          }
           const to = s.on === 'dash' ? 'entity:dash' : 'travel:to#interior'
           steps.push({
             verb: 'camera',
@@ -181,12 +186,15 @@ export function migrateNotebookV1(
     if (isRecord(action.when)) {
       const w = action.when
       const geom: Record<string, unknown> = {}
-      if (isNum(w.minDist)) geom.minDist = w.minDist
-      if (isNum(w.maxDist)) geom.maxDist = w.maxDist
-      if (isNum(w.minHoriz)) geom.minHoriz = w.minHoriz
-      if (isNum(w.minVert)) geom.minVert = w.minVert
+      // v1 permitted finite negative thresholds; the v2 gate requires >= 0 — a
+      // negative min is vacuous anyway, so clamp (review: a validator-accepted
+      // v1 doc must never generate an invalid v2 doc).
+      if (isNum(w.minDist)) geom.minDist = Math.max(0, w.minDist)
+      if (isNum(w.maxDist)) geom.maxDist = Math.max(0, w.maxDist)
+      if (isNum(w.minHoriz)) geom.minHoriz = Math.max(0, w.minHoriz)
+      if (isNum(w.minVert)) geom.minVert = Math.max(0, w.minVert)
       if (w.vert === 'up' || w.vert === 'down') geom.vert = w.vert
-      if (isArr(w.fromPanel)) geom.fromPanel = w.fromPanel
+      if (isArr(w.fromPanel) && w.fromPanel.every((n) => isNum(n) && Number.isInteger(n))) geom.fromPanel = w.fromPanel
       if (Object.keys(geom).length > 0) (doc as { when?: unknown }).when = { geom }
     }
     addGenerated(id, doc)

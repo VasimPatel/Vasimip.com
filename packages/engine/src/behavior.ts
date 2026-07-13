@@ -129,6 +129,11 @@ export interface BehaviorState {
   runId: number
   /** monotonic count of locomotion.begin() calls this run-lifetime (see BehaviorFrame.moveSeq). */
   moveSeq: number
+  /** The run's watchdog time bound. REQUIRED for one-shot runs (doc = null →
+   * nothing to recompute from; a fresh runtime would otherwise restore budget 0
+   * and force-release on the next tick — review blocker). Optional so pre-parity
+   * snapshots (doc-bound, recomputable) restore unchanged. */
+  budget?: number
 }
 
 export interface BehaviorDeps {
@@ -625,6 +630,9 @@ export function createBehaviorExecutor(deps: BehaviorDeps): BehaviorExecutor {
         endBehavior('halted', inReaction() ? 'reaction-movement-failed' : 'movement-failed')
       } else if (f.stepElapsedMs >= movementTimeout(step)) {
         // timeout: bounded even if the solver's own bounds somehow don't bite → give-up.
+        // A move-scoped acting pose leaves with its move here too (review: an empty
+        // onTimeout reaction would otherwise strand the crossing art persistently).
+        if ((step as { pose?: string }).pose) blender.clearActing()
         emit('intent:timeout', { step: f.index, verb: step.verb })
         if (!inReaction()) concludeTimeout('timeout')
         else endBehavior('halted', 'reaction-timeout')
@@ -804,11 +812,15 @@ export function createBehaviorExecutor(deps: BehaviorDeps): BehaviorExecutor {
         speech: speech ? { ...speech } : null,
         runId,
         moveSeq,
+        budget,
       }
     },
     setState(s: BehaviorState) {
       if (s.behaviorId === null) {
         doc = null
+        // one-shot (docless) runs carry their budget in the snapshot; a pre-parity
+        // snapshot with a null doc is an idle state (budget irrelevant).
+        budget = s.budget ?? 0
       } else {
         const bound = registry.get(s.behaviorId)
         if (bound === undefined) {
@@ -817,7 +829,7 @@ export function createBehaviorExecutor(deps: BehaviorDeps): BehaviorExecutor {
           )
         }
         doc = bound
-        budget = computeBudget(bound)
+        budget = s.budget ?? computeBudget(bound)
       }
       status = s.status
       flags = { ...s.flags }

@@ -15,6 +15,11 @@
       "match": "unmapped v1 target",
       "why": "defensive: a target shape outside the v1 vocabulary coarsens to the destination anchor rather than crashing the migration",
       "restoredBy": "n/a — defensive fallback (none occur in the live doc)"
+    },
+    {
+      "match": "camera focus",
+      "why": "defensive: raw {cx,cy} camera focus has no TargetRef home — approximated as the destination and reported (none occur in the live doc)",
+      "restoredBy": "n/a — defensive fallback"
     }
   ]
 }

@@ -811,10 +811,13 @@ export default class Notebook extends React.Component<NotebookProps, State> {
     if (s.busy || s.dragging || p === s.page) return
     this.sfx('flip')
     const lo = Math.min(s.page, p), hi = Math.max(s.page, p) - 1
-    if (this.engineMode && p === s.page + 1 && s.page > 0 && chance('flip.surf', .38)) {
-      // Engine surf: the layer stages the ride-in after the flip lands.
-      this.engineRef?.surfNext()
-    } else if (p === s.page + 1 && s.page > 0 && s.dop === 1 && chance('flip.surf', .38)) {
+    if (p === s.page + 1 && s.page > 0 && chance('flip.surf', .38)) {
+      // ONE surf roll for both routes (review: the engine branch falling through
+      // rolled a second legacy chance, inflating surf probability and running
+      // hidden legacy choreography in admin previews).
+      if (this.engineMode) {
+        this.engineRef?.surfNext() // the layer stages the ride-in after the flip
+      } else if (s.dop === 1) {
       const a = this.anch(p, 0)
       this.sfx('whoosh')
       this.setState({
@@ -828,18 +831,29 @@ export default class Notebook extends React.Component<NotebookProps, State> {
       this.to(1240, () => { this.setState({ pose: 'land' }); this.shakeCam() })
       this.to(1780, () => { this.panelPose(); this.setState({ busy: false }) })
       return
+      }
     }
     this.setState({ busy: true, busyFlip: true, flipRange: [lo, hi], page: p, panel: landPanel, pose: 'hidden', dop: 0 })
     this.to(820, () => {
       this.setState({ busyFlip: false })
       if (p === 0) this.setState({ busy: false })
-      else this.enterPage()
+      else if (this.engineMode) {
+        // The engine layer stages its own entrance/landing (and keeps its OWN
+        // busy); legacy enterPage() would stomp `panel` back to 0 (review
+        // BLOCKER: back-nav landings focus the LAST panel) and run the hidden
+        // legacy walk-in against engine state.
+        this.setState({ busy: false })
+      } else this.enterPage()
     })
   }
 
   next() {
     const s = this.state
     if (s.busy || s.dragging) return
+    // Engine travels/stagings don't set Notebook busy — gate on the engine's own
+    // busy (review BLOCKER: repeated input / the autoplay interval could
+    // interrupt long performances mid-staging).
+    if (this.engineMode && this.engineRef?.busy()) return
     if (s.page === 0) { this.flipTo(1); return }
     const n = this.geom()[s.page].panels.length
     if (s.panel < n - 1) this.travel(s.panel + 1)
@@ -850,6 +864,7 @@ export default class Notebook extends React.Component<NotebookProps, State> {
   prev() {
     const s = this.state
     if (s.busy || s.dragging || s.page === 0) return
+    if (this.engineMode && this.engineRef?.busy()) return
     if (s.panel > 0) this.travel(s.panel - 1)
     else if (s.page === 1) this.flipTo(0)
     else if (this.engineMode) {
