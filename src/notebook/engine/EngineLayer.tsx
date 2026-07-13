@@ -95,8 +95,7 @@ export class EngineLayer extends Component<EngineLayerProps> {
   /** Destination of the in-flight travel run — poof-recovery lands here if the
    * picked behavior blocks/fails (the legacy poof teleport, driver-owned). */
   private travelDest: number | null = null
-  /** Camera-follow throttle + airborne-roll state (render-layer charm). */
-  private camTick = 0
+  /** Airborne-roll state (render-layer charm). */
   private rolling = false
   private airborne = false
   private spin = 0
@@ -114,8 +113,6 @@ export class EngineLayer extends Component<EngineLayerProps> {
   private fidgetTimer = 0
   /** Smoothed cursor-lean (rad) — the legacy .22s ease-out transition. */
   private lean = 0
-  /** An authored camera cue owns the shot (suppresses the follow cam). */
-  private camOverride = false
   /** Scripted root motion (back-nav hop-to-hole) — render-layer, like drag. */
   private scriptMove: { fromX: number; fromY: number; toX: number; toY: number; t0: number; dur: number; arcH: number } | null = null
   /** Actor visibility (back-nav dive/poof vanish). */
@@ -258,13 +255,6 @@ export class EngineLayer extends Component<EngineLayerProps> {
       })
       if (reviewHook()?.motion) this.recordMotion(s, solved, skinRoot, src.id)
 
-      // Camera follows Dash while a travel is in flight (throttled ~9 ticks; the
-      // Notebook's CSS cam transition glides between updates) — unless an
-      // AUTHORED camera cue owns the shot (cleared by cue or behavior end).
-      if (this.travelDest != null && !this.camOverride && ++this.camTick % 9 === 0) {
-        this.lastCam = { x: s.rt.transform.x, y: s.rt.transform.y }
-        this.props.onDashCam?.(this.lastCam)
-      }
       // Scripted root motion (back-nav hop-to-hole): a render-layer arc, exactly
       // like the drag's direct transform drive.
       if (this.scriptMove) {
@@ -462,7 +452,6 @@ export class EngineLayer extends Component<EngineLayerProps> {
       ctx.events.on('intent:camera', (p) => {
         const c = p as { to?: string; mult?: number; fast?: boolean }
         if (!c.to) {
-          this.camOverride = false
           this.props.onDashCam?.(null)
           return
         }
@@ -471,7 +460,6 @@ export class EngineLayer extends Component<EngineLayerProps> {
         const inFlight = this.travelDest != null
         const cx = inFlight ? (rt.transform.x + pt.x) / 2 : pt.x
         const cy = inFlight ? pt.y - 26 : pt.y - 40
-        this.camOverride = true
         this.lastCam = { x: cx, y: cy }
         this.props.onDashCam?.({ x: cx, y: cy, mult: c.mult, fast: c.fast })
       }),
@@ -489,7 +477,6 @@ export class EngineLayer extends Component<EngineLayerProps> {
       }),
       ctx.events.on('behavior:complete', () => {
         this.travelDest = null
-        this.camOverride = false
         this.props.onDashCam?.(null)
         if (this.pendingHang) {
           this.pendingHang = false
@@ -678,6 +665,20 @@ export class EngineLayer extends Component<EngineLayerProps> {
     const pn = this.docV2.pages[pageIdx]?.panels[panelIdx]
     this.pendingHang = doc.id === 'builtin:hop' && !!pn && pn.anchor.dy <= 6 && chance('hop.hang', 0.25)
 
+    // Q5 — AUTHORED camera: one establishing shot per travel framing departure
+    // AND destination before root motion begins (the comic-panel staging the
+    // review recommends — Dash stays visible without a follow chase). Cue shots
+    // (vault 1.15× etc.) override mid-flight; completion releases to the
+    // destination panel focus. Short in-panel trips skip the shot entirely.
+    if (from && to) {
+      const span = Math.abs(to.x - from.x)
+      if (span >= 200 && pn) {
+        const mult = Math.max(0.55, Math.min(1, (pn.w + 60) / (span + 140)))
+        this.lastCam = { x: (from.x + to.x) / 2, y: (from.y + to.y) / 2 - 26 }
+        this.props.onDashCam?.({ ...this.lastCam, mult, fast: true })
+      }
+    }
+
     // Q4 — the legacy ordinary-walk timing policy: duration = clamp(dist/190,
     // 0.7s, 2.2s), expressed as a per-run default ground speed (authored step
     // speeds always win, so approaches/crossings keep their legacy classes).
@@ -769,7 +770,6 @@ export class EngineLayer extends Component<EngineLayerProps> {
     if (!s) return
     const dest = this.travelDest
     this.travelDest = null
-    this.camOverride = false
     this.props.onDashCam?.(null)
     if (dest != null) {
       const spot = this.panelSpot(s.pageIdx, dest)
@@ -1002,7 +1002,6 @@ export class EngineLayer extends Component<EngineLayerProps> {
     this.rolling = false
     this.airborne = false
     this.spin = 0
-    this.camOverride = false
     this.lastCam = null
     this.clearArc()
     this.props.onDashCam?.(null)

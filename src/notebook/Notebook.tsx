@@ -1065,7 +1065,10 @@ export default class Notebook extends React.Component<NotebookProps, State> {
       sc = Math.max(.15, sc * (s.camo.mult || 1))
       if (s.camo.cx != null) { cx = s.camo.cx; cy = s.camo.cy }
     }
-    const px = (((s.mx ?? vw / 2) / vw) - .5) * 12, py = (((s.my ?? vh / 2) / vh) - .5) * 8
+    // Pointer parallax damps to a whisper while an AUTHORED shot (camo) holds —
+    // parallax noise during a choreographed move reads as camera drift (Q5).
+    const pk = s.camo ? 0.25 : 1
+    const px = (((s.mx ?? vw / 2) / vw) - .5) * 12 * pk, py = (((s.my ?? vh / 2) / vh) - .5) * 8 * pk
     const tx = vw / 2 - sc * cx + px, ty = (vh - 70) / 2 - sc * cy + py
     this._cam = { tx: tx, ty: ty, sc: sc }
     const cameraTf = 'translate(' + tx.toFixed(1) + 'px, ' + ty.toFixed(1) + 'px) scale(' + sc.toFixed(3) + ')'
