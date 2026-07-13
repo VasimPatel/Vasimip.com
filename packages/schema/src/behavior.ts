@@ -129,10 +129,18 @@ export type Intent =
   | { verb: 'idle' }
   | MoveIntent
   | { verb: 'playClip'; ref: string; blendMs?: number }
-  | { verb: 'strikePose'; ref: string; blendMs?: number; holdMs?: number }
+  /** `hold: 'persist'` (parity recovery, Stage 2a — owner-approved widening):
+   * the pose is struck onto the concurrent ACTING layer and stays until the next
+   * transition (movement step / new pose / force-release) instead of dwelling the
+   * behavior for holdMs — the v1 "arrival pose persists until the next transition"
+   * semantics, restored. holdMs is ignored when hold is present. */
+  | { verb: 'strikePose'; ref: string; blendMs?: number; holdMs?: number; hold?: 'persist' }
   | { verb: 'say'; text: string }
   | { verb: 'sfx'; kind: string }
-  | { verb: 'camera'; to?: TargetRef; ms?: number }
+  /** camera `mult`/`fast` (parity recovery, Stage 2a — owner-approved widening):
+   * the v1 authored zoom multiplier and tempo, dropped by the 9a migration. An
+   * omitted `to` means CLEAR — return the camera to panel focus. */
+  | { verb: 'camera'; to?: TargetRef; ms?: number; mult?: number; fast?: boolean }
   | { verb: 'wait'; ms: number }
   | { verb: 'emit'; emitter: string; count?: number }
   | { verb: 'impulse'; target: EntityRef; vec: [number, number] }
@@ -223,10 +231,10 @@ const VERB_KEYS: Record<IntentVerb, readonly string[]> = {
   flyTo: ['verb', 'target', 'timeoutMs'],
   flyThrough: ['verb', 'target', 'timeoutMs'],
   playClip: ['verb', 'ref', 'blendMs'],
-  strikePose: ['verb', 'ref', 'blendMs', 'holdMs'],
+  strikePose: ['verb', 'ref', 'blendMs', 'holdMs', 'hold'],
   say: ['verb', 'text'],
   sfx: ['verb', 'kind'],
-  camera: ['verb', 'to', 'ms'],
+  camera: ['verb', 'to', 'ms', 'mult', 'fast'],
   wait: ['verb', 'ms'],
   emit: ['verb', 'emitter', 'count'],
   impulse: ['verb', 'target', 'vec'],
@@ -275,6 +283,8 @@ function checkIntent(intent: unknown, path: string, issues: Issues): void {
         issues.push(`${path}.blendMs: must be a finite number >= 0 when present`)
       if (intent.holdMs !== undefined && (!isNum(intent.holdMs) || intent.holdMs < 0))
         issues.push(`${path}.holdMs: must be a finite number >= 0 when present`)
+      if (intent.hold !== undefined && intent.hold !== 'persist')
+        issues.push(`${path}.hold: must be the literal 'persist' when present`)
       break
     case 'say':
       if (!isStr(intent.text)) issues.push(`${path}.text: required string`)
@@ -286,6 +296,10 @@ function checkIntent(intent: unknown, path: string, issues: Issues): void {
       if (intent.to !== undefined) checkTarget(intent.to, `${path}.to`, issues)
       if (intent.ms !== undefined && (!isNum(intent.ms) || intent.ms < 0))
         issues.push(`${path}.ms: must be a finite number >= 0 when present`)
+      if (intent.mult !== undefined && (!isNum(intent.mult) || intent.mult <= 0))
+        issues.push(`${path}.mult: must be a finite number > 0 when present`)
+      if (intent.fast !== undefined && !isBool(intent.fast))
+        issues.push(`${path}.fast: must be a boolean when present`)
       break
     case 'wait':
       if (!isNum(intent.ms) || intent.ms < 0) issues.push(`${path}.ms: required finite number >= 0`)

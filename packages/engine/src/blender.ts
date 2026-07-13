@@ -56,6 +56,22 @@ type Source =
   | { kind: 'pose'; pose: Pose }
   | { kind: 'clip'; clip: Clip; timeMs: number }
 
+/** The concurrent ACTING layer (parity recovery, Stage 2a). A full-skeleton
+ * override that the base blend chases INSTEAD of the base source while active —
+ * the base source keeps advancing underneath (a walk cycle stays in phase), so
+ * entering and leaving acting are ordinary target changes on the same persistent
+ * velocity integrator: velocity-continuous both ways, by construction. This is
+ * what makes cue strikePose/playClip VISIBLE (vault poses mid-jump, rope poses
+ * mid-walk) and what carries persist-until-next-transition arrival poses. */
+interface ActingState {
+  source: Source
+  /** ms to hold before auto-release, or 'persist' (until clearActing). */
+  hold: number | 'persist'
+  elapsedMs: number
+  /** Transition duration for the release back to the base source. */
+  returnMs: number
+}
+
 /** Fully serializable blender state (plain JSON). Additive FNS are NOT part of it
  * — they are behavior, re-registered by the caller after setState. */
 export interface BlenderState {
@@ -65,6 +81,8 @@ export interface BlenderState {
   decayTau: number
   tick: number
   source: Source
+  /** Optional for pre-parity snapshots (older goldens restore acting-free). */
+  acting?: ActingState | null
 }
 
 export interface BlenderTick {
@@ -77,11 +95,21 @@ export interface BlenderTick {
 export interface Blender {
   /** Retarget the base blend to a Pose or a Clip; velocity carries (no pop). */
   setSource(source: Pose | Clip, opts?: { durationMs?: number }): void
+  /** Override the visible target with an ACTING source (concurrent performance
+   * layer). The base source keeps time underneath; holdMs auto-releases, 'persist'
+   * stays until clearActing(). Velocity-continuous in and out. */
+  setActing(source: Pose | Clip, opts?: { durationMs?: number; holdMs?: number | 'persist'; returnMs?: number }): void
+  /** Release the acting override (no-op when none). The return to the base source
+   * is a normal transition (durationMs, default the acting's returnMs). */
+  clearActing(opts?: { durationMs?: number }): void
+  /** Identity of the acting source, or null when the base is in control. */
+  actingSource(): { kind: 'pose' | 'clip'; id: string } | null
   /** Advance one fixed tick; returns the POST-ADDITIVE pose + markers crossed. */
   tick(): BlenderTick
   /** Cheap identity of the CURRENT base source ({kind, id}) — lets a caller waiting
    * on a clip's markers (the P7 launch-marker binding) detect a mid-wait source
-   * replacement without the cost of getState(). */
+   * replacement without the cost of getState(). NOT affected by acting (the P7
+   * binding watches the base); use actingSource() for the visible identity. */
   currentSource(): { kind: 'pose' | 'clip'; id: string }
   addAdditive(id: string, fn: AdditiveFn): void
   removeAdditive(id: string): void
@@ -113,9 +141,24 @@ export function createBlender(rig: RigTemplate, opts?: BlenderOptions): Blender 
 
   const restPose: Pose = opts?.initialPose ?? { id: '__rest', angles: {} }
   let source: Source = { kind: 'pose', pose: restPose }
+  let acting: ActingState | null = null
   let smoothTime = trackSmoothTime
   let decayTau = trackSmoothTime
   let tickCount = 0
+
+  const DEFAULT_ACTING_RETURN_MS = 250
+
+  function armTransition(durationMs: number): void {
+    const durationSec = durationMs / 1000
+    smoothTime = Math.max(durationSec * SMOOTH_TIME_FACTOR, trackSmoothTime)
+    decayTau = Math.max(durationSec, DT)
+  }
+
+  function releaseActing(durationMs: number): void {
+    if (!acting) return
+    acting = null
+    armTransition(durationMs) // the return to base is a normal transition (no pop)
+  }
 
   const additives = new Map<string, AdditiveFn>()
 
@@ -125,29 +168,63 @@ export function createBlender(rig: RigTemplate, opts?: BlenderOptions): Blender 
     return sample.root ?? { x: root.x, y: root.y, rot: root.rot }
   }
 
+  function advanceSource(src: Source, markers: string[]): ClipSample {
+    if (src.kind === 'clip') {
+      const prev = src.timeMs
+      const next = prev + STEP_MS
+      src.timeMs = next
+      markers.push(...markersCrossed(src.clip, prev, next))
+      return sampleClip(src.clip, next)
+    }
+    return { angles: src.pose.angles, root: src.pose.root }
+  }
+
   return {
     setSource(src, o) {
-      const durationSec = (o?.durationMs ?? DEFAULT_TRANSITION_MS) / 1000
-      smoothTime = Math.max(durationSec * SMOOTH_TIME_FACTOR, trackSmoothTime)
-      decayTau = Math.max(durationSec, DT)
+      armTransition(o?.durationMs ?? DEFAULT_TRANSITION_MS)
       // Velocity + angle are deliberately untouched — the no-pop mechanism.
       source = isClip(src) ? { kind: 'clip', clip: src, timeMs: 0 } : { kind: 'pose', pose: src }
+    },
+
+    setActing(src, o) {
+      armTransition(o?.durationMs ?? 160)
+      acting = {
+        source: isClip(src) ? { kind: 'clip', clip: src, timeMs: 0 } : { kind: 'pose', pose: src },
+        hold: o?.holdMs ?? 'persist',
+        elapsedMs: 0,
+        returnMs: o?.returnMs ?? DEFAULT_ACTING_RETURN_MS,
+      }
+    },
+
+    clearActing(o) {
+      releaseActing(o?.durationMs ?? acting?.returnMs ?? DEFAULT_ACTING_RETURN_MS)
+    },
+
+    actingSource() {
+      if (!acting) return null
+      return acting.source.kind === 'clip'
+        ? { kind: 'clip' as const, id: acting.source.clip.id }
+        : { kind: 'pose' as const, id: acting.source.pose.id }
     },
 
     tick(): BlenderTick {
       tickCount++
 
-      // ── sample the target source ────────────────────────────────────────────
-      let sample: ClipSample
-      let markers: string[] = []
-      if (source.kind === 'clip') {
-        const prev = source.timeMs
-        const next = prev + STEP_MS
-        source.timeMs = next
-        sample = sampleClip(source.clip, next)
-        markers = markersCrossed(source.clip, prev, next)
-      } else {
-        sample = { angles: source.pose.angles, root: source.pose.root }
+      // ── sample the target source(s) ─────────────────────────────────────────
+      // The BASE always advances (a walk cycle keeps phase under an acting hold);
+      // markers merge from both layers so the P7 launch-marker binding survives a
+      // concurrent acting cue.
+      const markers: string[] = []
+      const baseSample = advanceSource(source, markers)
+      let sample = baseSample
+      if (acting) {
+        acting.elapsedMs += STEP_MS
+        const actingSample = advanceSource(acting.source, markers)
+        if (acting.hold !== 'persist' && acting.elapsedMs >= acting.hold) {
+          releaseActing(acting.returnMs) // expired THIS tick: base regains the target
+        } else {
+          sample = actingSample
+        }
       }
       const tRoot = currentTargetRoot(sample)
 
@@ -214,11 +291,17 @@ export function createBlender(rig: RigTemplate, opts?: BlenderOptions): Blender 
     getState(): BlenderState {
       const j: Record<string, JointState> = {}
       for (const [id, s] of joints) j[id] = { angle: s.angle, vel: s.vel }
-      const src: Source =
-        source.kind === 'clip'
-          ? { kind: 'clip', clip: structuredClone(source.clip), timeMs: source.timeMs }
-          : { kind: 'pose', pose: structuredClone(source.pose) }
-      return { joints: j, root: { ...root }, smoothTime, decayTau, tick: tickCount, source: src }
+      const cloneSrc = (s: Source): Source =>
+        s.kind === 'clip'
+          ? { kind: 'clip', clip: structuredClone(s.clip), timeMs: s.timeMs }
+          : { kind: 'pose', pose: structuredClone(s.pose) }
+      const state: BlenderState = {
+        joints: j, root: { ...root }, smoothTime, decayTau, tick: tickCount, source: cloneSrc(source),
+      }
+      // Key OMITTED when inactive (not `acting: null`) so pre-parity golden state
+      // hashes are byte-identical for acting-free runs.
+      if (acting) state.acting = { ...acting, source: cloneSrc(acting.source) }
+      return state
     },
 
     setState(state) {
@@ -235,10 +318,12 @@ export function createBlender(rig: RigTemplate, opts?: BlenderOptions): Blender 
       smoothTime = state.smoothTime
       decayTau = state.decayTau
       tickCount = state.tick
-      source =
-        state.source.kind === 'clip'
-          ? { kind: 'clip', clip: structuredClone(state.source.clip), timeMs: state.source.timeMs }
-          : { kind: 'pose', pose: structuredClone(state.source.pose) }
+      const cloneSrc = (s: Source): Source =>
+        s.kind === 'clip'
+          ? { kind: 'clip', clip: structuredClone(s.clip), timeMs: s.timeMs }
+          : { kind: 'pose', pose: structuredClone(s.pose) }
+      source = cloneSrc(state.source)
+      acting = state.acting ? { ...state.acting, source: cloneSrc(state.acting.source) } : null
       // Additives are behavior, not state — the caller re-registers them.
     },
   }

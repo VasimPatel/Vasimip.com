@@ -353,7 +353,7 @@ export function createCharacterRuntime(opts: CharacterRuntimeOptions): Character
     // Pose registries are immutable content docs: reading face acting from the
     // registry (not the snapshot) is safe as long as callers never mutate poses
     // between getState/setState — the same contract clips already rely on.
-    const src = blender.currentSource()
+    const src = blender.actingSource() ?? blender.currentSource()
     const poseFace = src.kind === 'pose' ? (poses[src.id] as { face?: { brow?: FaceAux['brow']; mouth?: FaceAux['mouth']; intensity?: number } } | undefined)?.face : undefined
     if (poseFace) {
       if (poseFace.brow) lastFace = { ...lastFace, brow: poseFace.brow }
@@ -452,7 +452,9 @@ export function createCharacterRuntime(opts: CharacterRuntimeOptions): Character
     },
     solved: () => lastSolved,
     face: () => lastFace,
-    activeSource: () => blender.currentSource(),
+    // The VISIBLE identity: an acting overlay (cue pose, persist arrival) wins over
+    // the base — pose props (sword, spray can) and pose-scoped site acting ride it.
+    activeSource: () => blender.actingSource() ?? blender.currentSource(),
     capsule,
     overrides: () => secondary.overrides(),
     running: () => behavior.running(),

@@ -318,6 +318,7 @@ export function createBehaviorExecutor(deps: BehaviorDeps): BehaviorExecutor {
       case 'playClip': {
         const clip = deps.clips[step.ref]
         if (!clip) return failStep(`unknown-clip:${step.ref}`)
+        blender.clearActing() // a step-level clip takes the base — no stale overlay
         blender.setSource(clip, { durationMs: step.blendMs ?? 200 })
         f.dwellMs = clip.loop ? STRIKE_HOLD_MS : Math.max(clipDuration(clip), STEP_MS)
         break
@@ -325,6 +326,16 @@ export function createBehaviorExecutor(deps: BehaviorDeps): BehaviorExecutor {
       case 'strikePose': {
         const pose = deps.poses[step.ref] ?? deps.clips[step.ref]
         if (!pose) return failStep(`unknown-pose:${step.ref}`)
+        if (step.hold === 'persist') {
+          // Persist-until-next-transition (the v1 arrival semantics): the pose rides
+          // the ACTING layer and the step completes IMMEDIATELY — the character is
+          // interactable (pokes, fidget gates see idle) while LOOKING like the pose.
+          // Released by the next movement/pose step or forceRelease, never a timer.
+          blender.setActing(pose as Pose | Clip, { durationMs: step.blendMs ?? 150, holdMs: 'persist' })
+          complete()
+          break
+        }
+        blender.clearActing() // a new pose supersedes any held one
         blender.setSource(pose as Pose | Clip, { durationMs: step.blendMs ?? 150 })
         f.dwellMs = step.holdMs ?? STRIKE_HOLD_MS
         if (f.dwellMs <= 0) complete()
@@ -353,7 +364,7 @@ export function createBehaviorExecutor(deps: BehaviorDeps): BehaviorExecutor {
         complete()
         break
       case 'camera':
-        emit('intent:camera', { to: step.to, ms: step.ms })
+        emit('intent:camera', { to: step.to, ms: step.ms, mult: step.mult, fast: step.fast })
         complete()
         break
       case 'emit':
@@ -571,6 +582,9 @@ export function createBehaviorExecutor(deps: BehaviorDeps): BehaviorExecutor {
 
     if (MOVEMENT.has(step.verb)) {
       if (!f.moveStarted) {
+        // A movement is "the next transition": a persist-held arrival pose releases
+        // here (v1 semantics — the pose survived pokes/quips but not real travel).
+        blender.clearActing()
         locomotion.begin(step as Intent & { verb: MovementVerb })
         f.moveStarted = true
         moveSeq++
@@ -650,6 +664,7 @@ export function createBehaviorExecutor(deps: BehaviorDeps): BehaviorExecutor {
     locomotion.reset()
     stack = []
     status = 'idle'
+    blender.clearActing({ durationMs: 120 })
     blender.setSource(idleSource(), { durationMs: 120 })
   }
 
@@ -700,10 +715,13 @@ export function createBehaviorExecutor(deps: BehaviorDeps): BehaviorExecutor {
     cues: () => doc?.cues ?? [],
     running: () => status === 'running',
     execCue: (intent) => {
-      // Cues run CONCURRENTLY (never on the step stack). say drives the bubble; the
-      // rest emit their trace event. Schema validation restricts cue verbs to EXACTLY
-      // this performance subset (CUE_VERBS) — the default arm is pure defense against
-      // hand-built docs that bypassed validation, and traces loudly rather than acts.
+      // Cues run CONCURRENTLY (never on the step stack). say drives the bubble;
+      // strikePose/playClip act on the blender's ACTING layer (parity recovery,
+      // Stage 2a — the review's core gap: these were trace-only, so vault/roll/
+      // swing/smash cues rendered nothing); sfx/camera emit for the site adapter.
+      // Schema validation restricts cue verbs to EXACTLY this performance subset
+      // (CUE_VERBS) — the default arm is pure defense against hand-built docs that
+      // bypassed validation, and traces loudly rather than acts.
       switch (intent.verb) {
         case 'say':
           doSay(intent.text)
@@ -712,16 +730,28 @@ export function createBehaviorExecutor(deps: BehaviorDeps): BehaviorExecutor {
           emit('intent:sfx', { kind: intent.kind, cue: true })
           break
         case 'camera':
-          emit('intent:camera', { to: intent.to, ms: intent.ms, cue: true })
+          emit('intent:camera', { to: intent.to, ms: intent.ms, mult: intent.mult, fast: intent.fast, cue: true })
           break
-        case 'strikePose':
-          // Upper-body concurrent pose overlay is a P9 render concern; 7b records the
-          // milestone-scheduled cue as a trace event (the scheduling IS the deliverable).
-          emit('cue:strikePose', { ref: intent.ref })
+        case 'strikePose': {
+          const pose = deps.poses[intent.ref] ?? deps.clips[intent.ref]
+          if (pose) {
+            blender.setActing(pose as Pose | Clip, {
+              durationMs: intent.blendMs ?? 160,
+              holdMs: intent.hold === 'persist' ? 'persist' : (intent.holdMs ?? STRIKE_HOLD_MS),
+            })
+          }
+          emit('cue:strikePose', { ref: intent.ref, acted: pose !== undefined })
           break
-        case 'playClip':
-          emit('cue:playClip', { ref: intent.ref })
+        }
+        case 'playClip': {
+          const clip = deps.clips[intent.ref]
+          if (clip) {
+            // A cue clip plays ONCE over the movement (looping clips get one cycle).
+            blender.setActing(clip, { durationMs: intent.blendMs ?? 160, holdMs: Math.max(clipDuration(clip), STEP_MS) })
+          }
+          emit('cue:playClip', { ref: intent.ref, acted: clip !== undefined })
           break
+        }
         default:
           emit('cue:ignored', { verb: intent.verb })
       }
