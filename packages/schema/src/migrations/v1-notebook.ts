@@ -73,10 +73,21 @@ export function migrateNotebookV1(
     report.generatedBehaviors.push(id)
   }
 
+  // v1 pose names that were RENAMED in the v2 content set (the v1 'idle' is the v2
+  // rest pose 'stand'; 'walk'/'tuck'/'land' became clip-adjacent pose ids). Applied
+  // before lookup so owner-authored steps keep working across the schema line.
+  const V1_POSE_RENAMES: Record<string, string> = {
+    idle: 'stand',
+    walk: 'walk-mid',
+    tuck: 'jump-tuck',
+    land: 'squash-land',
+  }
+  const mapPose = (name: string): string => V1_POSE_RENAMES[name] ?? name
   const notePose = (name: string, where: string): void => {
-    if (!base.poses[name] && !report.missingPoses.includes(name)) {
-      report.missingPoses.push(name)
-      report.lossy.push(`${where}: pose ${JSON.stringify(name)} not in base.poses yet (authoring checklist)`)
+    const mapped = mapPose(name)
+    if (!base.poses[mapped] && !report.missingPoses.includes(mapped)) {
+      report.missingPoses.push(mapped)
+      report.lossy.push(`${where}: pose ${JSON.stringify(mapped)} not in base.poses yet (authoring checklist)`)
     }
   }
   const noteBehavior = (id: string, where: string): void => {
@@ -104,7 +115,7 @@ export function migrateNotebookV1(
           if (isStr(s.pose)) {
             notePose(s.pose, sw)
             if (s.face !== undefined) report.lossy.push(`${sw}.face: dropped — facing follows the approach direction`)
-            steps.push({ verb: 'strikePose', ref: s.pose, holdMs: isNum(s.ms) ? s.ms : 600 } as Intent)
+            steps.push({ verb: 'strikePose', ref: mapPose(s.pose), holdMs: isNum(s.ms) ? s.ms : 600 } as Intent)
           }
           break
         case 'move': {
@@ -206,7 +217,7 @@ export function migrateNotebookV1(
             holdMs = 2500
             report.lossy.push(`${where}.arrival: v1 pose persisted until the next transition; approximated as a ${2500}ms hold`)
           }
-          steps.push({ verb: 'strikePose', ref: a.pose, holdMs } as Intent)
+          steps.push({ verb: 'strikePose', ref: mapPose(a.pose), holdMs } as Intent)
         }
         if (isStr(a.say)) steps.push({ verb: 'say', text: a.say } as Intent)
         if (isStr(a.sfx)) steps.push({ verb: 'sfx', kind: a.sfx } as Intent)

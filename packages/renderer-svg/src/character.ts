@@ -51,6 +51,10 @@ export interface RenderExtras {
   spin?: number
   /** Accessory ribbon point chains (e.g. the bandana), root→tip, world space. */
   accessories?: ReadonlyArray<ReadonlyArray<{ x: number; y: number }>>
+  /** Pupil dilation (1 = rest) — the legacy eyes grow when the cursor is near. */
+  pupilScale?: number
+  /** Whole-figure lean (rad, about the ground point) — the legacy cursor lean. */
+  lean?: number
 }
 
 export interface CharacterRenderer {
@@ -147,7 +151,11 @@ export function createCharacterRenderer(
   }
 
   // ── limb chains ────────────────────────────────────────────────────────────────
-  const chainDefs = buildChains(rig, widths)
+  // Faded chains (style.opacities < 1 on their first joint) are the FAR limbs —
+  // the legacy walk draws them first, UNDER the trunk, at .85 and a hair thinner.
+  const opacities = character.style?.opacities
+  const chainOpacity = (jointIds: string[]): number => opacities?.[jointIds[0]] ?? 1
+  const chainDefs = [...buildChains(rig, widths)].sort((a, b) => chainOpacity(a) - chainOpacity(b))
   const chains: Chain[] = []
   for (const jointIds of chainDefs) {
     const path = document.createElementNS(SVG_NS, 'path')
@@ -158,12 +166,15 @@ export function createCharacterRenderer(
     path.setAttribute('stroke-width', String(w))
     path.setAttribute('stroke-linecap', character.style?.linecap ?? 'round')
     path.setAttribute('stroke-linejoin', 'round')
+    const op = chainOpacity(jointIds)
+    if (op < 1) path.setAttribute('stroke-opacity', String(op))
     group.appendChild(path)
     const chain: Chain = { jointIds, path }
     if (isArmChain(jointIds)) {
       const fist = document.createElementNS(SVG_NS, 'circle')
       fist.setAttribute('r', '0')
       fist.setAttribute('fill', color)
+      if (op < 1) fist.setAttribute('fill-opacity', String(op))
       group.appendChild(fist)
       chain.fist = fist
     }
@@ -330,8 +341,9 @@ export function createCharacterRenderer(
       const rootX = root ? root.ox : 0
       const fl = extras?.flourish
       const spin = extras?.spin ?? 0
+      const lean = extras?.lean ?? 0
       const hasScale = !!fl && (Math.abs(fl.sx - 1) > 0.004 || Math.abs(fl.sy - 1) > 0.004)
-      if (hasScale || Math.abs(spin) > 0.01) {
+      if (hasScale || Math.abs(spin) > 0.01 || Math.abs(lean) > 0.004) {
         // Two independent pivots: squash scales about the GROUND point (feet stay
         // planted — the documented flourish contract) while spin rotates about the
         // figure centre so the roll reads as a tumble, not a ground-pinned sweep.
@@ -342,6 +354,11 @@ export function createCharacterRenderer(
         }
         if (Math.abs(spin) > 0.01) {
           parts.push(`translate(${rootX}px, ${midY}px)`, `rotate(${spin}rad)`, `translate(${-rootX}px, ${-midY}px)`)
+        }
+        // Cursor lean — the legacy standing Dash tips toward a near cursor,
+        // pivoting at his feet (legacy transform-origin 50% 88%).
+        if (Math.abs(lean) > 0.004) {
+          parts.push(`translate(${rootX}px, ${groundY}px)`, `rotate(${lean}rad)`, `translate(${-rootX}px, ${-groundY}px)`)
         }
         group.style.transform = parts.join(' ')
       } else if (group.style.transform) {
@@ -401,13 +418,16 @@ export function createCharacterRenderer(
           dx = (dx / len) * maxOff
           dy = (dy / len) * maxOff
         }
+        // Dilation: the legacy eyes grow toward the cursor (eyeR 2 → 3.1 near).
+        const pr = PUPIL_R * headR * (extras?.pupilScale ?? 1)
         for (let i = 0; i < 2; i++) {
           const side = i === 0 ? -1 : 1
           const ex = (EYE_FACING * facing + EYE_SEP * side) * headR + dx
           const ey = EYE_Y * headR + dy
           pupils[i].setAttribute('cx', String(ex))
           pupils[i].setAttribute('cy', String(ey))
-          pupils[i].setAttribute('ry', String(PUPIL_R * headR * openY))
+          pupils[i].setAttribute('rx', String(pr))
+          pupils[i].setAttribute('ry', String(pr * openY))
           brows[i].setAttribute('d', browD(side as -1 | 1, face.brow ?? 'determined', intensity, facing))
         }
         if (mouthEl) mouthEl.setAttribute('d', mouthD(face.mouth ?? 'smile', intensity, facing))

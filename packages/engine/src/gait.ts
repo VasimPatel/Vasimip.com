@@ -130,7 +130,9 @@ export function createGait(rig: RigTemplate, character: CharacterDoc, opts: Gait
         j1.length * (props?.[j1.id] ?? 1)
     }
   }
-  const STRIDE_MAX = legLen * 1.1
+  // Parity pass: 1.1× read as a low LUNGE (long strides force the walk-crouch
+  // deep); 0.9× keeps the hip high and the steps snappy — the legacy upright walk.
+  const STRIDE_MAX = legLen * 0.9
   const naturalStride = naturalCadence !== 0 ? Math.abs(speed) / naturalCadence : 0
   const strideMag = Math.min(naturalStride, STRIDE_MAX)
   const stride = (speed < 0 ? -1 : 1) * strideMag

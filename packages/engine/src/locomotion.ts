@@ -42,6 +42,7 @@ export const LOCO_EVENTS = {
   failed: 'intent:failed',
   jumpLaunch: 'jump:launch',
   jumpLand: 'jump:land',
+  jumpWindup: 'jump:windup',
   route: 'path:route',
   leg: 'path:leg',
 } as const
@@ -706,6 +707,7 @@ export function createLocomotion(deps: LocomotionDeps): Locomotion {
       return
     }
     jPhase = 'anticipate'
+    emit(LOCO_EVENTS.jumpWindup)
     jLaunched = false
     jVx = sol.vx
     jVy = sol.vy

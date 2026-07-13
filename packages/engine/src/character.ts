@@ -220,10 +220,14 @@ export function createCharacterRuntime(opts: CharacterRuntimeOptions): Character
   // Unsubscribers retained for dispose() (review finding: no listener leaks).
   const flourish = createSquashFlourish()
   const flourishOffs = [
-    events.on('jump:launch', () => flourish.trigger('launch')),
+    events.on('jump:windup', () => flourish.trigger('windup')), // anticipation crouch, held
+    events.on('jump:launch', () => flourish.trigger('launch')), // kick clears the hold
     events.on('jump:land', () => flourish.trigger('land')),
     events.on('intent:blocked', () => flourish.trigger('poke')),
     events.on('expression:poke', () => flourish.trigger('poke')),
+    // An interrupted/failed run must never leave the crouch held.
+    events.on('behavior:interrupted', () => flourish.releaseHold()),
+    events.on('intent:failed', () => flourish.releaseHold()),
   ]
   let lastFlourish = { sx: 1, sy: 1 }
 
