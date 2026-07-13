@@ -130,6 +130,12 @@ export interface CharacterRuntime {
   /** Run an ephemeral one-shot steps list (dynamic quips/beats — text varies per
    * invocation) WITHOUT registering a behavior doc. See BehaviorExecutor.runOneShot. */
   runOneShot(label: string, steps: Intent[]): void
+  /** Site-adapter acting: hold a pose/clip on the concurrent acting layer WITHOUT
+   * running a behavior (the legacy in-routine dice — walk-trip, hop-hang). Same
+   * semantics as a cue strikePose; unknown refs are a silent no-op. */
+  act(ref: string, opts?: { holdMs?: number | 'persist'; blendMs?: number }): void
+  /** Release an adapter-held acting pose (no-op when none). */
+  clearAct(): void
   getState(): CharacterState
   setState(s: CharacterState): void
   readonly transform: CharacterTransform
@@ -410,10 +416,18 @@ export function createCharacterRuntime(opts: CharacterRuntimeOptions): Character
     locomotion.setTravelContext(null)
   }
 
+  function act(ref: string, o?: { holdMs?: number | 'persist'; blendMs?: number }): void {
+    const src = clips[ref] ?? poses[ref]
+    if (!src) return
+    blender.setActing(src, { durationMs: o?.blendMs ?? 160, holdMs: o?.holdMs ?? 'persist' })
+  }
+
   return {
     tick,
     runBehavior,
     runOneShot,
+    act,
+    clearAct: () => blender.clearActing(),
     getState(): CharacterState {
       return {
         transform: { ...transform },

@@ -2,26 +2,18 @@
   "schemaVersion": 2,
   "id": "builtin:swing",
   "steps": [
-    {
-      "verb": "jumpTo",
-      "target": "travel:to#interior"
-    }
+    { "verb": "jumpTo", "target": "travel:to#roof" },
+    { "verb": "camera", "to": "travel:to#interior", "mult": 1.2, "fast": true },
+    { "verb": "strikePose", "ref": "swing", "holdMs": 640 },
+    { "verb": "sfx", "kind": "whoosh" },
+    { "verb": "jumpTo", "target": "travel:to#interior" },
+    { "verb": "sfx", "kind": "fx:shake" },
+    { "verb": "strikePose", "ref": "squash-land", "holdMs": 280 },
+    { "verb": "camera" },
+    { "verb": "wait", "ms": 260 }
   ],
   "cues": [
-    {
-      "at": "onLaunch",
-      "do": {
-        "verb": "strikePose",
-        "ref": "swing",
-        "holdMs": 500
-      }
-    },
-    {
-      "at": "onLaunch",
-      "do": {
-        "verb": "sfx",
-        "kind": "whoosh"
-      }
-    }
+    { "at": "onLaunch", "do": { "verb": "strikePose", "ref": "jump-tuck", "holdMs": 520 } },
+    { "at": "onLaunch", "do": { "verb": "sfx", "kind": "hop" } }
   ]
 }

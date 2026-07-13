@@ -811,7 +811,10 @@ export default class Notebook extends React.Component<NotebookProps, State> {
     if (s.busy || s.dragging || p === s.page) return
     this.sfx('flip')
     const lo = Math.min(s.page, p), hi = Math.max(s.page, p) - 1
-    if (p === s.page + 1 && s.page > 0 && s.dop === 1 && chance('flip.surf', .38)) {
+    if (this.engineMode && p === s.page + 1 && s.page > 0 && chance('flip.surf', .38)) {
+      // Engine surf: the layer stages the ride-in after the flip lands.
+      this.engineRef?.surfNext()
+    } else if (p === s.page + 1 && s.page > 0 && s.dop === 1 && chance('flip.surf', .38)) {
       const a = this.anch(p, 0)
       this.sfx('whoosh')
       this.setState({

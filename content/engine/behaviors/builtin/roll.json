@@ -2,26 +2,13 @@
   "schemaVersion": 2,
   "id": "builtin:roll",
   "steps": [
-    {
-      "verb": "jumpTo",
-      "target": "travel:to#interior"
-    }
+    { "verb": "jumpTo", "target": "travel:to#interior" },
+    { "verb": "strikePose", "ref": "squash-land", "holdMs": 260 },
+    { "verb": "wait", "ms": 300 }
   ],
   "cues": [
-    {
-      "at": "onLaunch",
-      "do": {
-        "verb": "strikePose",
-        "ref": "jump-tuck",
-        "holdMs": 450
-      }
-    },
-    {
-      "at": "onLaunch",
-      "do": {
-        "verb": "sfx",
-        "kind": "whoosh"
-      }
-    }
+    { "at": "onLaunch", "do": { "verb": "strikePose", "ref": "jump-tuck", "holdMs": 900 } },
+    { "at": "onLaunch", "do": { "verb": "sfx", "kind": "hop" } },
+    { "at": "onLand", "do": { "verb": "sfx", "kind": "hop" } }
   ]
 }

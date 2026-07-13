@@ -123,13 +123,23 @@ export class EngineLayer extends Component<EngineLayerProps> {
   private actorHidden = false
   private actorHiddenApplied = false
   /** The NEXT enterPage's staging (back-nav landings replace the entrance stroll). */
-  private pendingEntrance: { kind: 'bombPop' | 'poofIn'; panel: number } | null = null
+  private pendingEntrance: { kind: 'bombPop' | 'poofIn' | 'surfIn'; panel: number } | null = null
+
+  /** The next forward flip rides in surfing (legacy 38% page-surf variant). */
+  surfNext(): void {
+    this.pendingEntrance = { kind: 'surfIn', panel: 0 }
+  }
   /** Back-nav timeline timers (cancellable as a set). */
   private backNavTimers: number[] = []
   /** The panel the current travel departed from (camera midpoint framing). */
   private travelFrom = 0
   /** Back-nav staging window: busy() holds and fidgets stay quiet until then. */
   private stagingUntil = 0
+  /** The hop-hang variant rolled for the in-flight travel. */
+  private pendingHang = false
+  /** Adapter speech (trip 'whoa—', hang 'hup—') — shown when the engine bubble
+   * is otherwise silent; a real say wins. */
+  private bubbleNote: { text: string; until: number } | null = null
 
   private cancelBackNav(): void {
     this.backNavCancel?.()
@@ -175,9 +185,12 @@ export class EngineLayer extends Component<EngineLayerProps> {
       const activePose = src.kind === 'pose' ? this.docV2.poses[src.id] : undefined
       this.syncPoseAct(src.kind === 'pose' ? src.id : null)
       const cap = s.rt.capsule()
+      // A skinned source carries its own internal animation (the tuck skin's
+      // tuckspin already rotates) — the render-layer roll spin would double it.
+      const skinned = EngineLayer.SKINNED.has(src.id)
       this.renderer.render(solved, s.rt.face(), s.rt.overrides(), {
         flourish: s.rt.flourish(),
-        spin: this.rolling && this.airborne ? this.spin : 0,
+        spin: this.rolling && this.airborne && !skinned ? this.spin : 0,
         accessories: s.rt.accessories.map((a) => a.points()),
         pupilScale: 1 + 0.55 * near, // legacy eyeR 2 → 3.1 at the cursor
         lean: this.lean,
@@ -329,7 +342,21 @@ export class EngineLayer extends Component<EngineLayerProps> {
         const { flag, value } = p as { flag: string; value?: boolean }
         this.props.onFlag(flag, value ?? true)
       }),
-      ctx.events.on('intent:sfx', (p) => this.props.sfx((p as { kind: string }).kind)),
+      ctx.events.on('intent:sfx', (p) => {
+        const kind = (p as { kind: string }).kind
+        // fx sounds carry their VISUALS now (review: audio announced effects that
+        // never appeared) — crack/smoke overlays spawn at Dash, legacy-timed.
+        if (kind === 'fx:crack') {
+          const c = rt.capsule()
+          this.props.onFx?.({ kind: 'crack', on: true, x: rt.transform.x + rt.transform.facing * 30, y: Math.max(c.y0, c.y1) + c.r - 55 })
+          this.backNavTimers.push(window.setTimeout(() => this.props.onFx?.({ kind: 'crack', on: false }), 1650))
+        } else if (kind === 'fx:smoke') {
+          const c = rt.capsule()
+          this.props.onFx?.({ kind: 'smoke', on: true, x: rt.transform.x, y: Math.max(c.y0, c.y1) + c.r - 53 })
+          this.backNavTimers.push(window.setTimeout(() => this.props.onFx?.({ kind: 'smoke', on: false }), 700))
+        }
+        this.props.sfx(kind)
+      }),
       // Camera cues (parity Stage 2c): authored shots override the follow cam.
       // A travel-bound target in flight frames the MIDPOINT of Dash and the
       // destination (the legacy vault/rope composition); omitted `to` = clear.
@@ -364,6 +391,11 @@ export class EngineLayer extends Component<EngineLayerProps> {
         this.travelDest = null
         this.camOverride = false
         this.props.onDashCam?.(null)
+        if (this.pendingHang) {
+          this.pendingHang = false
+          this.hangStaging() // ends with chainArrival
+          return
+        }
         this.chainArrival()
       }),
       ctx.events.on('behavior:ended', () => this.recoverOrArrive()),
@@ -421,6 +453,30 @@ export class EngineLayer extends Component<EngineLayerProps> {
       })
       return
     }
+    if (pe?.kind === 'surfIn') {
+      // Legacy page-surf: Dash rides the flip in, hangs above the anchor in the
+      // surf art, then drops with a tuck and lands (legacy 880/1240/1780 beats,
+      // re-based to the flip's end — the engine actor shows post-busyFlip).
+      this.stagingUntil = performance.now() + 1000
+      const t0 = rt.transform
+      t0.y -= 96
+      rt.act('surf', { holdMs: 'persist' })
+      const at = (ms: number, fn: () => void): void => {
+        this.backNavTimers.push(window.setTimeout(fn, ms))
+      }
+      at(60, () => {
+        this.props.sfx('hop')
+        rt.act('jump-tuck', { holdMs: 400 })
+        this.scriptMove = { fromX: t0.x, fromY: t0.y, toX: t0.x, toY: t0.y + 96, t0: performance.now(), dur: 340, arcH: 0 }
+      })
+      at(420, () => {
+        rt.clearAct()
+        rt.runOneShot('__surf:land', [{ verb: 'strikePose', ref: 'squash-land', holdMs: 280 }])
+        this.props.sfx('fx:shake')
+      })
+      at(960, () => this.chainArrival())
+      return
+    }
     if (pe?.kind === 'poofIn') {
       this.actorHidden = true
       this.stagingUntil = performance.now() + 1500
@@ -459,10 +515,25 @@ export class EngineLayer extends Component<EngineLayerProps> {
   travelTo(panelIdx: number): void {
     const s = this.scene
     if (!s) return
+    const doc = this.pickTravel(s.pageIdx, panelIdx)
+    this.startTravel(doc, panelIdx)
+  }
+
+  /** Shared travel launch (nav + the admin/harness testBehavior): poof interception,
+   * the legacy in-routine variant dice (trip/hang), and the behavior run itself. */
+  private startTravel(doc: BehaviorDoc, panelIdx: number): void {
+    const s = this.scene
+    if (!s) return
     const pageIdx = s.pageIdx
     const fromId = `panel:${pageIdx}:${this.currentPanel}`
     const toId = `panel:${pageIdx}:${panelIdx}`
-    const doc = this.pickTravel(pageIdx, panelIdx)
+    // POOF is code choreography (legacy poofTo): vanish + teleport + reappear —
+    // there is no teleport verb, deliberately (the sim never cheats; the ADAPTER
+    // may, exactly like legacy CSS did).
+    if (doc.id === 'builtin:poof') {
+      this.poofTravel(panelIdx)
+      return
+    }
     this.travelFrom = this.currentPanel
     this.pendingArrival = this.arrivalId(pageIdx, panelIdx)
     this.currentPanel = panelIdx
@@ -471,7 +542,102 @@ export class EngineLayer extends Component<EngineLayerProps> {
     this.rolling = doc.id === 'builtin:roll' || doc.id === 'builtin:hop' || doc.id === 'builtin:combo'
     this.spin = 0
     this.props.onHeading?.(panelIdx)
+
+    // Legacy in-routine variants (adapter dice, review-forceable):
+    // walk TRIP — 28% on walks longer than a second, at 42% of the stroll.
+    const from = this.panelSpot(pageIdx, this.travelFrom)
+    const to = this.panelSpot(pageIdx, panelIdx)
+    if (doc.id === 'builtin:walk' && from && to) {
+      const durMs = (Math.hypot(to.x - from.x, to.y - from.y) / 111.6) * 1000
+      if (durMs > 1000 && chance('walk.trip', 0.28)) {
+        this.backNavTimers.push(
+          window.setTimeout(() => {
+            if (this.travelDest === panelIdx && s.rt.running() && !this.airborne) {
+              this.props.sfx('hop')
+              s.rt.act('trip', { holdMs: 520 })
+              this.bubbleNote = { text: 'whoa—', until: performance.now() + 900 }
+            }
+          }, durMs * 0.42),
+        )
+      }
+    }
+    // hop HANG — 25% when the destination anchor hugs the panel top.
+    const pn = this.docV2.pages[pageIdx]?.panels[panelIdx]
+    this.pendingHang = doc.id === 'builtin:hop' && !!pn && pn.anchor.dy <= 6 && chance('hop.hang', 0.25)
+
     s.rt.runBehavior(doc, { travel: { from: fromId, to: toId } })
+  }
+
+  /** Legacy poofTo: smoke → vanish (150) → TELEPORT under cover (520) → smoke at
+   * the destination (620) → reappear + land (760) → arrival (1240); smoke clears
+   * at 1350. Render-layer teleport, like the legacy CSS version. */
+  private poofTravel(destIdx: number): void {
+    const s = this.scene
+    if (!s) return
+    const pageIdx = s.pageIdx
+    const spot = this.panelSpot(pageIdx, destIdx)
+    if (!spot) return
+    this.travelFrom = this.currentPanel
+    this.pendingArrival = this.arrivalId(pageIdx, destIdx)
+    this.currentPanel = destIdx
+    this.clearTravel()
+    this.stagingUntil = performance.now() + 1350
+    this.props.onHeading?.(destIdx)
+    const t = s.rt.transform
+    const cap = s.rt.capsule()
+    const gy = Math.max(cap.y0, cap.y1) + cap.r
+    this.props.sfx('flip')
+    this.props.onFx?.({ kind: 'smoke', on: true, x: t.x, y: gy - 53 })
+    const at = (ms: number, fn: () => void): void => {
+      this.backNavTimers.push(window.setTimeout(fn, ms))
+    }
+    at(150, () => {
+      this.actorHidden = true
+    })
+    at(520, () => {
+      this.props.onFx?.({ kind: 'smoke', on: false })
+      t.x = spot.x
+      const c2 = s.rt.capsule()
+      t.y += spot.y - (Math.max(c2.y0, c2.y1) + c2.r)
+    })
+    at(620, () => {
+      this.props.onFx?.({ kind: 'smoke', on: true, x: spot.x, y: spot.y - 53 })
+      this.props.sfx('flip')
+    })
+    at(760, () => {
+      this.actorHidden = false
+      s.rt.runOneShot('__poof:land', [{ verb: 'strikePose', ref: 'squash-land', holdMs: 300 }])
+      this.props.sfx('poof')
+    })
+    at(1240, () => this.chainArrival())
+    at(1350, () => this.props.onFx?.({ kind: 'smoke', on: false }))
+  }
+
+  /** Legacy hop-hang: land under the lip, dangle with kicking legs and a 'hup—',
+   * then pull up, tuck, and settle — staged AFTER the hop behavior completes. */
+  private hangStaging(): void {
+    const s = this.scene
+    if (!s) return
+    const t = s.rt.transform
+    this.stagingUntil = performance.now() + 1950
+    this.props.sfx('hop')
+    this.props.sfx('fx:shake')
+    this.scriptMove = { fromX: t.x, fromY: t.y, toX: t.x, toY: t.y + 102, t0: performance.now(), dur: 130, arcH: 0 }
+    s.rt.act('hang', { holdMs: 'persist' })
+    this.bubbleNote = { text: 'hup—', until: performance.now() + 900 }
+    const at = (ms: number, fn: () => void): void => {
+      this.backNavTimers.push(window.setTimeout(fn, ms))
+    }
+    at(970, () => {
+      this.props.sfx('whoosh')
+      s.rt.act('jump-tuck', { holdMs: 440 })
+      this.scriptMove = { fromX: t.x, fromY: t.y, toX: t.x, toY: t.y - 102, t0: performance.now(), dur: 400, arcH: 0 }
+    })
+    at(1410, () => {
+      s.rt.clearAct()
+      s.rt.runOneShot('__hang:land', [{ verb: 'strikePose', ref: 'squash-land', holdMs: 280 }])
+    })
+    at(1950, () => this.chainArrival())
   }
 
   /** A travel run blocked/failed → the legacy escape hatch: POOF. Smoke, teleport
@@ -605,7 +771,9 @@ export class EngineLayer extends Component<EngineLayerProps> {
   }
 
   /** Dev-hook surface (admin Test buttons + harness): run a specific behavior id
-   * toward the farthest panel, exactly like the legacy hooks did. */
+   * toward the farthest panel, exactly like the legacy hooks did. Goes through
+   * startTravel so the variant dice (trip/hang/peek) and poof choreography run
+   * identically to organic navigation — the harness reviews the REAL paths. */
   testBehavior(behaviorId: string): boolean {
     const s = this.scene
     const base = this.docV2.behaviors[behaviorId]
@@ -622,14 +790,7 @@ export class EngineLayer extends Component<EngineLayerProps> {
       const d = sp ? Math.abs(sp.x - here.x) : -1
       if (d > farD) { farD = d; far = i }
     })
-    const fromId = `panel:${pageIdx}:${this.currentPanel}`
-    const toId = `panel:${pageIdx}:${far}`
-    this.clearTravel()
-    this.travelDest = far
-    this.rolling = doc.id === 'builtin:roll' || doc.id === 'builtin:hop' || doc.id === 'builtin:combo'
-    this.pendingArrival = this.arrivalId(pageIdx, far)
-    this.currentPanel = far
-    s.rt.runBehavior(doc, { travel: { from: fromId, to: toId } })
+    this.startTravel(doc, far)
     return true
   }
 
@@ -900,52 +1061,72 @@ export class EngineLayer extends Component<EngineLayerProps> {
   }
 
   /** Behaviors whose movement is a jump (can cross gaps/heights ground can't). */
-  private static JUMPY = new Set(['builtin:hop', 'builtin:roll', 'builtin:vault', 'builtin:swing', 'builtin:smash', 'builtin:poof', 'builtin:combo'])
+  /** The last travel mode run — the legacy anti-repeat memory. */
+  private lastMode: string | null = null
 
   private pickTravel(pageIdx: number, destIdx: number): BehaviorDoc {
     const s = this.scene!
-    // Geometry heuristics (the legacy travel() logic, which lived in CODE and was
-    // not migratable data): a trip with real height/width needs a jump-capable
-    // behavior; a flat stroll can use anything.
-    const from = this.panelSpot(pageIdx, this.currentPanel)
-    const to = this.panelSpot(pageIdx, destIdx)
-    const needsAir = !!from && !!to && (Math.abs(to.y - from.y) > 24 || Math.abs(to.x - from.x) > 200)
-    // v1 semantics: the DESTINATION panel's (merged) pool governs the trip.
-    let pool = this.docV2.pages[pageIdx]?.panels[destIdx]?.travel?.pool
+    // THE LEGACY travel() SELECTION (Stage 3): geometry pools by the trip's shape,
+    // the 18% combo gate for big diagonal trips, the authored allow-list filter,
+    // weighted custom actions, and the anti-repeat rule — verbatim from
+    // Notebook.travel(), with the deterministic rng doing the rolling.
+    const to = this.panelSpot(pageIdx, destIdx) ?? { x: s.rt.transform.x, y: s.rt.transform.y }
+    const cap = s.rt.capsule()
+    const dxv = to.x - s.rt.transform.x
+    const dyv = to.y - (Math.max(cap.y0, cap.y1) + cap.r)
+    const horiz = Math.abs(dxv)
+    const vert = Math.abs(dyv)
+    const dist = Math.hypot(dxv, dyv)
     const fallback = this.docV2.behaviors['builtin:hop'] ?? this.docV2.behaviors['builtin:walk']
-    if (pool && needsAir) {
-      const airy = pool.filter((e) => EngineLayer.JUMPY.has(e.behaviorId))
-      if (airy.length > 0) pool = airy
-    }
-    if (!pool || pool.length === 0) {
-      // No authored pool → the classic default: the full builtin set (air-filtered;
-      // VARIANT docs like vault-peek are adapter-selected, never pool members).
-      let ids = Object.keys(this.docV2.behaviors).filter((id) => id.startsWith('builtin:') && !EngineLayer.VARIANTS.has(id))
-      if (needsAir) ids = ids.filter((id) => EngineLayer.JUMPY.has(id))
-      const id = this.forcedTravel(ids) ?? ids[s.ctx.rng.int(0, ids.length)]
-      reviewLog('engine', 'pick', { key: 'travel.mode', value: id })
-      return this.applyVariant(this.docV2.behaviors[id] ?? fallback)
-    }
-    const entries: string[] = []
-    for (const e of pool) {
+
+    // The authored pool (migrated v1 allow-list + weighted actions).
+    const authored = this.docV2.pages[pageIdx]?.panels[destIdx]?.travel?.pool
+    const allowed = new Set<string>()
+    const actionEntries: string[] = []
+    for (const e of authored ?? []) {
       const doc = this.docV2.behaviors[e.behaviorId]
       if (!doc) continue
-      const gate = (doc as { when?: GateExpr }).when
-      if (gate && !evalGate(gate, this.props.flags)) continue
-      const w = Math.max(1, Math.floor(e.weight ?? 1))
-      for (let k = 0; k < w; k++) entries.push(e.behaviorId)
+      if (e.behaviorId.startsWith('builtin:')) allowed.add(e.behaviorId)
+      else {
+        const gate = (doc as { when?: GateExpr }).when
+        if (gate && !evalGate(gate, this.props.flags)) continue
+        const w = Math.max(0, Math.floor(e.weight ?? 1))
+        for (let k = 0; k < w; k++) actionEntries.push(e.behaviorId)
+      }
     }
+
+    // Combo gate (legacy: big diagonal trips, 18%, never twice in a row).
+    const comboOk = (allowed.size === 0 || allowed.has('builtin:combo')) && this.docV2.behaviors['builtin:combo']
+    if (dist > 380 && horiz > 240 && vert > 60 && comboOk && this.lastMode !== 'builtin:combo' && chance('travel.combo', 0.18)) {
+      reviewLog('engine', 'pick', { key: 'travel.mode', value: 'builtin:combo' })
+      this.lastMode = 'builtin:combo'
+      return this.docV2.behaviors['builtin:combo']
+    }
+
+    // Geometry pools — the legacy shape → verb mapping, weights via repetition.
+    let modes: string[]
+    if (vert > 110) modes = dyv < 0 ? ['wallrun', 'wallrun', 'swing', 'hop', 'poof'] : ['slide', 'slide', 'swing', 'hop', 'roll']
+    else if (horiz > 430) modes = ['swing', 'rope', 'rope', 'vault', 'poof']
+    else if (horiz > 250) modes = ['vault', 'vault', 'rope', 'swing', 'walk', 'smash']
+    else modes = ['walk', 'vault', 'hop', 'roll', 'smash', 'walk']
+    let entries = modes.map((m) => `builtin:${m}`).filter((id) => this.docV2.behaviors[id])
+    if (allowed.size > 0) {
+      const filtered = entries.filter((id) => allowed.has(id))
+      if (filtered.length > 0) entries = filtered // an author error never empties the pool
+    }
+    entries = [...entries, ...actionEntries]
     if (entries.length === 0) return fallback
-    const id = this.forcedTravel(entries) ?? entries[s.ctx.rng.int(0, entries.length)]
+
+    let id = this.forcedTravel(entries) ?? entries[s.ctx.rng.int(0, entries.length)]
+    if (id === this.lastMode) id = entries[(entries.indexOf(id) + 1) % entries.length] // anti-repeat
     reviewLog('engine', 'pick', { key: 'travel.mode', value: id })
+    this.lastMode = id
     return this.applyVariant(this.docV2.behaviors[id] ?? fallback)
   }
 
-  /** Variant docs the adapter rolls AFTER the pool pick (never pool members) —
-   * the legacy in-routine dice (vault's 30% peek; hop-hang/walk-trip follow in
-   * Stage 3). All review-forceable. */
-  private static VARIANTS = new Set(['builtin:vault-peek'])
-
+  /** Variant docs are adapter-rolled AFTER the pool pick (never pool members —
+   * the geometry pools enumerate base modes only): the legacy in-routine dice,
+   * all review-forceable. */
   private applyVariant(doc: BehaviorDoc): BehaviorDoc {
     if (doc.id === 'builtin:vault' && this.docV2.behaviors['builtin:vault-peek'] && chance('vault.peek', 0.3)) {
       return this.docV2.behaviors['builtin:vault-peek']
@@ -986,7 +1167,13 @@ export class EngineLayer extends Component<EngineLayerProps> {
     const s = this.scene
     const b = this.bubble
     if (!s || !b) return
-    const sp = s.rt.speech()
+    let sp = s.rt.speech()
+    // Adapter quips (trip 'whoa—', hang 'hup—') fill in when the engine bubble
+    // is silent; a real behavior say always wins.
+    if (!sp && this.bubbleNote) {
+      if (performance.now() < this.bubbleNote.until) sp = { text: this.bubbleNote.text, remainingMs: 1 }
+      else this.bubbleNote = null
+    }
     if (!sp) {
       b.style.display = 'none'
       return

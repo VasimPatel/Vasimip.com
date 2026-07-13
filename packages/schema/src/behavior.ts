@@ -126,7 +126,12 @@ export type IntentVerb = (typeof INTENT_VERBS)[number]
 export const MOVEMENT_VERBS = ['moveTo', 'jumpTo', 'flyTo', 'flyThrough'] as const
 export type MovementVerb = (typeof MOVEMENT_VERBS)[number]
 
-export type MoveIntent = { verb: MovementVerb; target: TargetRef; timeoutMs?: number }
+/** Movement widening (parity Stage 3/4, owner-approved in plan):
+ * `pose` — an ACTING pose held for the duration of THIS move (the v1 rope/slide
+ * crossings and tightrope walk: the root travels while the figure holds the art;
+ * released when the move concludes). `speed` — authored ground speed in px/s
+ * (the v1 motion tempo the 9a migration dropped; jumps ignore it). */
+export type MoveIntent = { verb: MovementVerb; target: TargetRef; timeoutMs?: number; pose?: string; speed?: number }
 
 export type Intent =
   | { verb: 'idle' }
@@ -229,10 +234,10 @@ function rejectUnknownKeys(o: Record<string, unknown>, allowed: readonly string[
 /** Allowed fields per verb (closed schema — anything else is rejected). */
 const VERB_KEYS: Record<IntentVerb, readonly string[]> = {
   idle: ['verb'],
-  moveTo: ['verb', 'target', 'timeoutMs'],
-  jumpTo: ['verb', 'target', 'timeoutMs'],
-  flyTo: ['verb', 'target', 'timeoutMs'],
-  flyThrough: ['verb', 'target', 'timeoutMs'],
+  moveTo: ['verb', 'target', 'timeoutMs', 'pose', 'speed'],
+  jumpTo: ['verb', 'target', 'timeoutMs', 'pose', 'speed'],
+  flyTo: ['verb', 'target', 'timeoutMs', 'pose', 'speed'],
+  flyThrough: ['verb', 'target', 'timeoutMs', 'pose', 'speed'],
   playClip: ['verb', 'ref', 'blendMs'],
   strikePose: ['verb', 'ref', 'blendMs', 'holdMs', 'hold'],
   say: ['verb', 'text'],
@@ -274,6 +279,10 @@ function checkIntent(intent: unknown, path: string, issues: Issues): void {
       checkTarget(intent.target, `${path}.target`, issues)
       if (intent.timeoutMs !== undefined && (!isNum(intent.timeoutMs) || intent.timeoutMs <= 0))
         issues.push(`${path}.timeoutMs: must be a finite number > 0 when present`)
+      if (intent.pose !== undefined && (!isStr(intent.pose) || intent.pose.length === 0))
+        issues.push(`${path}.pose: must be a non-empty pose/clip ref when present`)
+      if (intent.speed !== undefined && (!isNum(intent.speed) || intent.speed <= 0))
+        issues.push(`${path}.speed: must be a finite number > 0 (px/s) when present`)
       break
     case 'playClip':
       if (!isStr(intent.ref) || intent.ref.length === 0) issues.push(`${path}.ref: required non-empty string`)

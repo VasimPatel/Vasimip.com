@@ -135,6 +135,10 @@ export interface LocomotionState {
   gFloorY: number
   gHipHeight: number
   gElapsedMs: number
+  /** Authored per-intent ground speed (px/s) — applies to LATER legs of a
+   * multi-leg route too, so it must survive a between-legs snapshot. Optional
+   * for pre-parity snapshots. */
+  speedOverride?: number | null
   // jump
   jPhase: JumpPhase
   jVx: number
@@ -354,6 +358,7 @@ export function createLocomotion(deps: LocomotionDeps): Locomotion {
   let gStartX = 0
   let gSpeed = 0
   let gDir: 1 | -1 = 1
+  let speedOverride: number | null = null
   let gFloorY = 0
   let gHipHeight = deps.hipHeight
   let gElapsedMs = 0
@@ -690,7 +695,7 @@ export function createLocomotion(deps: LocomotionDeps): Locomotion {
     gHipHeight = deps.hipHeight
     gStartX = t.x
     gDir = to.x >= t.x ? 1 : -1
-    gSpeed = walkSpeed * gDir
+    gSpeed = (speedOverride ?? walkSpeed) * gDir
     gElapsedMs = 0
     t.facing = gDir
     gait = createGait(rig, character, {
@@ -842,6 +847,10 @@ export function createLocomotion(deps: LocomotionDeps): Locomotion {
     pendingRef = intent.target
     replanCount = 0
     elapsedMs = 0
+    // Authored ground speed (parity Stage 3/4): the v1 motion tempo (rope 200,
+    // tightrope 200, custom actions 270-300 px/s). Cleared per begin; jumps
+    // ignore it (ballistics own air time).
+    speedOverride = (intent as { speed?: number }).speed ?? null
 
     // CAPABILITY GATING (model documented at GROUND_EDGES): each verb requires its
     // mode — a fly-only bird cannot walk/jump; a walker cannot fly.
@@ -1132,6 +1141,7 @@ export function createLocomotion(deps: LocomotionDeps): Locomotion {
 
   function reset(): void {
     travelCtx = null // stale context must never leak into a later behavior (review)
+    speedOverride = null
     mode = 'idle'
     status = 'idle'
     verb = null
@@ -1167,6 +1177,7 @@ export function createLocomotion(deps: LocomotionDeps): Locomotion {
       gFloorY,
       gHipHeight,
       gElapsedMs,
+      ...(speedOverride !== null ? { speedOverride } : {}),
       jPhase,
       jVx,
       jVy,
@@ -1199,6 +1210,7 @@ export function createLocomotion(deps: LocomotionDeps): Locomotion {
     gFloorY = s.gFloorY
     gHipHeight = s.gHipHeight
     gElapsedMs = s.gElapsedMs
+    speedOverride = s.speedOverride ?? null
     jPhase = s.jPhase
     jVx = s.jVx
     jVy = s.jVy

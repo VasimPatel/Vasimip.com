@@ -590,10 +590,23 @@ export function createBehaviorExecutor(deps: BehaviorDeps): BehaviorExecutor {
         f.moveStarted = true
         moveSeq++
         f.moveSeq = moveSeq
+        // Move-scoped ACTING pose (v1 rope/slide/tightrope crossings): the figure
+        // holds the art while the root travels; released when the move concludes
+        // (any terminal path funnels through the next enterCurrent/endBehavior,
+        // both of which clear or replace acting — plus the explicit clear below).
+        const actingRef = (step as { pose?: string }).pose
+        if (actingRef) {
+          const src = deps.poses[actingRef] ?? deps.clips[actingRef]
+          if (src) blender.setActing(src as Pose | Clip, { durationMs: 180, holdMs: 'persist' })
+        }
       }
       // Terminal solver status FIRST, timeout second: an arrival on the exact
       // timeout-boundary tick is an arrival, never a timeout.
       const st = locomotion.status
+      // A move-scoped acting pose releases the moment ITS move concludes — the
+      // next step may be a non-clearing beat (sfx/say) that must show the figure
+      // landing, not still frozen in the crossing art.
+      if (st !== 'running' && (step as { pose?: string }).pose) blender.clearActing()
       if (st === 'arrived') {
         if (!inReaction()) concludeArrived()
         else complete()
