@@ -161,6 +161,11 @@ export interface BehaviorDeps {
 
 export interface BehaviorExecutor {
   run(doc: BehaviorDoc): void
+  /** Run an EPHEMERAL one-shot steps list (dynamic quips/beats whose text varies per
+   * invocation). Never touches the registry — snapshots store `behaviorId: null` plus
+   * the inline frame steps, so restore is exact and repeated one-shots cannot violate
+   * the registry identity contract. `label` is trace-only (events/reason). */
+  runOneShot(label: string, steps: Intent[]): void
   /** Advance the active step by one tick. Call AFTER locomotion.postBlend. */
   advance(): void
   readonly status: BehaviorStatus
@@ -271,6 +276,24 @@ export function createBehaviorExecutor(deps: BehaviorDeps): BehaviorExecutor {
     runId++
     budget = computeBudget(behavior)
     emit('behavior:start', { behaviorId: behavior.id })
+    enterCurrent()
+  }
+
+  /** One-shot run: interrupt semantics match run() (reset locomotion, fresh stack,
+   * watchdog re-armed), but the steps live INLINE in the frame and `doc` stays null —
+   * nothing is registered. The frame is a reaction frame (bus reactions don't stack
+   * inside it) that ends the run when it drains (`behavior:ended {reason: label}`). */
+  function runOneShot(label: string, steps: Intent[]): void {
+    if (status === 'running') {
+      emit('behavior:interrupted', { behaviorId: doc?.id ?? top()?.reason ?? '__one-shot', depth: stack.length })
+    }
+    locomotion.reset()
+    doc = null
+    status = 'running'
+    stack = [newFrame(steps.map((s) => structuredClone(s)), { isReaction: true, endAfter: true, reason: label })]
+    runId++
+    budget = sumBound(steps) + REACTION_ALLOWANCE_MS + 1500
+    emit('behavior:start', { behaviorId: label, oneShot: true })
     enterCurrent()
   }
 
@@ -707,6 +730,7 @@ export function createBehaviorExecutor(deps: BehaviorDeps): BehaviorExecutor {
 
   return {
     run,
+    runOneShot,
     advance,
     get status() {
       return status

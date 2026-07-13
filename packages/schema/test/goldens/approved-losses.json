@@ -1,0 +1,65 @@
+{
+  "$comment": "Parity-recovery Stage 0: the migration loss report is a CHECKED ARTIFACT. Every lossy note migrateNotebookV1 emits for the live notebook.json must match one of these approved classes; a note matching none fails the suite (an unapproved loss appeared). Classes are matched by substring. Stage 4 eliminates classes one by one — remove the entry here in the same commit that restores the semantics, so the approved set shrinks with the work. Target: empty.",
+  "approved": [
+    {
+      "match": "geometric gate dropped",
+      "why": "v1 `when` (minHoriz etc.) approximated by traversal-graph feasibility",
+      "restoredBy": "Stage 4: geometric when-gates via world queries"
+    },
+    {
+      "match": "face: dropped — facing follows the approach direction",
+      "why": "v1 authored arrival/step facing overridden by approach direction",
+      "restoredBy": "Stage 4: arrival face restored as authored choice"
+    },
+    {
+      "match": "v1 ease/easeY/speed/ms dropped",
+      "why": "authored movement tempo flattened to the locomotion solver's feel",
+      "restoredBy": "Stage 4: named motion profiles preserve authored tempo"
+    },
+    {
+      "match": "acting pose during a move approximated",
+      "why": "v1 pose-during-move became an onLaunch cue (jump moves only)",
+      "restoredBy": "Stage 2a/4: acting layer holds the pose through the move"
+    },
+    {
+      "match": "say duration is engine-standard now",
+      "why": "v1 holdMs flattened to SAY_DURATION_MS",
+      "restoredBy": "Stage 4: say {holdMs} passes through"
+    },
+    {
+      "match": "approximated as travel:to#interior",
+      "why": "v1 camera focus target / unmapped travel target coarsened",
+      "restoredBy": "Stage 4: camera targets + edge target refs restored"
+    },
+    {
+      "match": "camera mult/fast dropped",
+      "why": "authored zoom/tempo flattened to the follow camera",
+      "restoredBy": "Stage 2a: camera intent {mult, fast} wired to the shell"
+    },
+    {
+      "match": "approximated as sfx",
+      "why": "v1 page effects (smoke/crack/shove) reduced to sound intents",
+      "restoredBy": "Stage 2c/4: fx intents drive the real overlays"
+    },
+    {
+      "match": "approximated as a 12000ms hold",
+      "why": "v1 persist-until-next-transition faked with a long timer",
+      "restoredBy": "Stage 2a/4: strikePose {hold:'persist'}"
+    },
+    {
+      "match": "flourish: dropped",
+      "why": "v1 arrival flourish (knock/shove/squish) not migrated",
+      "restoredBy": "Stage 4: flourish behaviors + 24% arrival roll"
+    },
+    {
+      "match": "approximated as the roof spot",
+      "why": "v1 edge-side targets coarsened to the roof spot",
+      "restoredBy": "Stage 4: panel-edge target refs"
+    },
+    {
+      "match": "disabled by actionWeight 0",
+      "why": "owner-authored weight 0 = deliberately out of the pool (not a loss)",
+      "restoredBy": "n/a — intentional"
+    }
+  ]
+}

@@ -9,6 +9,9 @@ import character from '../../../content/engine/character.dash.json'
 import idleClip from '../../../content/engine/clips/idle-shuffle.json'
 import walkClip from '../../../content/engine/clips/walk-cycle.json'
 import jumpClip from '../../../content/engine/clips/jump.json'
+import lossFixture from './goldens/approved-losses.json'
+
+const approvedLosses = lossFixture.approved as Array<{ match: string }>
 
 const ROOT = new URL('../../../', import.meta.url).pathname
 
@@ -68,10 +71,12 @@ test('THE 9a ROUND-TRIP: live notebook.json migrates CLEAN with the full base', 
   if (!v.ok) console.log('errors:', v.errors.slice(0, 8))
   expect(v.ok).toBe(true)
 
-  // Report is small and every note is an EXPECTED approximation class.
-  for (const note of report.lossy) {
-    expect(/face|flourish|ease|geometric gate|fx |holdMs|persisted|edge side|approximated|disabled|camera mult/.test(note)).toBe(true)
-  }
+  // THE LOSS CONTRACT (parity recovery, Stage 0): the loss report is a checked
+  // artifact. Every note must match an APPROVED class in goldens/approved-losses.json;
+  // anything else is a NEW unapproved loss and fails loudly. Stage 4 shrinks the
+  // approved set to zero as each semantics class is restored.
+  const unapproved = report.lossy.filter((note) => !approvedLosses.some((c) => note.includes(c.match)))
+  expect(unapproved).toEqual([])
 })
 
 test('deterministic: migrating twice yields identical docs and reports', async () => {

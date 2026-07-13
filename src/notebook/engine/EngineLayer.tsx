@@ -402,18 +402,18 @@ export class EngineLayer extends Component<EngineLayerProps> {
       window.clearTimeout(timer)
       this.backNavCancel = null
     }
-    const doc =
-      kind === 'bomb'
-        ? ({ schemaVersion: 2, id: '__backnav:bomb', steps: [
-            { verb: 'strikePose', ref: 'throw', holdMs: 380 },
-            { verb: 'sfx', kind: 'boom' },
-          ] } as never)
-        : ({ schemaVersion: 2, id: '__backnav:poof', steps: [
-            { verb: 'sfx', kind: 'fx:smoke' },
-            { verb: 'strikePose', ref: 'sneeze', holdMs: 240 },
-            { verb: 'sfx', kind: 'poof' },
-          ] } as never)
-    s.rt.runBehavior(doc)
+    if (kind === 'bomb') {
+      s.rt.runOneShot('__backnav:bomb', [
+        { verb: 'strikePose', ref: 'throw', holdMs: 380 },
+        { verb: 'sfx', kind: 'boom' },
+      ])
+    } else {
+      s.rt.runOneShot('__backnav:poof', [
+        { verb: 'sfx', kind: 'fx:smoke' },
+        { verb: 'strikePose', ref: 'sneeze', holdMs: 240 },
+        { verb: 'sfx', kind: 'poof' },
+      ])
+    }
   }
 
   /** Dev-hook surface (admin Test buttons + harness): run a specific behavior id
@@ -462,7 +462,7 @@ export class EngineLayer extends Component<EngineLayerProps> {
       const lines = this.props.pokeLines
       if (lines && lines.length > 0) {
         const line = lines[Math.floor(Math.random() * lines.length)]
-        s.rt.runBehavior({ schemaVersion: 2, id: '__poke:quip', steps: [{ verb: 'say', text: line }] } as never)
+        s.rt.runOneShot('__poke:quip', [{ verb: 'say', text: line }])
       }
     }
   }
@@ -594,7 +594,7 @@ export class EngineLayer extends Component<EngineLayerProps> {
     const lines = this.props.dropLines
     if (this.dragMoved && lines && lines.length > 0 && s.ctx.rng.float() < 0.6) {
       const line = lines[s.ctx.rng.int(0, lines.length)]
-      s.rt.runBehavior({ schemaVersion: 2, id: '__drop:quip', steps: [{ verb: 'say', text: line }] } as never)
+      s.rt.runOneShot('__drop:quip', [{ verb: 'say', text: line }])
     }
   }
 
@@ -654,16 +654,16 @@ export class EngineLayer extends Component<EngineLayerProps> {
           const lines = this.props.chatterLines
           if (lines && lines.length > 0) {
             const line = lines[Math.floor(Math.random() * lines.length)]
-            s.rt.runBehavior({ schemaVersion: 2, id: '__fidget:chat', steps: [{ verb: 'say', text: line }] } as never)
+            s.rt.runOneShot('__fidget:chat', [{ verb: 'say', text: line }])
           }
         } else if (f === 'wave') {
-          s.rt.runBehavior({ schemaVersion: 2, id: '__fidget:wave', steps: [{ verb: 'strikePose', ref: 'wave', holdMs: 1200 }] } as never)
+          s.rt.runOneShot('__fidget:wave', [{ verb: 'strikePose', ref: 'wave', holdMs: 1200 }])
         } else if (f === 'sneeze') {
           this.props.sfx('scrib')
-          s.rt.runBehavior({ schemaVersion: 2, id: '__fidget:sneeze', steps: [
+          s.rt.runOneShot('__fidget:sneeze', [
             { verb: 'say', text: 'ah— ah— CHOO!' },
             { verb: 'strikePose', ref: 'sneeze', holdMs: 700 },
-          ] } as never)
+          ])
         } else {
           if (f === 'hop') this.props.sfx('hop')
           this.playArc(f as 'hop' | 'spin' | 'wob', true)

@@ -18,7 +18,7 @@
 // blender/secondary/verlet carry their OWN serializable state; this runtime's state
 // is {transform, locomotion, behavior(+flags), blender, blink}.
 
-import type { CharacterDoc, RigTemplate, Pose, Clip, BehaviorDoc } from '@dash/schema'
+import type { CharacterDoc, RigTemplate, Pose, Clip, BehaviorDoc, Intent } from '@dash/schema'
 import { solveFk, type SolvedSkeleton } from './fk'
 import { createBlender, type Blender, type BlenderState } from './blender'
 import { createControllerSet, type ControllerSet, type ControllerSetState } from './controllers/set'
@@ -127,6 +127,9 @@ export interface CharacterRuntime {
    * refs resolve against — applied AFTER the run's locomotion reset, so the
    * binding is atomic with the run (a reset clears any previous binding). */
   runBehavior(doc: BehaviorDoc, opts?: { travel?: { from?: string; to?: string } }): void
+  /** Run an ephemeral one-shot steps list (dynamic quips/beats — text varies per
+   * invocation) WITHOUT registering a behavior doc. See BehaviorExecutor.runOneShot. */
+  runOneShot(label: string, steps: Intent[]): void
   getState(): CharacterState
   setState(s: CharacterState): void
   readonly transform: CharacterTransform
@@ -402,9 +405,15 @@ export function createCharacterRuntime(opts: CharacterRuntimeOptions): Character
     locomotion.setTravelContext(opts?.travel ?? null)
   }
 
+  function runOneShot(label: string, steps: Intent[]): void {
+    behavior.runOneShot(label, steps) // resets locomotion like run()
+    locomotion.setTravelContext(null)
+  }
+
   return {
     tick,
     runBehavior,
+    runOneShot,
     getState(): CharacterState {
       return {
         transform: { ...transform },
