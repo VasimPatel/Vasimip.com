@@ -105,6 +105,22 @@ cape socket are both detected; the clean run is quiet. Regenerate the evidence
 (metrics + 0.25×/1× flipbook clips per scenario) with:
 `node scripts/motion-harness.mjs <outDir>` (add `--negative-control`).
 
+Cape metric semantics (post-review): `sockSep` compares the RENDERED knot (live
+CTM probe on the authored cape) against the expected placement — walk/idle sit
+within the plan's ≤2px envelope (1.3px avg). Poses whose whole drawing shifts
+(fightshift) carry the knot with the body BY DESIGN; the expectation model
+excludes group animations, so their larger readings are placement-model
+variance, not detachment (the knot is structurally inside the drawing).
+
+Accepted edges (codex final review findings 4/8/11, documented):
+- Refresh-rate invariance is by construction (distance phase) + throttle-
+  induced irregularity — headless Chrome can't sweep literal 60/90/120Hz.
+- A snapshot captured synchronously from a behavior:start listener restores
+  before the per-run defaultSpeed installs (nothing in production snapshots
+  from event handlers).
+- The ordinary-walk 0.7–2.2s bound derives from straight-line distance; a
+  graph-routed walk with hop legs can exceed the total (rare page geometries).
+
 ### Reopened-gate status after Q0–Q7
 
 | Gate (quality review) | Status now |

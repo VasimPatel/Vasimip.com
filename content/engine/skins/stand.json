@@ -85,7 +85,10 @@
       {
         "kind": "group",
         "anim": {
-          "name": "capeidle"
+          "name": "capeidle",
+          "durationSec": 0.9,
+          "ease": "ease-in-out",
+          "iterations": "infinite"
         },
         "origin": "100% 0%",
         "children": [

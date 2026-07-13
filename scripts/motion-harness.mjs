@@ -13,6 +13,11 @@
 //   node scripts/motion-harness.mjs <outDir> [baseURL] [scenario ...]
 //   node scripts/motion-harness.mjs <outDir> [baseURL] --negative-control
 //   flags: --throttle=4  --no-clips
+//
+// LIMITATION (documented, review finding): headless Chrome offers no direct
+// rAF-rate control, so refresh-rate invariance is established by construction
+// (distance-locked phase) plus CPU-throttle-induced cadence irregularity —
+// not by literal 60/90/120Hz sweeps.
 import puppeteer from 'puppeteer-core'
 import { mkdirSync, writeFileSync } from 'node:fs'
 
@@ -126,15 +131,17 @@ function metrics(samples) {
   const bobAmp = bobY.length ? (quantile(bobY, 0.95) - quantile(bobY, 0.05)) / 2 : 0
   const bobHz = dominantHz(bobY, bobT)
 
-  // screen-space step pattern: normalized |d(scr)/frame| — alternation score =
-  // fraction of frames where displacement flips between ~0 and ~2× median.
-  const disp = []
+  // screen-space step pattern over MOVING frames only (review: pre-filtering
+  // near-zero displacements hid literal zero/double-step defects — zeros are
+  // exactly the signal). Alternation = low↔high flips around the median.
+  const movingSet = new Set(moving)
+  const activeDisp = []
   for (let i = 1; i < samples.length; i++) {
+    if (!movingSet.has(i)) continue
     if (Number.isNaN(samples[i].scrX) || Number.isNaN(samples[i - 1].scrX)) continue
-    disp.push(Math.hypot(samples[i].scrX - samples[i - 1].scrX, samples[i].scrY - samples[i - 1].scrY))
+    activeDisp.push(Math.hypot(samples[i].scrX - samples[i - 1].scrX, samples[i].scrY - samples[i - 1].scrY))
   }
-  const activeDisp = disp.filter((d) => d > 0.05)
-  const m = median(activeDisp)
+  const m = median(activeDisp.filter((d) => d > 0)) || 1
   let flips = 0
   for (let i = 1; i < activeDisp.length; i++) {
     const lo = activeDisp[i - 1] < 0.4 * m

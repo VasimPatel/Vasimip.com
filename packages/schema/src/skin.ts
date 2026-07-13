@@ -62,6 +62,16 @@ interface SkinPaint {
   opacity?: number
 }
 
+/** A keyframe-animation reference with optional per-use timing overrides. */
+export interface SkinAnimRef {
+  name: string
+  delaySec?: number
+  durationSec?: number
+  ease?: string
+  iterations?: 'infinite' | number
+  fill?: 'forwards'
+}
+
 export type SkinElement =
   | ({ kind: 'path'; d: string } & SkinPaint)
   | ({ kind: 'circle'; cx: number; cy: number; r: number } & SkinPaint)
@@ -103,7 +113,7 @@ export interface PoseSkinDoc {
    * authority is the drawing; secondary motion is a bounded render-layer lag. */
   cape?: { socket: { x: number; y: number }; elements: SkinElement[] }
   /** Whole-figure animation (legacy top-group anims like fightshift/idlesway). */
-  groupAnim?: { name: string; delaySec?: number; origin?: string }
+  groupAnim?: SkinAnimRef & { origin?: string }
   elements: SkinElement[]
 }
 
@@ -115,7 +125,8 @@ const KEYFRAME_KEYS = new Set(['duration', 'ease', 'iterations', 'fill', 'frames
 const KEYFRAMES_DOC_KEYS = new Set(['schemaVersion', 'id', 'keyframes'])
 const POSE_SKIN_KEYS = new Set(['schemaVersion', 'id', 'sources', 'head', 'face', 'groupAnim', 'elements', 'strideLen', 'cape'])
 const HEAD_KEYS = new Set(['cx', 'cy', 'r'])
-const GROUP_ANIM_KEYS = new Set(['name', 'delaySec', 'origin'])
+const ANIM_REF_KEYS = new Set(['name', 'delaySec', 'durationSec', 'ease', 'iterations', 'fill'])
+const GROUP_ANIM_KEYS = new Set([...ANIM_REF_KEYS, 'origin'])
 const PAINT_KEYS = ['fill', 'stroke', 'strokeWidth', 'linecap', 'opacity']
 const ELEMENT_KEYS: Record<string, Set<string>> = {
   path: new Set(['kind', 'd', ...PAINT_KEYS]),
@@ -160,6 +171,16 @@ function checkKeyframe(k: unknown, path: string, issues: Issues): void {
   }
 }
 
+function checkAnimRef(a: Record<string, unknown>, path: string, issues: Issues): void {
+  for (const k of Object.keys(a)) if (!ANIM_REF_KEYS.has(k)) issues.push(`${path}.${k}: unknown key`)
+  if (a.delaySec !== undefined && !isNum(a.delaySec)) issues.push(`${path}.delaySec: must be a number`)
+  if (a.durationSec !== undefined && (!isNum(a.durationSec) || (a.durationSec as number) <= 0)) issues.push(`${path}.durationSec: must be > 0`)
+  if (a.ease !== undefined && !isStr(a.ease)) issues.push(`${path}.ease: must be a string`)
+  if (a.iterations !== undefined && a.iterations !== 'infinite' && (!isNum(a.iterations) || (a.iterations as number) <= 0))
+    issues.push(`${path}.iterations: must be 'infinite' or a positive number`)
+  if (a.fill !== undefined && a.fill !== 'forwards') issues.push(`${path}.fill: must be 'forwards' when present`)
+}
+
 function checkPaint(e: Record<string, unknown>, path: string, issues: Issues): void {
   if (e.fill !== undefined && !isStr(e.fill)) issues.push(`${path}.fill: must be a string`)
   if (e.stroke !== undefined && !isStr(e.stroke)) issues.push(`${path}.stroke: must be a string`)
@@ -194,8 +215,8 @@ function checkElement(e: unknown, path: string, issues: Issues, depth: number): 
       if (depth >= 6) return void issues.push(`${path}: group nesting too deep (max 6)`)
       if (e.anim !== undefined) {
         if (!isRecord(e.anim) || !isStr(e.anim.name) || (e.anim.name as string).length === 0)
-          issues.push(`${path}.anim: must be { name: string, delaySec? }`)
-        else if (e.anim.delaySec !== undefined && !isNum(e.anim.delaySec)) issues.push(`${path}.anim.delaySec: must be a number`)
+          issues.push(`${path}.anim: must be { name, delaySec?, durationSec?, ease?, iterations?, fill? }`)
+        else checkAnimRef(e.anim, `${path}.anim`, issues)
       }
       if (e.origin !== undefined && !isStr(e.origin)) issues.push(`${path}.origin: must be a string`)
       if (e.transform !== undefined && !isStr(e.transform)) issues.push(`${path}.transform: must be a string`)
@@ -250,11 +271,12 @@ const poseSkinChecks: Check[] = [
     }
     if (doc.groupAnim !== undefined) {
       const g = doc.groupAnim
-      if (!isRecord(g) || !isStr(g.name)) issues.push('groupAnim: must be { name, delaySec?, origin? }')
+      if (!isRecord(g) || !isStr(g.name)) issues.push('groupAnim: must be { name, timing?, origin? }')
       else {
         rejectUnknown(g, GROUP_ANIM_KEYS, 'groupAnim', issues)
-        if (g.delaySec !== undefined && !isNum(g.delaySec)) issues.push('groupAnim.delaySec: must be a number')
-        if (g.origin !== undefined && !isStr(g.origin)) issues.push('groupAnim.origin: must be a string')
+        const { origin, ...ref } = g
+        checkAnimRef(ref as Record<string, unknown>, 'groupAnim', issues)
+        if (origin !== undefined && !isStr(origin)) issues.push('groupAnim.origin: must be a string')
       }
     }
     if (!isArr(doc.elements) || doc.elements.length === 0) issues.push('elements: required non-empty array')

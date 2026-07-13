@@ -82,7 +82,10 @@
             }
           ],
           "anim": {
-            "name": "kickl"
+            "name": "kickl",
+            "durationSec": 0.45,
+            "ease": "ease-in-out",
+            "iterations": "infinite"
           },
           "origin": "15% 0%"
         },
@@ -99,7 +102,10 @@
             }
           ],
           "anim": {
-            "name": "kickr"
+            "name": "kickr",
+            "durationSec": 0.45,
+            "ease": "ease-in-out",
+            "iterations": "infinite"
           },
           "origin": "85% 0%"
         }

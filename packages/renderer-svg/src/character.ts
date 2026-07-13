@@ -15,7 +15,7 @@
 //
 // Geometry constants are expressed in HEAD RADII so any rig proportion scales.
 
-import type { CharacterDoc, PoseProp, PoseSkinDoc, RigTemplate, SkinElement, SkinKeyframe } from '@dash/schema'
+import type { CharacterDoc, PoseProp, PoseSkinDoc, RigTemplate, SkinAnimRef, SkinElement, SkinKeyframe } from '@dash/schema'
 import type { FaceAux, SolvedSkeleton } from '@dash/engine'
 import { NEUTRAL_FACE } from '@dash/engine'
 
@@ -95,6 +95,10 @@ export interface RenderExtras {
 
 export interface CharacterRenderer {
   render(solved: SolvedSkeleton, face?: FaceAux, overrides?: EndpointOverrides, extras?: RenderExtras): void
+  /** The VISIBLE cape's rendered knot position in world/page coords (via the
+   * live CTM — an independent DOM measurement for the motion recorder), or
+   * null when no authored cape is active (rig ribbon mode). */
+  capeProbe(): { x: number; y: number } | null
   destroy(): void
 }
 
@@ -381,20 +385,21 @@ export function createCharacterRenderer(
     svgRoot.appendChild(skinStyleEl)
   }
 
-  function animShorthand(name: string, delaySec?: number): string {
-    const k = opts?.skins?.keyframes[name]
+  function animShorthand(ref: SkinAnimRef): string {
+    const k = opts?.skins?.keyframes[ref.name]
     if (!k) return ''
-    const parts = [`dskin-${name}`, `${k.duration}s`, k.ease ?? 'ease-in-out']
-    if (delaySec !== undefined) parts.push(`${delaySec}s`)
-    const iter = k.iterations ?? 'infinite'
-    parts.push(String(iter))
-    if (k.fill === 'forwards') parts.push('forwards')
+    // per-USE timing wins over the shared table (poses run the same keyframes
+    // at their own durations — review finding).
+    const parts = [`dskin-${ref.name}`, `${ref.durationSec ?? k.duration}s`, ref.ease ?? k.ease ?? 'ease-in-out']
+    if (ref.delaySec !== undefined) parts.push(`${ref.delaySec}s`)
+    parts.push(String(ref.iterations ?? k.iterations ?? 'infinite'))
+    if ((ref.fill ?? k.fill) === 'forwards') parts.push('forwards')
     return parts.join(' ')
   }
 
   /** WAAPI keyframes from skin data — the SAME numbers the CSS synthesis uses,
    * so a phase-driven animation and its wall-clock twin are pixel-identical. */
-  function waapiFrames(k: SkinKeyframe): Keyframe[] {
+  function waapiFrames(k: SkinKeyframe, easeOverride?: string): Keyframe[] {
     const stops = Object.entries(k.frames)
       .map(([off, f]) => ({ off: Number(off) / 100, f }))
       .sort((a, b) => a.off - b.off)
@@ -403,7 +408,7 @@ export function createCharacterRenderer(
       if (f.translate) parts.push(`translate(${f.translate[0]}px, ${f.translate[1]}px)`)
       if (f.rotate !== undefined) parts.push(`rotate(${f.rotate}deg)`)
       if (f.scale) parts.push(`scale(${f.scale[0]}, ${f.scale[1]})`)
-      const kf: Keyframe = { offset: off, easing: k.ease ?? 'ease-in-out' }
+      const kf: Keyframe = { offset: off, easing: easeOverride ?? k.ease ?? 'ease-in-out' }
       if (parts.length > 0) kf.transform = parts.join(' ')
       if (f.opacity !== undefined) kf.opacity = f.opacity
       return kf
@@ -414,18 +419,18 @@ export function createCharacterRenderer(
    * WAAPI instance (currentTime set per frame from the gait phase); decorative
    * skins keep the CSS wall-clock shorthand. A negative legacy delay shifts the
    * cycle start (CSS -0.34s == 340ms into the loop). */
-  function attachAnim(el: SVGElement, name: string, delaySec: number | undefined, collector: SkinEntry['phaseAnims'] | null): void {
-    const k = opts?.skins?.keyframes[name]
+  function attachAnim(el: SVGElement, ref: SkinAnimRef, collector: SkinEntry['phaseAnims'] | null): void {
+    const k = opts?.skins?.keyframes[ref.name]
     if (!k) return
     if (collector) {
-      const durMs = k.duration * 1000
-      const anim = el.animate(waapiFrames(k), { duration: durMs, iterations: Infinity })
+      const durMs = (ref.durationSec ?? k.duration) * 1000
+      const anim = el.animate(waapiFrames(k, ref.ease), { duration: durMs, iterations: Infinity })
       anim.pause()
       anim.currentTime = 0
-      const offsetMs = ((-(delaySec ?? 0) * 1000) % durMs + durMs) % durMs
+      const offsetMs = ((-(ref.delaySec ?? 0) * 1000) % durMs + durMs) % durMs
       collector.push({ anim, durMs, offsetMs })
     } else {
-      el.style.animation = animShorthand(name, delaySec)
+      el.style.animation = animShorthand(ref)
     }
   }
 
@@ -441,7 +446,7 @@ export function createCharacterRenderer(
       if (e.anim) {
         g.style.transformBox = 'fill-box'
         if (e.origin) g.style.transformOrigin = e.origin
-        attachAnim(g, e.anim.name, e.anim.delaySec, collector)
+        attachAnim(g, e.anim, collector)
       } else if (e.origin) {
         g.style.transformBox = 'fill-box'
         g.style.transformOrigin = e.origin
@@ -492,7 +497,7 @@ export function createCharacterRenderer(
     if (doc.groupAnim) {
       inner.style.transformBox = 'fill-box'
       inner.style.transformOrigin = doc.groupAnim.origin ?? '50% 88%'
-      attachAnim(inner, doc.groupAnim.name, doc.groupAnim.delaySec, collector)
+      attachAnim(inner, doc.groupAnim, collector)
     }
     // The AUTHORED cape paints FIRST (legacy: cape is element #1, behind the
     // body); the lag rotation composes on this wrapper via the SVG transform
@@ -694,6 +699,11 @@ export function createCharacterRenderer(
 
   return {
     render(solved, face: FaceAux = NEUTRAL_FACE, overrides?, extras?): void {
+      // Expressive skin swap happens FIRST: the interpolation-offset eligibility
+      // below reads activeSkin (review: reading last frame's skin double-applied
+      // the offset on the first rig→skin frame).
+      const skinDoc = extras?.skinId ? skinBySource.get(extras.skinId) : undefined
+      swapSkin(skinDoc ? skinGroupFor(skinDoc) : null)
 
       // Squash pivot: the figure's ground point (root x, lowest extent).
       let groundY = -Infinity
@@ -729,11 +739,6 @@ export function createCharacterRenderer(
         group.style.transform = ''
       }
 
-      // Expressive skin: when the active source has a registered drawing, it
-      // REPLACES the rig figure — placed at the ground-centre, mirrored by
-      // facing; the inner CSS animations carry the legacy internal acting.
-      const skinDoc = extras?.skinId ? skinBySource.get(extras.skinId) : undefined
-      swapSkin(skinDoc ? skinGroupFor(skinDoc) : null)
       if (activeSkin && extras?.skinRoot) {
         const sr = extras.skinRoot
         const facing = extras.facing ?? 1
@@ -812,7 +817,19 @@ export function createCharacterRenderer(
 
       renderFace(solved, face, overrides, extras)
     },
+    capeProbe() {
+      if (!activeSkin?.capeGroup || !activeSkin.capeSocket) return null
+      const ctm = activeSkin.capeGroup.getCTM()
+      if (!ctm) return null
+      const pt = new DOMPoint(activeSkin.capeSocket.x, activeSkin.capeSocket.y).matrixTransform(ctm)
+      // getCTM is relative to the nearest viewport; the svg viewBox == page
+      // space here, so the transformed point IS page coordinates.
+      return { x: pt.x, y: pt.y }
+    },
     destroy(): void {
+      for (const entry of skinGroups.values()) {
+        for (const pa of entry.phaseAnims) pa.anim.cancel()
+      }
       group.remove()
       skinStyleEl?.remove()
       pupils = []

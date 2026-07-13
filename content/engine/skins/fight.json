@@ -80,7 +80,10 @@
             }
           ],
           "anim": {
-            "name": "fback"
+            "name": "fback",
+            "durationSec": 2.6,
+            "ease": "ease-in-out",
+            "iterations": "infinite"
           },
           "origin": "0% 0%"
         }
@@ -133,7 +136,10 @@
                     }
                   ],
                   "anim": {
-                    "name": "fjab"
+                    "name": "fjab",
+                    "durationSec": 2.6,
+                    "ease": "cubic-bezier(.3,.05,.35,1)",
+                    "iterations": "infinite"
                   },
                   "origin": "0% 50%"
                 }
@@ -142,7 +148,10 @@
             }
           ],
           "anim": {
-            "name": "fswing"
+            "name": "fswing",
+            "durationSec": 2.6,
+            "ease": "cubic-bezier(.3,.05,.35,1)",
+            "iterations": "infinite"
           },
           "origin": "0% 50%"
         }
@@ -175,7 +184,10 @@
       {
         "kind": "group",
         "anim": {
-          "name": "capewalk"
+          "name": "capewalk",
+          "durationSec": 0.9,
+          "ease": "ease-in-out",
+          "iterations": "infinite"
         },
         "origin": "100% 0%",
         "children": [

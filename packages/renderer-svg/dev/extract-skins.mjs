@@ -101,6 +101,20 @@ function parseKeyframes(css) {
   return table
 }
 
+// A per-USE anim reference (review: keyframe timing differs per pose — Sneeze's
+// capewalk runs 0.5s where Walk's runs 0.8s; the shared table keeps FRAMES, the
+// use site keeps its own duration/ease/iterations/fill).
+function animRef(a) {
+  return {
+    name: a.name,
+    ...(a.delaySec !== undefined ? { delaySec: a.delaySec } : {}),
+    ...(a.duration !== undefined ? { durationSec: a.duration } : {}),
+    ...(a.ease ? { ease: a.ease } : {}),
+    ...(a.iterations !== undefined ? { iterations: a.iterations } : {}),
+    ...(a.fill ? { fill: a.fill } : {}),
+  }
+}
+
 // animation shorthand: "name 2.6s cubic-bezier(.3,.05,.35,1) infinite" etc.
 function parseAnimShorthand(str) {
   const cleaned = str.trim()
@@ -154,10 +168,7 @@ function parseJsx(tsx, warn) {
       const style = attrs.__style ?? {}
       if (style.animation) {
         const a = parseAnimShorthand(style.animation)
-        if (a) {
-          grp.anim = { name: a.name }
-          if (a.delaySec !== undefined) grp.anim.delaySec = a.delaySec
-        }
+        if (a) grp.anim = animRef(a)
       }
       if (style.animationDelay) {
         const d = parseFloat(style.animationDelay)
@@ -179,7 +190,7 @@ function parseJsx(tsx, warn) {
       // scrub strips markers everywhere else.
       if (attrs.__style?.animation) {
         const a = parseAnimShorthand(attrs.__style.animation)
-        if (a) el.__anim = { name: a.name, ...(a.delaySec !== undefined ? { delaySec: a.delaySec } : {}) }
+        if (a) el.__anim = animRef(a)
       }
       if (attrs.__style?.transformOrigin) el.__origin = attrs.__style.transformOrigin
       stack[stack.length - 1].children.push(el)
@@ -256,7 +267,7 @@ function elementFrom(tag, attrs, warn) {
 // it becomes the skin's dedicated `cape` group (painted behind the body, knot
 // socket = the path's first point) instead of being dropped for a physics
 // ribbon. Placeholders and emptied parametric groups still prune away.
-function prune(elements, warn, capeOut) {
+function prune(elements, warn, capeOut, ancestors = []) {
   const out = []
   for (const e of elements) {
     if (e.kind === 'path' && e.fill === '#ff5ca8') {
@@ -267,9 +278,17 @@ function prune(elements, warn, capeOut) {
       const anim = el.__anim
       delete el.__anim
       delete el.__origin
-      const wrapped = anim
+      let wrapped = anim
         ? [{ kind: 'group', anim, origin: el0Origin(e), children: [el] }]
         : [el]
+      // Ancestor transforms must survive the lift (review BLOCKER: Slide's
+      // translate(2,24) and Vault/Wallrun whole-pose rotations position the
+      // cape too) — rebuild the wrapper chain outermost-first.
+      for (let i = ancestors.length - 1; i >= 0; i--) {
+        const a = ancestors[i]
+        if (!a.transform && !a.origin) continue
+        wrapped = [{ kind: 'group', ...(a.transform ? { transform: a.transform } : {}), ...(a.origin ? { origin: a.origin } : {}), children: wrapped }]
+      }
       capeOut.push({ socket, elements: wrapped })
       warn('cape → skin.cape group')
       continue
@@ -279,7 +298,7 @@ function prune(elements, warn, capeOut) {
         warn('dropped skipped parametric group')
         continue
       }
-      e.children = prune(e.children, warn, capeOut)
+      e.children = prune(e.children, warn, capeOut, [...ancestors, { transform: e.transform, origin: e.origin }])
       if (e.children.length === 0) {
         warn(`dropped empty group${e.anim ? ` (${e.anim.name})` : ''}`)
         continue

@@ -82,7 +82,10 @@
             }
           ],
           "anim": {
-            "name": "ropearm"
+            "name": "ropearm",
+            "durationSec": 0.85,
+            "ease": "ease-in-out",
+            "iterations": "infinite"
           },
           "origin": "0% 50%"
         }
@@ -113,7 +116,10 @@
           ],
           "anim": {
             "name": "ropearm",
-            "delaySec": -0.42
+            "delaySec": -0.42,
+            "durationSec": 0.85,
+            "ease": "ease-in-out",
+            "iterations": "infinite"
           },
           "origin": "100% 50%"
         }
@@ -144,7 +150,10 @@
             }
           ],
           "anim": {
-            "name": "ropeleg"
+            "name": "ropeleg",
+            "durationSec": 0.85,
+            "ease": "ease-in-out",
+            "iterations": "infinite"
           },
           "origin": "0% 0%"
         }
@@ -161,7 +170,10 @@
       {
         "kind": "group",
         "anim": {
-          "name": "capeidle"
+          "name": "capeidle",
+          "durationSec": 1.1,
+          "ease": "ease-in-out",
+          "iterations": "infinite"
         },
         "origin": "100% 0%",
         "children": [

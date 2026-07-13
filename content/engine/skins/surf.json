@@ -99,7 +99,10 @@
       {
         "kind": "group",
         "anim": {
-          "name": "capewalk"
+          "name": "capewalk",
+          "durationSec": 0.35,
+          "ease": "ease-in-out",
+          "iterations": "infinite"
         },
         "origin": "100% 0%",
         "children": [

@@ -88,7 +88,10 @@
                 }
               ],
               "anim": {
-                "name": "wallscramble"
+                "name": "wallscramble",
+                "durationSec": 0.4,
+                "ease": "cubic-bezier(.4,.05,.5,1)",
+                "iterations": "infinite"
               },
               "origin": "0% 0%"
             },
@@ -107,7 +110,10 @@
               ],
               "anim": {
                 "name": "wallscramble",
-                "delaySec": -0.2
+                "delaySec": -0.2,
+                "durationSec": 0.4,
+                "ease": "cubic-bezier(.4,.05,.5,1)",
+                "iterations": "infinite"
               },
               "origin": "0% 0%"
             }
@@ -134,12 +140,18 @@
     },
     "elements": [
       {
-        "kind": "path",
-        "d": "M-3,-14 L-38,8 L-28,10 L-42,28 L-8,13 Z",
-        "fill": "#ff5ca8",
-        "stroke": "#1a1a1a",
-        "strokeWidth": 3,
-        "opacity": 0.55
+        "kind": "group",
+        "transform": "rotate(-52)",
+        "children": [
+          {
+            "kind": "path",
+            "d": "M-3,-14 L-38,8 L-28,10 L-42,28 L-8,13 Z",
+            "fill": "#ff5ca8",
+            "stroke": "#1a1a1a",
+            "strokeWidth": 3,
+            "opacity": 0.55
+          }
+        ]
       }
     ]
   },

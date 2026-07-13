@@ -87,7 +87,10 @@
                 }
               ],
               "anim": {
-                "name": "punch1"
+                "name": "punch1",
+                "durationSec": 0.4,
+                "ease": "cubic-bezier(.3,.05,.3,1)",
+                "fill": "forwards"
               },
               "origin": "0% 50%"
             }
@@ -122,7 +125,10 @@
       {
         "kind": "group",
         "anim": {
-          "name": "capeidle"
+          "name": "capeidle",
+          "durationSec": 0.5,
+          "ease": "ease-in-out",
+          "iterations": "infinite"
         },
         "origin": "100% 0%",
         "children": [

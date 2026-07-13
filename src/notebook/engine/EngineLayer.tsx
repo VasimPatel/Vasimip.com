@@ -164,6 +164,24 @@ export class EngineLayer extends Component<EngineLayerProps> {
       this.last = now
       const s = this.scene
       if (!s || !this.renderer) return
+      // Scripted root motion (back-nav hop-to-hole) and the drag follow run
+      // BEFORE the sim steps (review: mutating after the snapshot made their
+      // interpolation cadence-dependent) — they are wall-clock continuous and
+      // the snapshots taken below now include them coherently.
+      if (this.scriptMove) {
+        const m = this.scriptMove
+        const k = Math.min(1, (performance.now() - m.t0) / m.dur)
+        const t = s.rt.transform
+        t.x = m.fromX + (m.toX - m.fromX) * k
+        t.y = m.fromY + (m.toY - m.fromY) * k - m.arcH * 4 * k * (1 - k)
+        if (k >= 1) this.scriptMove = null
+      }
+      if (this.dragging && this.dragMoved && this.look) {
+        const t = s.rt.transform
+        const ease = 0.45
+        t.x = t.x + (this.look.x - t.x) * ease
+        t.y = t.y + (this.look.y - 24 - t.y) * ease
+      }
       while (this.acc >= STEP_MS) {
         this.acc -= STEP_MS
         this.prevSnap = this.curSnap
@@ -233,6 +251,7 @@ export class EngineLayer extends Component<EngineLayerProps> {
       if (this.prevSnap && this.curSnap) {
         const jx = this.curSnap.x - this.prevSnap.x
         if (Math.abs(jx) < 48) vx = jx / (STEP_MS / 1000)
+        else this.capeLag = 0 // teleport: momentum must not survive (review)
       }
       if (pres.facing !== this.capeFacing) {
         this.capeFacing = pres.facing
@@ -258,33 +277,11 @@ export class EngineLayer extends Component<EngineLayerProps> {
       })
       if (reviewHook()?.motion) this.recordMotion(s, solved, skinRoot, src.id)
 
-      // Scripted root motion (back-nav hop-to-hole): a render-layer arc, exactly
-      // like the drag's direct transform drive.
-      if (this.scriptMove) {
-        const m = this.scriptMove
-        const k = Math.min(1, (performance.now() - m.t0) / m.dur)
-        const t = s.rt.transform
-        t.x = m.fromX + (m.toX - m.fromX) * k
-        t.y = m.fromY + (m.toY - m.fromY) * k - m.arcH * 4 * k * (1 - k)
-        if (k >= 1) this.scriptMove = null
-      }
       if (this.actorHidden !== this.actorHiddenApplied && this.svgRef.current) {
         this.svgRef.current.style.opacity = this.actorHidden ? '0' : '1'
         this.actorHiddenApplied = this.actorHidden
       }
-      this.publishSpeech()
-      // DRAG: while grabbed, the transform follows the cursor (page coords from
-      // the Notebook's look feed) with a light ease; the verlet secondary and
-      // bandana trail it for free — the legacy grab, reborn on physics.
-      if (this.dragging && this.dragMoved && this.look) {
-        const t = s.rt.transform
-        const ease = 0.45
-        const nx = t.x + (this.look.x - t.x) * ease
-        const ny = t.y + (this.look.y - 24 - t.y) * ease
-        if (Math.abs(nx - t.x) + Math.abs(ny - t.y) > 0.8) this.dragMoved = true
-        t.x = nx
-        t.y = ny
-      }
+      this.publishSpeech(skinRoot)
       // Poke hitbox tracks the figure (the wrapper must NOT catch page-wide
       // clicks — review finding: it swallowed the cover's open handler).
       if (this.pokeBox) {
@@ -307,6 +304,11 @@ export class EngineLayer extends Component<EngineLayerProps> {
     const pts = s.rt.accessories[0]?.points() ?? []
     const tip = pts[pts.length - 1]
     const rect = this.svgRef.current?.querySelector('[data-dash-renderer]')?.getBoundingClientRect()
+    // The VISIBLE cape (review blocker: the metric sampled the hidden ribbon):
+    // for authored skin capes, capeRoot = the RENDERED knot via the live CTM and
+    // sock = the EXPECTED world socket from the placement math — an independent
+    // DOM measurement that catches real render defects.
+    const probe = this.renderer?.capeProbe() ?? null
     // Q0 negative control: a displaced cape socket the separation metric must flag.
     const sockBias = reviewHook()?.force?.['negctl.socket'] ? 6 : 0
     const sample: MotionSample = {
@@ -319,10 +321,10 @@ export class EngineLayer extends Component<EngineLayerProps> {
       skinY: skinRoot.y,
       src: srcId,
       air: this.airborne,
-      sockX: (neck?.ex ?? NaN) + sockBias,
-      sockY: neck?.ey ?? NaN,
-      capeRootX: pts[0]?.x ?? NaN,
-      capeRootY: pts[0]?.y ?? NaN,
+      sockX: (probe ? probe.x : (neck?.ex ?? NaN)) + sockBias,
+      sockY: probe ? probe.y : (neck?.ey ?? NaN),
+      capeRootX: probe ? this.expectedCapeSocket(skinRoot, srcId)?.x ?? NaN : (pts[0]?.x ?? NaN),
+      capeRootY: probe ? this.expectedCapeSocket(skinRoot, srcId)?.y ?? NaN : (pts[0]?.y ?? NaN),
       capeTipX: tip?.x ?? NaN,
       capeTipY: tip?.y ?? NaN,
       camX: this.lastCam?.x ?? NaN,
@@ -331,6 +333,24 @@ export class EngineLayer extends Component<EngineLayerProps> {
       scrY: rect ? rect.y + rect.height / 2 : NaN,
     }
     arr.push(sample)
+  }
+
+  /** Where the authored cape knot SHOULD be in page coords (the same placement
+   * math the renderer applies): skinRoot + scale(104/120·facing, 113/130) about
+   * the (0,55) foot origin. Static-transform cape wrappers (slide/vault) shift
+   * the knot too — this expectation intentionally ignores them, so the CTM
+   * probe comparison measures ONLY unexpected displacement for plain capes and
+   * those poses are excluded from the ≤2px assertion (documented). */
+  private expectedCapeSocket(skinRoot: { x: number; y: number }, srcId: string): { x: number; y: number } | null {
+    const doc = engineSkins.docs.find((d) => d.sources.includes(srcId))
+    if (!doc?.cape) return null
+    const s = this.scene
+    if (!s) return null
+    const facing = s.rt.transform.facing
+    return {
+      x: skinRoot.x + (104 / 120) * facing * doc.cape.socket.x,
+      y: skinRoot.y + (113 / 130) * (doc.cape.socket.y - 55),
+    }
   }
 
   componentDidUpdate(prev: EngineLayerProps): void {
@@ -366,6 +386,7 @@ export class EngineLayer extends Component<EngineLayerProps> {
     this.prevSnap = null
     this.curSnap = null
     this.capeLag = 0
+    this.bubbleNote = null
     if (this.svgRef.current) this.svgRef.current.style.opacity = '1'
     this.clearTravel()
     for (const off of this.scene?.offs ?? []) off()
@@ -460,6 +481,7 @@ export class EngineLayer extends Component<EngineLayerProps> {
       ctx.events.on('intent:camera', (p) => {
         const c = p as { to?: string; mult?: number; fast?: boolean }
         if (!c.to) {
+          this.lastCam = null
           this.props.onDashCam?.(null)
           return
         }
@@ -485,6 +507,7 @@ export class EngineLayer extends Component<EngineLayerProps> {
       }),
       ctx.events.on('behavior:complete', () => {
         this.travelDest = null
+        this.lastCam = null
         this.props.onDashCam?.(null)
         if (this.pendingHang) {
           this.pendingHang = false
@@ -777,6 +800,7 @@ export class EngineLayer extends Component<EngineLayerProps> {
     if (!s) return
     const dest = this.travelDest
     this.travelDest = null
+    this.lastCam = null
     this.props.onDashCam?.(null)
     if (dest != null) {
       const spot = this.panelSpot(s.pageIdx, dest)
@@ -1380,7 +1404,7 @@ export class EngineLayer extends Component<EngineLayerProps> {
    * per frame; the shell renders the same ReactBubble legacy uses. */
   private lastSpeech: { text: string; x: number; y: number } | null = null
 
-  private publishSpeech(): void {
+  private publishSpeech(skinRoot: { x: number; y: number }): void {
     const s = this.scene
     if (!s || !this.props.onSpeech) return
     let sp = s.rt.speech()
@@ -1397,12 +1421,12 @@ export class EngineLayer extends Component<EngineLayerProps> {
       }
       return
     }
-    const head = s.rt.solved().bones.find((bn) => bn.id === 'head')
-    if (!head) return
-    // the legacy anchor: just right of the head, above the shoulder line.
-    const next = { text: sp.text, x: head.ex + 14, y: head.ey - 43 }
+    // Anchored to the INTERPOLATED skin ground-centre with the legacy offsets
+    // (left = centre+14, top = feet−119) — the raw rig head stepped ~6px under
+    // the change-throttle while walking (review). 2px threshold keeps churn low.
+    const next = { text: sp.text, x: skinRoot.x + 14, y: skinRoot.y - 119 }
     const prev = this.lastSpeech
-    if (!prev || prev.text !== next.text || Math.abs(prev.x - next.x) > 4 || Math.abs(prev.y - next.y) > 4) {
+    if (!prev || prev.text !== next.text || Math.abs(prev.x - next.x) > 2 || Math.abs(prev.y - next.y) > 2) {
       this.lastSpeech = next
       this.props.onSpeech(next)
     }

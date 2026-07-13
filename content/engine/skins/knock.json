@@ -87,7 +87,10 @@
                 }
               ],
               "anim": {
-                "name": "knockarm"
+                "name": "knockarm",
+                "durationSec": 1,
+                "ease": "linear",
+                "iterations": "infinite"
               },
               "origin": "0% 50%"
             }

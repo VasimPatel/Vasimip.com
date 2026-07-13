@@ -81,7 +81,10 @@
         }
       ],
       "anim": {
-        "name": "thinkchin"
+        "name": "thinkchin",
+        "durationSec": 3,
+        "ease": "ease-in-out",
+        "iterations": "infinite"
       },
       "origin": "50% 100%"
     },
@@ -133,7 +136,10 @@
             }
           ],
           "anim": {
-            "name": "thinktap"
+            "name": "thinktap",
+            "durationSec": 0.55,
+            "ease": "ease-in-out",
+            "iterations": "infinite"
           },
           "origin": "0% 0%"
         }
@@ -150,7 +156,10 @@
       {
         "kind": "group",
         "anim": {
-          "name": "capeidle"
+          "name": "capeidle",
+          "durationSec": 1.4,
+          "ease": "ease-in-out",
+          "iterations": "infinite"
         },
         "origin": "100% 0%",
         "children": [

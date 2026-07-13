@@ -216,6 +216,7 @@ export default class Notebook extends React.Component<NotebookProps, State> {
     this._onU = () => { if (this.state.dragging) this.drop(); this._maybeDrag = false }
     window.addEventListener('pointerup', this._onU)
     window.addEventListener('pointercancel', this._onU)
+    window.addEventListener('blur', this._onU)
     this.scheduleFidget()
     this.setState({ sound: this.props.soundOn ?? true })
     // dev hook for headless verification; clamp to a valid page so it can't crash
@@ -293,6 +294,7 @@ export default class Notebook extends React.Component<NotebookProps, State> {
     window.removeEventListener('pointermove', this._onM)
     window.removeEventListener('pointerup', this._onU)
     window.removeEventListener('pointercancel', this._onU)
+    window.removeEventListener('blur', this._onU)
     if (this._ft) clearTimeout(this._ft)
     if (this._mraf) cancelAnimationFrame(this._mraf)
     if (this._ro) this._ro.disconnect()
@@ -1073,7 +1075,8 @@ export default class Notebook extends React.Component<NotebookProps, State> {
     }
     // Pointer parallax damps to a whisper while an AUTHORED shot (camo) holds —
     // parallax noise during a choreographed move reads as camera drift (Q5).
-    const pk = s.camo ? 0.25 : 1
+    // ENGINE mode only: /legacy stays the untouched comparison baseline.
+    const pk = s.camo && this.engineMode ? 0.25 : 1
     const px = (((s.mx ?? vw / 2) / vw) - .5) * 12 * pk, py = (((s.my ?? vh / 2) / vh) - .5) * 8 * pk
     const tx = vw / 2 - sc * cx + px, ty = (vh - 70) / 2 - sc * cy + py
     this._cam = { tx: tx, ty: ty, sc: sc }
