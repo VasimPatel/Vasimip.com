@@ -43,7 +43,7 @@ export { tryValidateRig } from './rig'
 export type { RigTemplate, JointDef, IkChainDef, Attach } from './rig'
 
 export { tryValidatePose, validatePoseAgainstRig } from './pose'
-export type { Pose, RootOffset } from './pose'
+export type { Pose, RootOffset, PoseProp, PropElement, PoseFace } from './pose'
 
 export { tryValidateCharacter } from './character'
 export type {

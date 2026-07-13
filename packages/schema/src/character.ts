@@ -14,6 +14,10 @@ export interface StrokeStyle {
   /** Per-joint stroke-width overrides (charm: the legacy weight hierarchy — torso
    * 5.5 / legs 5 / arms 4.5 / head outline 4). Joints not listed use `width`. */
   widths?: Record<string, number>
+  /** Per-joint stroke opacity (charm: the legacy walk fades FAR limbs to .85 —
+   * a chain draws at its first joint's opacity, and fully-faded chains paint
+   * BEHIND the trunk). Joints not listed draw at 1. */
+  opacities?: Record<string, number>
 }
 
 export interface PersonalityParams {
@@ -126,6 +130,13 @@ const characterChecks: readonly Check[] = [
           else
             for (const [k, v] of Object.entries(d.style.widths)) {
               if (!isNum(v) || v <= 0) issues.push(`style.widths.${k}: must be a positive number`)
+            }
+        }
+        if (d.style.opacities !== undefined) {
+          if (!isRecord(d.style.opacities)) issues.push('style.opacities: must be an object (jointId → 0..1)')
+          else
+            for (const [k, v] of Object.entries(d.style.opacities)) {
+              if (!isNum(v) || v <= 0 || v > 1) issues.push(`style.opacities.${k}: must be in (0, 1]`)
             }
         }
       }

@@ -19,5 +19,29 @@
     "x": -3,
     "y": 16,
     "rot": 0
-  }
+  },
+  "face": {
+    "brow": "fierce",
+    "mouth": "grit",
+    "intensity": 0.9
+  },
+  "props": [
+    {
+      "joint": "foreArmR",
+      "elements": [
+        {
+          "kind": "path",
+          "d": "M0,0 L22,-8",
+          "stroke": "#1a1a1a",
+          "strokeWidth": 4
+        },
+        {
+          "kind": "path",
+          "d": "M2,-10 L6,3",
+          "stroke": "#1a1a1a",
+          "strokeWidth": 3
+        }
+      ]
+    }
+  ]
 }

@@ -55,13 +55,18 @@ export function createAccessoryChain(
   // trailing stream direction comes from the pin leading the chain as the
   // character moves and from the flutter's slight upward bias at idle.
   const segments = opts.segments ?? 3
-  const segLen = opts.segmentLen ?? 11.5
+  const segLen = opts.segmentLen ?? 13.5
   const damping = opts.damping ?? 0.88
   const gravityScale = opts.gravityScale ?? 0.3
   const flutterAmp = opts.flutterAmp ?? 2.6
   const flutterPeriod = opts.flutterPeriod ?? 105
   const offsetX = opts.offsetX ?? -6
   const offsetY = opts.offsetY ?? -3
+  // Rest-stream direction, unit-ish, flipped by facing: the legacy cape doesn't
+  // fly level — it sweeps DOWN-back at ~42° (attach (−3,−14) → fly end ≈ (−33,15)),
+  // hugging the body. Parity pass: was (0.9, 0.35) ≈ 21°, read floaty/high.
+  const STREAM_X = 0.72
+  const STREAM_Y = 0.66
 
   if (!rig.joints.some((j) => j.id === opts.anchorJoint)) {
     throw new Error(`accessory: rig has no joint ${JSON.stringify(opts.anchorJoint)}`)
@@ -82,7 +87,7 @@ export function createAccessoryChain(
     const particles = []
     const constraints = []
     for (let i = 0; i <= segments; i++) {
-      particles.push({ x: ax - facing * i * segLen * 0.9, y: ay + i * segLen * 0.35, pinned: i === 0 })
+      particles.push({ x: ax - facing * i * segLen * STREAM_X, y: ay + i * segLen * STREAM_Y, pinned: i === 0 })
     }
     for (let i = 0; i < segments; i++) {
       constraints.push({ kind: 'distance' as const, a: i, b: i + 1, rest: segLen, stiffness: 1 })
@@ -95,8 +100,8 @@ export function createAccessoryChain(
       constraints.push({
         kind: 'spring' as const,
         a: i,
-        ax: ax - facing * i * segLen * 0.9,
-        ay: ay + i * segLen * 0.35,
+        ax: ax - facing * i * segLen * STREAM_X,
+        ay: ay + i * segLen * STREAM_Y,
         stiffness: REST_STIFF,
       })
     }
@@ -122,15 +127,15 @@ export function createAccessoryChain(
       const ax = bone.ox + facing * offsetX
       const ay = bone.oy + offsetY
       if (!handle) buildAt(ax, ay, facing)
-      world.setPinTarget(rootPid, ax + sway * 0.5, ay - Math.abs(sway) * 0.35)
-      // Stream the rest shape behind the heading; the flutter waves the tip.
+      world.setPinTarget(rootPid, ax + sway * 0.5, ay - Math.abs(sway) * 0.15)
+      // Stream the rest shape down-back; the flutter waves the tip.
       for (let i = 0; i < springIds.length; i++) {
         const k = i + 1
         const wave = sway * (0.35 + 0.5 * (k / segments))
         world.setSpringAnchor(
           springIds[i],
-          ax - facing * k * segLen * 0.9,
-          ay + k * segLen * 0.35 + wave,
+          ax - facing * k * segLen * STREAM_X,
+          ay + k * segLen * STREAM_Y + wave,
         )
       }
     },

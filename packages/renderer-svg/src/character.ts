@@ -15,7 +15,7 @@
 //
 // Geometry constants are expressed in HEAD RADII so any rig proportion scales.
 
-import type { CharacterDoc, RigTemplate } from '@dash/schema'
+import type { CharacterDoc, PoseProp, RigTemplate } from '@dash/schema'
 import type { FaceAux, SolvedSkeleton } from '@dash/engine'
 import { NEUTRAL_FACE } from '@dash/engine'
 
@@ -32,7 +32,11 @@ const DEFAULT_CAPE = '#ff5ca8'
 const EYE_SEP = 0.39
 const EYE_FACING = 0.25
 const EYE_Y = 0.07
-const PUPIL_R = 0.18
+const PUPIL_R = 2 / 14 // legacy rest eyeR is EXACTLY 2 on a 14r head
+/** Brows sit OUTWARD of the eyes (legacy centers: eye −0.143r → brow −0.32r;
+ * eye +0.643r → brow +0.82r) — the facing-side brow overshoots the outline. */
+const BROW_OUT = 0.18
+const BROW_Y = -0.34
 const BROW_W = 2.6 / 14 // stroke width per head radius
 const FIST_R = 4 / 14
 const ELBOW_FIST_BEND = 0.8 // rad of elbow bend that reads as a fist
@@ -51,6 +55,14 @@ export interface RenderExtras {
   spin?: number
   /** Accessory ribbon point chains (e.g. the bandana), root→tip, world space. */
   accessories?: ReadonlyArray<ReadonlyArray<{ x: number; y: number }>>
+  /** Pupil dilation (1 = rest) — the legacy eyes grow when the cursor is near. */
+  pupilScale?: number
+  /** Active pose props (sword, spray can…), drawn translated to their anchor
+   * joint's END in figure axes. Pass the SAME array identity per pose — the
+   * renderer rebuilds elements only when it changes. */
+  props?: readonly PoseProp[]
+  /** Whole-figure lean (rad, about the ground point) — the legacy cursor lean. */
+  lean?: number
 }
 
 export interface CharacterRenderer {
@@ -119,6 +131,13 @@ export function createCharacterRenderer(
   svgRoot: SVGSVGElement,
   character: CharacterDoc,
   rig: RigTemplate,
+  opts?: {
+    /** World angle (rad) of the head bone in the character's REST pose. The face
+     * renders LEVEL at rest (the legacy face never inherits the head bone's
+     * standing 8° offset) and rotates only with DEVIATIONS from rest — a tuck
+     * still carries the face around. */
+    faceRestAngle?: number
+  },
 ): CharacterRenderer {
   const color = character.style?.color ?? DEFAULT_COLOR
   const baseWidth = character.style?.width ?? DEFAULT_WIDTH
@@ -147,7 +166,11 @@ export function createCharacterRenderer(
   }
 
   // ── limb chains ────────────────────────────────────────────────────────────────
-  const chainDefs = buildChains(rig, widths)
+  // Faded chains (style.opacities < 1 on their first joint) are the FAR limbs —
+  // the legacy walk draws them first, UNDER the trunk, at .85 and a hair thinner.
+  const opacities = character.style?.opacities
+  const chainOpacity = (jointIds: string[]): number => opacities?.[jointIds[0]] ?? 1
+  const chainDefs = [...buildChains(rig, widths)].sort((a, b) => chainOpacity(a) - chainOpacity(b))
   const chains: Chain[] = []
   for (const jointIds of chainDefs) {
     const path = document.createElementNS(SVG_NS, 'path')
@@ -158,12 +181,15 @@ export function createCharacterRenderer(
     path.setAttribute('stroke-width', String(w))
     path.setAttribute('stroke-linecap', character.style?.linecap ?? 'round')
     path.setAttribute('stroke-linejoin', 'round')
+    const op = chainOpacity(jointIds)
+    if (op < 1) path.setAttribute('stroke-opacity', String(op))
     group.appendChild(path)
     const chain: Chain = { jointIds, path }
     if (isArmChain(jointIds)) {
       const fist = document.createElementNS(SVG_NS, 'circle')
       fist.setAttribute('r', '0')
       fist.setAttribute('fill', color)
+      if (op < 1) fist.setAttribute('fill-opacity', String(op))
       group.appendChild(fist)
       chain.fist = fist
     }
@@ -221,6 +247,54 @@ export function createCharacterRenderer(
     if (firstChain) group.insertBefore(headEl, firstChain)
   }
 
+  // ── pose props (sword, spray can…) — over the limbs, under the face ─────────────
+  const propGroup = document.createElementNS(SVG_NS, 'g') as SVGGElement
+  if (faceGroup) group.insertBefore(propGroup, faceGroup)
+  else group.appendChild(propGroup)
+  let propsKey: readonly PoseProp[] | null = null
+  let propAnchors: Array<{ joint: string; g: SVGGElement }> = []
+
+  function rebuildProps(props: readonly PoseProp[] | undefined): void {
+    propsKey = props ?? null
+    propGroup.textContent = ''
+    propAnchors = []
+    for (const prop of props ?? []) {
+      const g = document.createElementNS(SVG_NS, 'g') as SVGGElement
+      for (const e of prop.elements) {
+        let el: SVGElement
+        if (e.kind === 'path') {
+          el = document.createElementNS(SVG_NS, 'path')
+          el.setAttribute('d', e.d ?? 'M0,0')
+          el.setAttribute('fill', e.fill ?? 'none')
+        } else if (e.kind === 'circle') {
+          el = document.createElementNS(SVG_NS, 'circle')
+          el.setAttribute('cx', String(e.cx ?? 0))
+          el.setAttribute('cy', String(e.cy ?? 0))
+          el.setAttribute('r', String(e.r ?? 1))
+          el.setAttribute('fill', e.fill ?? color)
+        } else {
+          el = document.createElementNS(SVG_NS, 'rect')
+          el.setAttribute('x', String(e.x ?? 0))
+          el.setAttribute('y', String(e.y ?? 0))
+          el.setAttribute('width', String(e.w ?? 1))
+          el.setAttribute('height', String(e.h ?? 1))
+          if (e.rx !== undefined) el.setAttribute('rx', String(e.rx))
+          el.setAttribute('fill', e.fill ?? 'none')
+        }
+        if (e.stroke) el.setAttribute('stroke', e.stroke)
+        if (e.strokeWidth !== undefined) el.setAttribute('stroke-width', String(e.strokeWidth))
+        if (e.opacity !== undefined) el.setAttribute('opacity', String(e.opacity))
+        el.setAttribute('stroke-linecap', 'round')
+        // Render-layer flutter (the legacy sprayjit) — keyframes come from the
+        // page's stylesheet; absent (headless harness) it's simply static.
+        if (e.jitter) (el as SVGElement & { style: CSSStyleDeclaration }).style.animation = 'sprayjit .3s linear infinite'
+        g.appendChild(el)
+      }
+      propGroup.appendChild(g)
+      propAnchors.push({ joint: prop.joint, g })
+    }
+  }
+
   svgRoot.appendChild(group)
 
   // ── face state drawing (all in head-local px; the face group carries the head
@@ -230,31 +304,34 @@ export function createCharacterRenderer(
     // Determined (rest): inner ends low, outer ends high-in → the angry V.
     // Angles are the brow stroke slope in rad; height is the y of the brow centre.
     const cfg: Record<BrowState, { slope: number; y: number }> = {
-      determined: { slope: 0.28, y: -0.4 * r },
-      neutral: { slope: 0.08, y: -0.44 * r },
-      raised: { slope: -0.05, y: -0.6 * r },
-      worried: { slope: -0.3, y: -0.48 * r },
+      determined: { slope: 0.28, y: BROW_Y * r },
+      fierce: { slope: 0.45, y: -0.39 * r }, // the legacy Fight brows (l11,5)
+      neutral: { slope: 0.08, y: -0.4 * r },
+      raised: { slope: -0.05, y: -0.56 * r },
+      worried: { slope: -0.3, y: -0.44 * r },
     }
     const rest = cfg.determined
     const c = cfg[state]
     const slope = rest.slope + (c.slope - rest.slope) * intensity
     const y = rest.y + (c.y - rest.y) * intensity
-    const eyeX = (EYE_FACING * facing + EYE_SEP * side) * r
+    const browX = (EYE_FACING * facing + (EYE_SEP + BROW_OUT) * side) * r
     const half = 0.32 * r
     // Slope tilts toward the nose: mirror by side (and facing flips the nose).
     const dy = slope * half * side * facing
-    return `M${eyeX - half},${y + dy} L${eyeX + half},${y - dy}`
+    return `M${browX - half},${y + dy} L${browX + half},${y - dy}`
   }
 
   function mouthD(state: MouthState, intensity: number, facing: 1 | -1): string {
     const r = headR
-    const mx = 0.1 * r * facing
+    const mx = 0.35 * r * facing
     const my = 0.62 * r
     switch (state) {
       case 'smile': {
-        const w = 0.42 * r
-        const lift = (0.14 + 0.12 * intensity) * r
-        return `M${mx - w * 0.3},${my} q${w * 0.5},${lift} ${w},${-lift * 0.4}`
+        // Legacy: M(0.07r, 0.64r) q(+0.36r, +0.18r·k) (+0.64r, −0.07r·k) — starts
+        // near centre, dips toward the chin, hooks up on the facing side.
+        const k = 0.7 + 0.6 * intensity
+        const x0 = 0.07 * r * facing
+        return `M${x0},${0.64 * r} q${0.36 * r * facing},${0.18 * r * k} ${0.64 * r * facing},${-0.07 * r * k}`
       }
       case 'grit': {
         const w = 0.5 * r * (0.7 + 0.3 * intensity)
@@ -330,8 +407,9 @@ export function createCharacterRenderer(
       const rootX = root ? root.ox : 0
       const fl = extras?.flourish
       const spin = extras?.spin ?? 0
+      const lean = extras?.lean ?? 0
       const hasScale = !!fl && (Math.abs(fl.sx - 1) > 0.004 || Math.abs(fl.sy - 1) > 0.004)
-      if (hasScale || Math.abs(spin) > 0.01) {
+      if (hasScale || Math.abs(spin) > 0.01 || Math.abs(lean) > 0.004) {
         // Two independent pivots: squash scales about the GROUND point (feet stay
         // planted — the documented flourish contract) while spin rotates about the
         // figure centre so the roll reads as a tumble, not a ground-pinned sweep.
@@ -343,9 +421,22 @@ export function createCharacterRenderer(
         if (Math.abs(spin) > 0.01) {
           parts.push(`translate(${rootX}px, ${midY}px)`, `rotate(${spin}rad)`, `translate(${-rootX}px, ${-midY}px)`)
         }
+        // Cursor lean — the legacy standing Dash tips toward a near cursor,
+        // pivoting at his feet (legacy transform-origin 50% 88%).
+        if (Math.abs(lean) > 0.004) {
+          parts.push(`translate(${rootX}px, ${groundY}px)`, `rotate(${lean}rad)`, `translate(${-rootX}px, ${-groundY}px)`)
+        }
         group.style.transform = parts.join(' ')
       } else if (group.style.transform) {
         group.style.transform = ''
+      }
+
+      // Pose props: rebuild when the active pose's prop set changes, then ride
+      // the anchor joint's end point every frame.
+      if ((extras?.props ?? null) !== propsKey) rebuildProps(extras?.props)
+      for (const pa of propAnchors) {
+        const bn = bone(solved, pa.joint)
+        if (bn) pa.g.setAttribute('transform', `translate(${bn.ex},${bn.ey})`)
       }
 
       // Accessory ribbons.
@@ -387,7 +478,7 @@ export function createCharacterRenderer(
         const hy = overrides?.[HEAD_JOINT_ID]?.ey ?? head.ey
         headEl.setAttribute('cx', String(hx))
         headEl.setAttribute('cy', String(hy))
-        const rot = head.worldAngle + Math.PI / 2
+        const rot = head.worldAngle - (opts?.faceRestAngle ?? -Math.PI / 2)
         faceGroup.style.transform = `translate(${hx}px, ${hy}px) rotate(${rot}rad)`
 
         const facing = face.facing ?? 1
@@ -401,13 +492,16 @@ export function createCharacterRenderer(
           dx = (dx / len) * maxOff
           dy = (dy / len) * maxOff
         }
+        // Dilation: the legacy eyes grow toward the cursor (eyeR 2 → 3.1 near).
+        const pr = PUPIL_R * headR * (extras?.pupilScale ?? 1)
         for (let i = 0; i < 2; i++) {
           const side = i === 0 ? -1 : 1
           const ex = (EYE_FACING * facing + EYE_SEP * side) * headR + dx
           const ey = EYE_Y * headR + dy
           pupils[i].setAttribute('cx', String(ex))
           pupils[i].setAttribute('cy', String(ey))
-          pupils[i].setAttribute('ry', String(PUPIL_R * headR * openY))
+          pupils[i].setAttribute('rx', String(pr))
+          pupils[i].setAttribute('ry', String(pr * openY))
           brows[i].setAttribute('d', browD(side as -1 | 1, face.brow ?? 'determined', intensity, facing))
         }
         if (mouthEl) mouthEl.setAttribute('d', mouthD(face.mouth ?? 'smile', intensity, facing))

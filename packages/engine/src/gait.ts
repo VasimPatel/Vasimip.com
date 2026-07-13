@@ -130,26 +130,36 @@ export function createGait(rig: RigTemplate, character: CharacterDoc, opts: Gait
         j1.length * (props?.[j1.id] ?? 1)
     }
   }
-  const STRIDE_MAX = legLen * 1.1
+  // Parity pass: 1.1× read as a low LUNGE (long strides force the walk-crouch
+  // deep); 0.9× keeps the hip high and the steps snappy — the legacy upright walk.
+  const STRIDE_MAX = legLen * 0.9
   const naturalStride = naturalCadence !== 0 ? Math.abs(speed) / naturalCadence : 0
   const strideMag = Math.min(naturalStride, STRIDE_MAX)
   const stride = (speed < 0 ? -1 : 1) * strideMag
   const cadence = strideMag > 0 ? Math.abs(speed) / strideMag : naturalCadence
 
-  const halfStride = strideMag / 2
-  const reachableHip = Math.sqrt(Math.max(1, legLen * legLen - halfStride * halfStride)) * 0.97
-  const hipHeight = Math.min(opts.hipHeight ?? DEFAULT_HIP_HEIGHT, reachableHip)
   const lift = BASE_LIFT * (0.5 + bounciness)
   const speedNorm = Math.min(1, Math.abs(speed) / REF_SPEED)
   const bob = BASE_BOB * (0.4 + 0.8 * bounciness) * speedNorm
   const armSwing = BASE_ARM_SWING * (0.5 + 0.7 * confidence) * (0.25 + 0.75 * speedNorm)
+  // Max stance reach with the led plants is PLANT_LEAD strides (0.38), not half a
+  // stride — crouching for the old symmetric reach hunched the walk (parity).
+  // The bob LIFTS the hip mid-cycle, so the reach budget must cover hip + bob or
+  // the up-bob tick clamps the IK and slides the plant (independent-review
+  // blocker: 38.1 px demanded of a 37 px leg at site speed).
+  const maxReach = strideMag * 0.4
+  const reachableHip = Math.sqrt(Math.max(1, legLen * legLen - maxReach * maxReach)) * 0.97 - bob
+  const hipHeight = Math.min(opts.hipHeight ?? DEFAULT_HIP_HEIGHT, reachableHip)
 
   // Legs branch from the pelvis ORIGIN, and pelvis is the root joint, so the hip is
   // the root point and the thigh's parent world angle is the pelvis world angle.
   // The walk lean tilts the pelvis per tick, so the WORLD angle the leg IK converts
   // through must be the LEANED one — a stale angle here reads as foot slide.
   const pelvisLocal = base.angles.pelvis ?? 0
-  const lean = 0.07 * speedNorm
+  // Walk lean (parity): the legacy walker tips the WHOLE figure ~5° into travel
+  // (dashFaceTf lean=5). 0.07·speedNorm gave <2° at site speed — the spine stayed
+  // vertical while the legs reached ahead ("legs go before the body").
+  const lean = 0.06 * Math.min(1, speedNorm * 3) + 0.03 * speedNorm
   let pelvisWorld = rootRot + pelvisLocal
 
   const legR = rig.chains.find((c) => c.id === 'legR')
@@ -158,11 +168,16 @@ export function createGait(rig: RigTemplate, character: CharacterDoc, opts: Gait
   let rootX = opts.startX ?? 0
   let phase = 0 // accumulated cycles
 
+  /** How far ahead of the hip a foot PLANTS, in strides (0.5 = symmetric). The
+   * legacy read leads with the CHEST: plants land shorter ahead and trail longer
+   * behind, so the body rides in front of its feet instead of chasing them. */
+  const PLANT_LEAD = 0.38
+
   /** World x of a leg's fixed plant, `laps` cycles from the current stance
    * (0 = the plant it is on / last on, 1 = the next). Constant in world during the
    * relevant interval by construction. */
   function plantWorldX(phiLeg: number, laps: number): number {
-    return rootX + stride * (0.5 + laps - phiLeg)
+    return rootX + stride * (PLANT_LEAD + laps - phiLeg)
   }
 
   function solveLeg(

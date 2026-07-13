@@ -13,13 +13,20 @@
       "thighR": 5,
       "shinR": 5,
       "footR": 5,
-      "thighL": 5,
-      "shinL": 5,
-      "footL": 5,
+      "thighL": 4.5,
+      "shinL": 4.5,
+      "footL": 4.5,
       "upperArmR": 4.5,
       "foreArmR": 4.5,
-      "upperArmL": 4.5,
-      "foreArmL": 4.5
+      "upperArmL": 4,
+      "foreArmL": 4
+    },
+    "opacities": {
+      "upperArmL": 0.85,
+      "foreArmL": 0.85,
+      "thighL": 0.85,
+      "shinL": 0.85,
+      "footL": 0.85
     }
   },
   "palette": {
@@ -38,8 +45,8 @@
       "hop",
       "fly"
     ],
-    "maxJumpHeight": 260,
-    "maxJumpDistance": 420,
+    "maxJumpHeight": 300,
+    "maxJumpDistance": 620,
     "flySpeed": 220
   },
   "accessoryPoints": [

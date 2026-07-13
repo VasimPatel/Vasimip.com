@@ -24,7 +24,7 @@
 //   intensity — 0..1: how hard the brow/mouth read (reactions decay back to resting
 //               instead of snapping).
 
-export type BrowState = 'determined' | 'neutral' | 'raised' | 'worried'
+export type BrowState = 'determined' | 'fierce' | 'neutral' | 'raised' | 'worried'
 export type MouthState = 'smile' | 'grit' | 'o' | 'none'
 
 export interface FaceAux {

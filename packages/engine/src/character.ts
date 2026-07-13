@@ -115,8 +115,10 @@ export interface CharacterState {
   recoilVx: number
   /** The runtime-owned watchdog's window (latch + elapsed), so restore keeps it coherent. */
   watchdog: WatchdogState
-  /** Squash/stretch flourish spring (charm) — optional for pre-charm snapshots. */
-  squash?: { sx: number; sy: number; vx: number; vy: number }
+  /** Squash/stretch flourish spring (charm) — optional for pre-charm snapshots.
+   * `hold` is the windup's held crouch target (parity pass) — a serializer that
+   * drops it would restore a mid-anticipation snapshot un-crouched. */
+  squash?: { sx: number; sy: number; vx: number; vy: number; hold?: { sx: number; sy: number } | null }
 }
 
 export interface CharacterRuntime {
@@ -132,6 +134,9 @@ export interface CharacterRuntime {
   solved(): SolvedSkeleton
   /** This tick's face aux channel. */
   face(): FaceAux
+  /** The blender's current source (pose id during a strikePose hold) — the site
+   * uses it to attach pose PROPS (sword, spray can) and pose-scoped acting. */
+  activeSource(): { kind: 'pose' | 'clip'; id: string }
   /** Current world collision capsule. */
   capsule(): Capsule
   /** Verlet endpoint overrides for the renderer (secondary follow-through). */
@@ -220,10 +225,14 @@ export function createCharacterRuntime(opts: CharacterRuntimeOptions): Character
   // Unsubscribers retained for dispose() (review finding: no listener leaks).
   const flourish = createSquashFlourish()
   const flourishOffs = [
-    events.on('jump:launch', () => flourish.trigger('launch')),
+    events.on('jump:windup', () => flourish.trigger('windup')), // anticipation crouch, held
+    events.on('jump:launch', () => flourish.trigger('launch')), // kick clears the hold
     events.on('jump:land', () => flourish.trigger('land')),
     events.on('intent:blocked', () => flourish.trigger('poke')),
     events.on('expression:poke', () => flourish.trigger('poke')),
+    // An interrupted/failed run must never leave the crouch held.
+    events.on('behavior:interrupted', () => flourish.releaseHold()),
+    events.on('intent:failed', () => flourish.releaseHold()),
   ]
   let lastFlourish = { sx: 1, sy: 1 }
 
@@ -309,6 +318,7 @@ export function createCharacterRuntime(opts: CharacterRuntimeOptions): Character
 
   function forceRelease(): void {
     behavior.forceRelease()
+    flourish.releaseHold() // a release mid-anticipation must drop the held crouch
     recoilVx = 0
     settleToSupport()
   }
@@ -334,8 +344,19 @@ export function createCharacterRuntime(opts: CharacterRuntimeOptions): Character
     behavior.advance()
     // 2. advance gait/fly + set the blender base source; ground/fly collision.
     locomotion.preBlend()
-    // 3. face contributors (blink + look-at pupils).
+    // 3. face contributors (blink + look-at pupils) — the active POSE may override
+    // brow/mouth (the legacy per-pose expressions: Fight's steep brows + grit).
     lastFace = controllerSet.update(tickCount)
+    // Pose registries are immutable content docs: reading face acting from the
+    // registry (not the snapshot) is safe as long as callers never mutate poses
+    // between getState/setState — the same contract clips already rely on.
+    const src = blender.currentSource()
+    const poseFace = src.kind === 'pose' ? (poses[src.id] as { face?: { brow?: FaceAux['brow']; mouth?: FaceAux['mouth']; intensity?: number } } | undefined)?.face : undefined
+    if (poseFace) {
+      if (poseFace.brow) lastFace = { ...lastFace, brow: poseFace.brow }
+      if (poseFace.mouth) lastFace = { ...lastFace, mouth: poseFace.mouth }
+      if (poseFace.intensity !== undefined) lastFace = { ...lastFace, intensity: poseFace.intensity }
+    }
     // 4. base blend + additives; clip markers drive the jump launch sync.
     const { pose, markers } = blender.tick()
     // 5. jump launch (marker-synced) + ballistic integration + landing.
@@ -422,6 +443,7 @@ export function createCharacterRuntime(opts: CharacterRuntimeOptions): Character
     },
     solved: () => lastSolved,
     face: () => lastFace,
+    activeSource: () => blender.currentSource(),
     capsule,
     overrides: () => secondary.overrides(),
     running: () => behavior.running(),

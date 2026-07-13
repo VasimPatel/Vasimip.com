@@ -11,7 +11,7 @@
       "snark": "oh no. he made a website.",
       "panels": [
         {
-          "x": 16,
+          "x": 22,
           "y": 56,
           "w": 360,
           "h": 392,
@@ -180,7 +180,7 @@
           ]
         },
         {
-          "x": 592,
+          "x": 594,
           "y": 272,
           "w": 180,
           "h": 120,
@@ -207,6 +207,11 @@
             "once": true,
             "revertMs": 10,
             "setFlag": "No"
+          },
+          "travel": {
+            "actions": [
+              "action2"
+            ]
           }
         },
         {
@@ -776,6 +781,24 @@
     },
     "action": {
       "steps": []
+    },
+    "action2": {
+      "steps": [
+        {
+          "do": "fx",
+          "kind": "pageShove",
+          "dir": -1
+        },
+        {
+          "do": "say",
+          "text": "Wahhh",
+          "holdMs": 4
+        },
+        {
+          "do": "pose",
+          "pose": "idle"
+        }
+      ]
     }
   }
 }
