@@ -307,6 +307,9 @@ export function createCharacterRuntime(opts: CharacterRuntimeOptions): Character
     giveUp: opts.giveUp,
     resolveVerletBody,
     applyRootImpulse,
+    setFacing: (face) => {
+      transform.facing = face
+    },
     behaviors: opts.behaviors,
   })
 

@@ -90,6 +90,8 @@ export type {
   Cue,
   CueVerb,
   GateExpr,
+  GeomGate,
+  GeomCtx,
 } from './behavior'
 
 export { tryValidateNotebookV2 } from './notebook-v2'

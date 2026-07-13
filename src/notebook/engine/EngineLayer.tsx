@@ -1044,14 +1044,75 @@ export class EngineLayer extends Component<EngineLayerProps> {
 
   private chainArrival(): void {
     const s = this.scene
-    if (!s || !this.pendingArrival) return
-    const doc = this.docV2.behaviors[this.pendingArrival]
+    if (!s) return
+    const arrivalId = this.pendingArrival
     this.pendingArrival = null
-    if (!doc) return
-    // when-gates consult the SITE flags (the flag store of record in 9b).
-    const gate = (doc as { when?: GateExpr }).when
-    if (gate && !evalGate(gate, this.props.flags)) return
-    s.rt.runBehavior(doc)
+    const doc = arrivalId ? this.docV2.behaviors[arrivalId] : undefined
+    if (doc) {
+      // when-gates consult the SITE flags (the flag store of record in 9b).
+      const gate = (doc as { when?: GateExpr }).when
+      if (!gate || evalGate(gate, this.props.flags)) s.rt.runBehavior(doc)
+    }
+    this.scheduleFlourish()
+  }
+
+  /** The legacy arrival FLOURISH (Stage 4): 650ms after settling on a panel with
+   * no arrival pose, a 24% roll plays knock / shove / squish (squish only fits
+   * short panels). Gated exactly like legacy: authored arrival.flourish wins,
+   * else "not the last page"; still-idle checks before playing. */
+  private lastFlourish: string | null = null
+
+  private scheduleFlourish(): void {
+    const s = this.scene
+    if (!s) return
+    const pageIdx = s.pageIdx
+    const pn = this.docV2.pages[pageIdx]?.panels[this.currentPanel]
+    if (!pn) return
+    const allow = pn.arrival?.flourish ?? pageIdx !== this.docV2.pages.length - 1
+    if (pn.arrival?.hasPose || !allow || !chance('flourish.roll', 0.24)) return
+    this.backNavTimers.push(
+      window.setTimeout(() => {
+        const src = s.rt.activeSource()
+        const plainIdle = src.kind === 'clip' || src.id === 'stand'
+        if (s.rt.running() || this.dragging || this.airborne || !plainIdle || performance.now() < this.stagingUntil) return
+        const opts = ['knock', 'shove']
+        if (pn.h < 190) opts.push('squish', 'squish')
+        let f = pick('flourish.kind', opts)
+        if (f === this.lastFlourish) f = opts[(opts.indexOf(f) + 1) % opts.length]
+        this.lastFlourish = f
+        if (f === 'squish') {
+          this.props.sfx('hop')
+          this.bubbleNote = { text: 'snug fit.', until: performance.now() + 1700 }
+          this.playSquish()
+        } else if (f === 'knock') {
+          s.rt.runOneShot('__flourish:knock', [{ verb: 'strikePose', ref: 'knock', holdMs: 1000 }])
+          this.backNavTimers.push(window.setTimeout(() => this.props.sfx('fx:jitPage'), 240))
+          this.backNavTimers.push(window.setTimeout(() => { this.props.sfx('fx:jitPage'); this.props.sfx('fx:shake') }, 580))
+        } else {
+          const sdir: 1 | -1 = s.rt.transform.x > 460 ? -1 : 1
+          s.rt.transform.facing = sdir
+          this.props.sfx('scrape')
+          s.rt.runOneShot('__flourish:shove', [{ verb: 'strikePose', ref: 'shove', holdMs: 1450 }])
+          this.backNavTimers.push(window.setTimeout(() => this.props.sfx('fx:pageShove'), 120))
+        }
+      }, 650),
+    )
+  }
+
+  /** The legacy squish flourish (squishpop on the whole figure). */
+  private playSquish(): void {
+    const w = this.arcWrap
+    const pts = this.figurePoints()
+    if (!w || !pts) return
+    window.clearTimeout(this.arcTimer)
+    w.style.transformBox = 'view-box'
+    w.style.transformOrigin = pts.ground
+    w.style.animation = 'none'
+    void w.getBoundingClientRect()
+    w.style.animation = 'squishpop .95s cubic-bezier(.3,.5,.4,1)'
+    this.arcTimer = window.setTimeout(() => {
+      w.style.animation = ''
+    }, 980)
   }
 
   private panelSpot(pageIdx: number, panelIdx: number): { x: number; y: number } | null {
@@ -1079,7 +1140,10 @@ export class EngineLayer extends Component<EngineLayerProps> {
     const dist = Math.hypot(dxv, dyv)
     const fallback = this.docV2.behaviors['builtin:hop'] ?? this.docV2.behaviors['builtin:walk']
 
-    // The authored pool (migrated v1 allow-list + weighted actions).
+    // The authored pool (migrated v1 allow-list + weighted actions). Action
+    // when-gates evaluate against flags AND the trip geometry (Stage 4: the v1
+    // geometric gates — the tightrope only offers itself on long flat trips).
+    const geomCtx = { dist, horiz, vert, dyv, fromPanel: this.currentPanel }
     const authored = this.docV2.pages[pageIdx]?.panels[destIdx]?.travel?.pool
     const allowed = new Set<string>()
     const actionEntries: string[] = []
@@ -1089,7 +1153,7 @@ export class EngineLayer extends Component<EngineLayerProps> {
       if (e.behaviorId.startsWith('builtin:')) allowed.add(e.behaviorId)
       else {
         const gate = (doc as { when?: GateExpr }).when
-        if (gate && !evalGate(gate, this.props.flags)) continue
+        if (gate && !evalGate(gate, this.props.flags, geomCtx)) continue
         const w = Math.max(0, Math.floor(e.weight ?? 1))
         for (let k = 0; k < w; k++) actionEntries.push(e.behaviorId)
       }

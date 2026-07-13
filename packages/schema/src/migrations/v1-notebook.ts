@@ -103,9 +103,6 @@ export function migrateNotebookV1(
     if (!isRecord(action) || !isArr(action.steps)) continue
     const id = `act:${name}`
     const where = `actions.${name}`
-    if (action.when !== undefined) {
-      report.lossy.push(`${where}.when: geometric gate dropped — the traversal graph's arc feasibility approximates it`)
-    }
     const steps: Intent[] = []
     action.steps.forEach((s, i) => {
       if (!isRecord(s)) return
@@ -114,28 +111,37 @@ export function migrateNotebookV1(
         case 'pose':
           if (isStr(s.pose)) {
             notePose(s.pose, sw)
-            if (s.face !== undefined) report.lossy.push(`${sw}.face: dropped — facing follows the approach direction`)
-            steps.push({ verb: 'strikePose', ref: mapPose(s.pose), holdMs: isNum(s.ms) ? s.ms : 600 } as Intent)
+            steps.push({
+              verb: 'strikePose',
+              ref: mapPose(s.pose),
+              holdMs: isNum(s.ms) ? s.ms : 600,
+              ...(s.face === 1 || s.face === -1 ? { face: s.face } : {}),
+            } as Intent)
           }
           break
         case 'move': {
+          // Stage 4 restorations: acting pose rides the move ({pose}); authored
+          // speed carries ({speed} px/s). Easing remains engine-owned (the ONE
+          // approved residual loss — noted only when the author set one).
           const target = contextualTarget(s.to, sw, report)
           const arc = isRecord(s) && (s as { arc?: string }).arc
-          steps.push({ verb: arc ? 'jumpTo' : 'moveTo', target } as Intent)
+          const actingPose = isStr(s.pose) && s.pose !== 'walk' ? mapPose(s.pose) : undefined
+          if (actingPose) notePose(s.pose as string, sw)
+          steps.push({
+            verb: arc ? 'jumpTo' : 'moveTo',
+            target,
+            ...(actingPose ? { pose: actingPose } : {}),
+            ...(isNum(s.speed) && s.speed > 0 ? { speed: s.speed } : {}),
+          } as Intent)
           if (isStr(s.sfx)) steps.push({ verb: 'sfx', kind: s.sfx } as Intent)
-          if (isStr(s.pose) && s.pose !== 'walk') notePose(s.pose, sw)
-          if (s.ease !== undefined || s.speed !== undefined || s.easeY !== undefined || s.ms !== undefined) {
-            report.lossy.push(`${sw}: v1 ease/easeY/speed/ms dropped — the locomotion solver owns motion feel now`)
-          }
-          if (isStr(s.pose) && s.pose !== 'walk') {
-            report.lossy.push(`${sw}.pose: v1 acting pose during a move approximated — 9b maps it to an onLaunch cue where the move is a jump`)
+          if (s.ease !== undefined || s.easeY !== undefined) {
+            report.lossy.push(`${sw}: v1 ease/easeY dropped — the locomotion solver owns easing`)
           }
           break
         }
         case 'say':
           if (isStr(s.text)) {
-            if (s.holdMs !== undefined) report.lossy.push(`${sw}.holdMs: say duration is engine-standard now (SAY_DURATION_MS)`)
-            steps.push({ verb: 'say', text: s.text } as Intent)
+            steps.push({ verb: 'say', text: s.text, ...(isNum(s.holdMs) && s.holdMs > 0 ? { holdMs: s.holdMs } : {}) } as Intent)
           }
           break
         case 'sfx':
@@ -146,33 +152,44 @@ export function migrateNotebookV1(
           break
         case 'cam': {
           // v1 camera focus vocabulary → TargetRefs: 'dash' frames the character,
-          // 'target' frames the travel destination; 'midpoint'/raw coords have no
-          // ref-shaped home → approximate as the destination, with a report note.
-          let to: string | undefined
-          if (s.on === 'dash') to = 'entity:dash'
-          else if (s.on === 'target') to = 'travel:to#interior'
-          else {
-            report.lossy.push(`${sw}.on: camera focus ${JSON.stringify(s.on)} approximated as travel:to#interior`)
-            to = 'travel:to#interior'
-          }
-          if (s.mult !== undefined || s.fast !== undefined) {
-            report.lossy.push(`${sw}: camera mult/fast dropped — 9b's camera wiring owns zoom feel`)
-          }
-          steps.push({ verb: 'camera', to, ms: 400 } as Intent)
+          // 'target' frames the destination, 'midpoint' IS the in-flight framing
+          // the adapter applies to travel targets. mult/fast carry through.
+          const to = s.on === 'dash' ? 'entity:dash' : 'travel:to#interior'
+          steps.push({
+            verb: 'camera',
+            to,
+            ms: 400,
+            ...(isNum(s.mult) && s.mult > 0 ? { mult: s.mult } : {}),
+            ...(typeof s.fast === 'boolean' ? { fast: s.fast } : {}),
+          } as Intent)
           break
         }
         case 'camClear':
           steps.push({ verb: 'camera', ms: 400 } as Intent)
           break
         case 'fx':
-          report.lossy.push(`${sw}: fx ${JSON.stringify(s.kind)} approximated as sfx — real fx wiring is P9b`)
+          // fx sounds now DRIVE their overlays site-side (crack/smoke/shake/
+          // pageShove/jitPage) — the sfx encoding is the wire format, not a loss.
           if (isStr(s.kind)) steps.push({ verb: 'sfx', kind: `fx:${s.kind}` } as Intent)
           break
         default:
           report.lossy.push(`${sw}: unknown step kind ${JSON.stringify(s.do)} dropped`)
       }
     })
-    addGenerated(id, { schemaVersion: 2, id, steps } as BehaviorDoc)
+    const doc: BehaviorDoc = { schemaVersion: 2, id, steps } as BehaviorDoc
+    // v1 ActionWhen → the geometric gate, restored as data (Stage 4).
+    if (isRecord(action.when)) {
+      const w = action.when
+      const geom: Record<string, unknown> = {}
+      if (isNum(w.minDist)) geom.minDist = w.minDist
+      if (isNum(w.maxDist)) geom.maxDist = w.maxDist
+      if (isNum(w.minHoriz)) geom.minHoriz = w.minHoriz
+      if (isNum(w.minVert)) geom.minVert = w.minVert
+      if (w.vert === 'up' || w.vert === 'down') geom.vert = w.vert
+      if (isArr(w.fromPanel)) geom.fromPanel = w.fromPanel
+      if (Object.keys(geom).length > 0) (doc as { when?: unknown }).when = { geom }
+    }
+    addGenerated(id, doc)
   }
 
   // ── pages/panels ───────────────────────────────────────────────────────────────
@@ -206,28 +223,34 @@ export function migrateNotebookV1(
         const steps: Intent[] = []
         const onceFlag = a.once ? (isStr(a.setFlag) ? a.setFlag : `${id}:done`) : null
         if (onceFlag) steps.push({ verb: 'setFlag', flag: onceFlag } as Intent)
+        const face = a.face === 1 || a.face === -1 ? (a.face as 1 | -1) : undefined
         if (isStr(a.pose)) {
           notePose(a.pose, `${where}.arrival`)
-          // v1 semantics restored (parity Stage 2c): no/zero revertMs leaves the
+          // v1 semantics restored (parity Stage 2c/4): no/zero revertMs leaves the
           // pose until the NEXT transition — strikePose {hold:'persist'} rides the
           // acting layer, the behavior completes, and the character stays
           // interactable in the pose (the legacy Fight swings its sword until you
-          // navigate away). Authored revertMs stays a timed hold.
+          // navigate away). Authored revertMs stays a timed hold; authored FACE
+          // applies with the strike (the legacy Fight faces LEFT).
           if (isNum(a.revertMs) && a.revertMs > 0) {
-            steps.push({ verb: 'strikePose', ref: mapPose(a.pose), holdMs: a.revertMs } as Intent)
+            steps.push({ verb: 'strikePose', ref: mapPose(a.pose), holdMs: a.revertMs, ...(face ? { face } : {}) } as Intent)
           } else {
-            steps.push({ verb: 'strikePose', ref: mapPose(a.pose), hold: 'persist' } as Intent)
+            steps.push({ verb: 'strikePose', ref: mapPose(a.pose), hold: 'persist', ...(face ? { face } : {}) } as Intent)
           }
+        } else if (face) {
+          // face WITHOUT a pose (v1 allowed it): a momentary rest-pose strike
+          // carries the facing — visually the same figure, turned.
+          steps.push({ verb: 'strikePose', ref: 'stand', holdMs: 1, face } as Intent)
         }
         if (isStr(a.say)) steps.push({ verb: 'say', text: a.say } as Intent)
         if (isStr(a.sfx)) steps.push({ verb: 'sfx', kind: a.sfx } as Intent)
         if (isStr(a.setFlag) && !a.once) steps.push({ verb: 'setFlag', flag: a.setFlag } as Intent)
-        if (a.face !== undefined) report.lossy.push(`${where}.arrival.face: dropped — facing follows the approach direction now`)
-        if (a.flourish !== undefined) report.lossy.push(`${where}.arrival.flourish: dropped — squash/expression layers act arrivals now`)
         const doc: BehaviorDoc = { schemaVersion: 2, id, steps } as BehaviorDoc
         if (onceFlag) (doc as { when?: unknown }).when = { not: { flag: onceFlag } }
         addGenerated(id, doc)
-        panel.arrival = { behaviorId: id }
+        // `flourish` rides the panel (render-layer): the adapter rolls the legacy
+        // 24% knock/shove/squish only where v1 allowed it (Stage 4 restoration).
+        panel.arrival = { behaviorId: id, ...(typeof a.flourish === 'boolean' ? { flourish: a.flourish } : {}), ...(isStr(a.pose) ? { hasPose: true } : {}) }
       }
 
       const panelTravel = isRecord(pn.travel) ? pn.travel : undefined
@@ -284,10 +307,11 @@ function contextualTarget(to: unknown, where: string, report: MigrationReport): 
   if (to.at === 'panelEdge') {
     const panel = to.panel === 'from' ? 'from' : 'to'
     const side = isStr(to.side) ? to.side : 'top'
-    // v2 surface spots are roof|interior (closed — no silent grammar drift).
+    // v2 spots: top → roof; left/right → the EDGE spot (Stage 4 — the run-up
+    // target restored; the resolver picks the side toward the other panel,
+    // which is what every v1 edge move meant).
     if (side === 'top') return `travel:${panel}#roof`
-    report.lossy.push(`${where}.to: v1 edge side ${JSON.stringify(side)} approximated as the roof spot`)
-    return `travel:${panel}#roof`
+    return `travel:${panel}#edge`
   }
   report.lossy.push(`${where}.to: unmapped v1 target ${JSON.stringify(to)} → travel:to#interior`)
   return 'travel:to#interior'

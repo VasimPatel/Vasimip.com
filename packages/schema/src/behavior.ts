@@ -142,8 +142,11 @@ export type Intent =
    * transition (movement step / new pose / force-release) instead of dwelling the
    * behavior for holdMs — the v1 "arrival pose persists until the next transition"
    * semantics, restored. holdMs is ignored when hold is present. */
-  | { verb: 'strikePose'; ref: string; blendMs?: number; holdMs?: number; hold?: 'persist' }
-  | { verb: 'say'; text: string }
+  /** `face` (Stage 4): authored facing applied when the pose strikes — the v1
+   * arrival `face` (legacy Fight faces LEFT), dropped by the 9a migration. */
+  | { verb: 'strikePose'; ref: string; blendMs?: number; holdMs?: number; hold?: 'persist'; face?: 1 | -1 }
+  /** `holdMs` (Stage 4): authored speech duration — the v1 say holdMs. */
+  | { verb: 'say'; text: string; holdMs?: number }
   | { verb: 'sfx'; kind: string }
   /** camera `mult`/`fast` (parity recovery, Stage 2a — owner-approved widening):
    * the v1 authored zoom multiplier and tempo, dropped by the 9a migration. An
@@ -191,14 +194,37 @@ export interface Cue {
   do: Intent
 }
 
+/** Geometric gate (parity Stage 4, owner-approved widening) — the v1 ActionWhen
+ * restored: a behavior is only pool-eligible when the TRIP's shape passes. The
+ * evaluator needs a GeomCtx (the adapter's trip geometry); a geom gate with no
+ * context is FALSE (never silently pass a geometry test that wasn't run). */
+export interface GeomGate {
+  minDist?: number
+  maxDist?: number
+  minHoriz?: number
+  minVert?: number
+  vert?: 'up' | 'down'
+  fromPanel?: number[]
+}
+export interface GeomCtx {
+  dist: number
+  horiz: number
+  vert: number
+  /** Signed vertical delta (negative = destination above). */
+  dyv: number
+  fromPanel: number
+}
+
 /** Minimal boolean gate over the flag store (§5 `when?: GateExpr`). A gate is a
- * flag test or a boolean combination of gates. Evaluated against a character's flag
- * store (7b uses it to gate behavior selection; 7a validates + exposes an evaluator). */
+ * flag test, a geometry test, or a boolean combination. Evaluated against a
+ * character's flag store + an optional trip geometry (7b uses it to gate behavior
+ * selection; 7a validates + exposes an evaluator). */
 export type GateExpr =
   | { flag: string }
   | { not: GateExpr }
   | { and: GateExpr[] }
   | { or: GateExpr[] }
+  | { geom: GeomGate }
 
 export interface BehaviorDoc extends DocEnvelope {
   id: string
@@ -210,11 +236,23 @@ export interface BehaviorDoc extends DocEnvelope {
 
 /** Evaluate a GateExpr against a flag store (missing flag = false). Pure. Exposed so
  * the engine's `when?` check and 7b's selection logic share one implementation. */
-export function evalGate(expr: GateExpr, flags: Record<string, boolean>): boolean {
+export function evalGate(expr: GateExpr, flags: Record<string, boolean>, geom?: GeomCtx): boolean {
   if ('flag' in expr) return flags[expr.flag] === true
-  if ('not' in expr) return !evalGate(expr.not, flags)
-  if ('and' in expr) return expr.and.every((e) => evalGate(e, flags))
-  if ('or' in expr) return expr.or.some((e) => evalGate(e, flags))
+  if ('not' in expr) return !evalGate(expr.not, flags, geom)
+  if ('and' in expr) return expr.and.every((e) => evalGate(e, flags, geom))
+  if ('or' in expr) return expr.or.some((e) => evalGate(e, flags, geom))
+  if ('geom' in expr) {
+    if (!geom) return false // no trip context → the geometry test cannot pass
+    const g = expr.geom
+    if (g.minDist !== undefined && geom.dist < g.minDist) return false
+    if (g.maxDist !== undefined && geom.dist > g.maxDist) return false
+    if (g.minHoriz !== undefined && geom.horiz < g.minHoriz) return false
+    if (g.minVert !== undefined && geom.vert < g.minVert) return false
+    if (g.vert === 'up' && !(geom.dyv < 0)) return false
+    if (g.vert === 'down' && !(geom.dyv > 0)) return false
+    if (g.fromPanel !== undefined && !g.fromPanel.includes(geom.fromPanel)) return false
+    return true
+  }
   return false
 }
 
@@ -239,8 +277,8 @@ const VERB_KEYS: Record<IntentVerb, readonly string[]> = {
   flyTo: ['verb', 'target', 'timeoutMs', 'pose', 'speed'],
   flyThrough: ['verb', 'target', 'timeoutMs', 'pose', 'speed'],
   playClip: ['verb', 'ref', 'blendMs'],
-  strikePose: ['verb', 'ref', 'blendMs', 'holdMs', 'hold'],
-  say: ['verb', 'text'],
+  strikePose: ['verb', 'ref', 'blendMs', 'holdMs', 'hold', 'face'],
+  say: ['verb', 'text', 'holdMs'],
   sfx: ['verb', 'kind'],
   camera: ['verb', 'to', 'ms', 'mult', 'fast'],
   wait: ['verb', 'ms'],
@@ -297,9 +335,13 @@ function checkIntent(intent: unknown, path: string, issues: Issues): void {
         issues.push(`${path}.holdMs: must be a finite number >= 0 when present`)
       if (intent.hold !== undefined && intent.hold !== 'persist')
         issues.push(`${path}.hold: must be the literal 'persist' when present`)
+      if (intent.face !== undefined && intent.face !== 1 && intent.face !== -1)
+        issues.push(`${path}.face: must be 1 or -1 when present`)
       break
     case 'say':
       if (!isStr(intent.text)) issues.push(`${path}.text: required string`)
+      if (intent.holdMs !== undefined && (!isNum(intent.holdMs) || intent.holdMs <= 0))
+        issues.push(`${path}.holdMs: must be a finite number > 0 when present`)
       break
     case 'sfx':
       if (!isStr(intent.kind) || intent.kind.length === 0) issues.push(`${path}.kind: required non-empty string`)
@@ -368,7 +410,8 @@ export function checkReactions(reactions: unknown, base: string, issues: Issues)
   }
 }
 
-const GATE_KEYS = ['flag', 'not', 'and', 'or'] as const
+const GATE_KEYS = ['flag', 'not', 'and', 'or', 'geom'] as const
+const GEOM_KEYS = new Set(['minDist', 'maxDist', 'minHoriz', 'minVert', 'vert', 'fromPanel'])
 function checkGate(g: unknown, path: string, issues: Issues): void {
   if (!isRecord(g)) return void issues.push(`${path}: must be an object`)
   const keys = Object.keys(g)
@@ -386,6 +429,16 @@ function checkGate(g: unknown, path: string, issues: Issues): void {
   } else if ('or' in g) {
     if (!isArr(g.or) || g.or.length === 0) issues.push(`${path}.or: required non-empty array`)
     else g.or.forEach((e, i) => checkGate(e, `${path}.or[${i}]`, issues))
+  } else if ('geom' in g) {
+    const gg = g.geom
+    if (!isRecord(gg)) return void issues.push(`${path}.geom: must be an object`)
+    for (const k of Object.keys(gg)) if (!GEOM_KEYS.has(k)) issues.push(`${path}.geom.${k}: unknown key`)
+    for (const k of ['minDist', 'maxDist', 'minHoriz', 'minVert'] as const) {
+      if (gg[k] !== undefined && (!isNum(gg[k]) || (gg[k] as number) < 0)) issues.push(`${path}.geom.${k}: must be a number >= 0`)
+    }
+    if (gg.vert !== undefined && gg.vert !== 'up' && gg.vert !== 'down') issues.push(`${path}.geom.vert: must be 'up' or 'down'`)
+    if (gg.fromPanel !== undefined && (!isArr(gg.fromPanel) || !gg.fromPanel.every((n) => isNum(n))))
+      issues.push(`${path}.geom.fromPanel: must be an array of numbers`)
   }
 }
 

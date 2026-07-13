@@ -153,6 +153,9 @@ export interface BehaviorDeps {
    * character runtime provides it — a bounded, decaying, collision-respecting
    * displacement). Without it, a self-impulse only moves the cosmetic secondary. */
   applyRootImpulse?: (vx: number, vy: number) => void
+  /** Set the character's horizontal facing (strikePose {face} — the v1 authored
+   * arrival facing). The character runtime provides it (transform owner). */
+  setFacing?: (face: 1 | -1) => void
   /** BEHAVIOR REGISTRY (the P8 replay contract): id → doc, immutable. Snapshots store
    * `behaviorId` + the frame stack; setState REBINDS the active doc through this
    * registry (an unknown id THROWS). Docs passed to run() are auto-registered. */
@@ -327,6 +330,8 @@ export function createBehaviorExecutor(deps: BehaviorDeps): BehaviorExecutor {
       case 'strikePose': {
         const pose = deps.poses[step.ref] ?? deps.clips[step.ref]
         if (!pose) return failStep(`unknown-pose:${step.ref}`)
+        // Authored facing (v1 arrival face — the legacy Fight faces LEFT).
+        if (step.face !== undefined) deps.setFacing?.(step.face)
         if (step.hold === 'persist') {
           // Persist-until-next-transition (the v1 arrival semantics): the pose rides
           // the ACTING layer and the step completes IMMEDIATELY — the character is
@@ -357,7 +362,7 @@ export function createBehaviorExecutor(deps: BehaviorDeps): BehaviorExecutor {
         complete()
         break
       case 'say':
-        doSay(step.text)
+        doSay(step.text, step.holdMs)
         complete()
         break
       case 'sfx':
@@ -539,9 +544,10 @@ export function createBehaviorExecutor(deps: BehaviorDeps): BehaviorExecutor {
   }
 
   // ── say / impulse execution ───────────────────────────────────────────────────────
-  function doSay(text: string): void {
-    speech = { text, remainingMs: SAY_DURATION_MS }
-    emit('intent:say', { text, ms: SAY_DURATION_MS })
+  function doSay(text: string, holdMs?: number): void {
+    const ms = holdMs ?? SAY_DURATION_MS
+    speech = { text, remainingMs: ms }
+    emit('intent:say', { text, ms })
   }
 
   function doImpulse(step: Extract<Intent, { verb: 'impulse' }>): void {
@@ -738,7 +744,7 @@ export function createBehaviorExecutor(deps: BehaviorDeps): BehaviorExecutor {
       // bypassed validation, and traces loudly rather than acts.
       switch (intent.verb) {
         case 'say':
-          doSay(intent.text)
+          doSay(intent.text, intent.holdMs)
           break
         case 'sfx':
           emit('intent:sfx', { kind: intent.kind, cue: true })
