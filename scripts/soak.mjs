@@ -36,7 +36,7 @@ await sleep(2600)
 async function dashCenter() {
   return page.evaluate(() => {
     const el = document.querySelector('[data-dash-poke]') ||
-      document.querySelector('svg[viewBox="-60 -75 120 130"]')
+      document.querySelector('[data-dash-actor]')
     if (!el) return null
     const r = el.getBoundingClientRect()
     return { x: r.x + r.width / 2, y: r.y + r.height / 2 }

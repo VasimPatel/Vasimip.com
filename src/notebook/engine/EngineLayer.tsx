@@ -31,6 +31,7 @@ import {
 import { evalGate, type BehaviorDoc, type GateExpr } from '../../../packages/schema/src/index'
 import { createCharacterRenderer, type CharacterRenderer } from '../../../packages/renderer-svg/src/index'
 import type { EngineDoc } from './engineDoc'
+import { pick, scalar, reviewHook, reviewLog } from '../review'
 
 export interface EngineLayerProps {
   /** The engine doc derived from the SAME v1 doc the site renders (hot-swappable). */
@@ -230,7 +231,7 @@ export class EngineLayer extends Component<EngineLayerProps> {
     if (!svg || !pw) return
     this.teardown()
 
-    const ctx = createContext({ seed: (Math.random() * 0xffffffff) >>> 0 })
+    const ctx = createContext({ seed: reviewHook()?.seed ?? (Math.random() * 0xffffffff) >>> 0 })
     const verlet = createVerletWorld()
     const dash = this.dash
     const rig = this.rigDoc
@@ -297,6 +298,11 @@ export class EngineLayer extends Component<EngineLayerProps> {
 
     this.scene = { ctx, verlet, mw, rt, pageIdx, offs }
     this.currentPanel = 0
+    // Review surface: the engine's own event trace, exposed for the parity harness
+    // (normalized timeline). Only present when the review hook is installed.
+    if (reviewHook()) {
+      ;(window as unknown as { __dashEngineTrace?: () => readonly unknown[] }).__dashEngineTrace = () => ctx.events.trace()
+    }
     // Face-level calibration: the head bone's world angle in the rest pose.
     const stand = this.docV2.poses.stand?.angles ?? {}
     const faceRestAngle = (stand.pelvis ?? 0) + (stand.neck ?? 0) + (stand.head ?? 0)
@@ -458,10 +464,10 @@ export class EngineLayer extends Component<EngineLayerProps> {
     // actually standing around (legacy gated pokes on `standing`).
     if (!s.rt.running() && !this.dragging && !this.airborne) {
       const arcs: Array<'hop' | 'spin' | 'wob'> = ['hop', 'spin', 'wob']
-      this.playArc(arcs[Math.floor(Math.random() * arcs.length)], false)
+      this.playArc(pick('poke.arc', arcs), false)
       const lines = this.props.pokeLines
       if (lines && lines.length > 0) {
-        const line = lines[Math.floor(Math.random() * lines.length)]
+        const line = pick('poke.line', lines)
         s.rt.runOneShot('__poke:quip', [{ verb: 'say', text: line }])
       }
     }
@@ -649,11 +655,11 @@ export class EngineLayer extends Component<EngineLayerProps> {
       const idle = !!s && !s.rt.running() && !this.dragging && !this.airborne
       if (idle && s) {
         const opts = ['hop', 'spin', 'wob', 'wave', 'sneeze', 'chat', 'chat']
-        const f = opts[Math.floor(Math.random() * opts.length)]
+        const f = pick('fidget.kind', opts)
         if (f === 'chat') {
           const lines = this.props.chatterLines
           if (lines && lines.length > 0) {
-            const line = lines[Math.floor(Math.random() * lines.length)]
+            const line = pick('fidget.line', lines)
             s.rt.runOneShot('__fidget:chat', [{ verb: 'say', text: line }])
           }
         } else if (f === 'wave') {
@@ -670,7 +676,7 @@ export class EngineLayer extends Component<EngineLayerProps> {
         }
       }
       this.scheduleFidget()
-    }, 2800 + Math.random() * 3200)
+    }, scalar('fidget.delayMs', () => 2800 + Math.random() * 3200))
   }
 
   // ── internals ────────────────────────────────────────────────────────────────
@@ -718,7 +724,8 @@ export class EngineLayer extends Component<EngineLayerProps> {
       // No authored pool → the classic default: the full builtin set (air-filtered).
       let ids = Object.keys(this.docV2.behaviors).filter((id) => id.startsWith('builtin:'))
       if (needsAir) ids = ids.filter((id) => EngineLayer.JUMPY.has(id))
-      const id = ids[s.ctx.rng.int(0, ids.length)]
+      const id = this.forcedTravel(ids) ?? ids[s.ctx.rng.int(0, ids.length)]
+      reviewLog('engine', 'pick', { key: 'travel.mode', value: id })
       return this.docV2.behaviors[id] ?? fallback
     }
     const entries: string[] = []
@@ -731,7 +738,19 @@ export class EngineLayer extends Component<EngineLayerProps> {
       for (let k = 0; k < w; k++) entries.push(e.behaviorId)
     }
     if (entries.length === 0) return fallback
-    return this.docV2.behaviors[entries[s.ctx.rng.int(0, entries.length)]] ?? fallback
+    const id = this.forcedTravel(entries) ?? entries[s.ctx.rng.int(0, entries.length)]
+    reviewLog('engine', 'pick', { key: 'travel.mode', value: id })
+    return this.docV2.behaviors[id] ?? fallback
+  }
+
+  /** Review-only travel forcing: 'travel.mode' may name a bare mode ('vault') or a
+   * full behavior id ('builtin:vault' / 'act:tightrope'). Returns null unforced or
+   * when the forced id isn't in the candidate list (the real pool still governs). */
+  private forcedTravel(candidates: readonly string[]): string | null {
+    const f = reviewHook()?.force?.['travel.mode']
+    if (f === undefined) return null
+    const want = String(f)
+    return candidates.find((id) => id === want || id === `builtin:${want}` || id === `act:${want}`) ?? null
   }
 
   private makeBubble(svg: SVGSVGElement): void {

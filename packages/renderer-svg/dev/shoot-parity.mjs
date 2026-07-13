@@ -16,7 +16,7 @@ const b = await puppeteer.launch({
 async function dashBox(p, mode) {
   return p.evaluate((m) => {
     const el = m === 'legacy'
-      ? document.querySelector('svg[viewBox="-60 -75 120 130"]')
+      ? document.querySelector('[data-dash-actor]')
       : document.querySelector('[data-dash-renderer]')
     if (!el) return null
     const r = el.getBoundingClientRect()

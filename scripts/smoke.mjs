@@ -42,7 +42,7 @@ await sleep(2600)
 // click disambiguation is actually exercised. Missing both = FAILURE.
 const pokeAt = await page.evaluate(() => {
   const el = document.querySelector('[data-dash-poke]') ||
-    document.querySelector('svg[viewBox="-60 -75 120 130"]')
+    document.querySelector('[data-dash-actor]')
   if (!el) return null
   const r = el.getBoundingClientRect()
   return { x: r.x + r.width / 2, y: r.y + r.height / 2 }
@@ -57,7 +57,7 @@ if (pokeAt.x >= 0 && pokeAt.x < 1440 && pokeAt.y >= 0 && pokeAt.y < 900) {
   // sequence on the element itself so the poke path still runs
   await page.evaluate(() => {
     const el = document.querySelector('[data-dash-poke]') ||
-      document.querySelector('svg[viewBox="-60 -75 120 130"]')
+      document.querySelector('[data-dash-actor]')
     for (const type of ['mousedown', 'mouseup', 'click'])
       el.dispatchEvent(new MouseEvent(type, { bubbles: true }))
   })
@@ -75,7 +75,7 @@ await sleep(13500)
 await page.screenshot({ path: `${OUT}/idle-fidgets.png` })
 const poke2 = await page.evaluate(() => {
   const el = document.querySelector('[data-dash-poke]') ||
-    document.querySelector('svg[viewBox="-60 -75 120 130"]')
+    document.querySelector('[data-dash-actor]')
   if (!el) return null
   const r = el.getBoundingClientRect()
   return { x: r.x + r.width / 2, y: r.y + r.height / 2 }
