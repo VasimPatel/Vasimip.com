@@ -52,6 +52,10 @@ export interface EngineLayerProps {
   /** Visual effect overlays (bomb/boom/hole/smoke/crack) — the Notebook owns the
    * shared overlay components; the engine drives them for its performances. */
   onFx?(fx: { kind: 'bomb' | 'boom' | 'hole' | 'smoke' | 'crack'; on: boolean; x?: number; y?: number }): void
+  /** Engine speech (Q6): published to the shell, which renders the SHARED
+   * legacy ReactBubble (yellow marker bubble + pop-in) — the engine never
+   * draws a lookalike. Page coordinates; null clears. */
+  onSpeech?(s: { text: string; x: number; y: number } | null): void
   /** Quips for the end of a drag (the legacy DROPS list) — spoken via the
    * engine's own bubble so positioning always tracks the figure. */
   dropLines?: string[]
@@ -74,7 +78,6 @@ export class EngineLayer extends Component<EngineLayerProps> {
   private svgRef = createRef<SVGSVGElement>()
   private scene: Scene | null = null
   private renderer: CharacterRenderer | null = null
-  private bubble: SVGGElement | null = null
   private raf = 0
   private last = 0
   private acc = 0
@@ -269,7 +272,7 @@ export class EngineLayer extends Component<EngineLayerProps> {
         this.svgRef.current.style.opacity = this.actorHidden ? '0' : '1'
         this.actorHiddenApplied = this.actorHidden
       }
-      this.drawBubble()
+      this.publishSpeech()
       // DRAG: while grabbed, the transform follows the cursor (page coords from
       // the Notebook's look feed) with a light ease; the verlet secondary and
       // bandana trail it for free — the legacy grab, reborn on physics.
@@ -343,8 +346,11 @@ export class EngineLayer extends Component<EngineLayerProps> {
   }
 
   private teardown(): void {
-    if (this.onDragUp) window.removeEventListener('mouseup', this.onDragUp)
-    if (this.onDragBlur) window.removeEventListener('blur', this.onDragBlur)
+    if (this.onDragUp) window.removeEventListener('pointerup', this.onDragUp)
+    if (this.onDragBlur) {
+      window.removeEventListener('pointercancel', this.onDragBlur)
+      window.removeEventListener('blur', this.onDragBlur)
+    }
     this.onDragUp = null
     this.onDragBlur = null
     this.dragging = false
@@ -370,8 +376,10 @@ export class EngineLayer extends Component<EngineLayerProps> {
     this.arcWrap?.remove()
     this.arcWrap = null
     this.lean = 0
-    this.bubble?.remove()
-    this.bubble = null
+    if (this.lastSpeech) {
+      this.lastSpeech = null
+      this.props.onSpeech?.(null)
+    }
     this.scene = null
   }
 
@@ -518,7 +526,6 @@ export class EngineLayer extends Component<EngineLayerProps> {
       arc.appendChild(rg)
       this.arcWrap = arc
     }
-    this.makeBubble(svg)
 
     this.pendingArrival = this.arrivalId(pageIdx, spawnPanel)
 
@@ -970,7 +977,8 @@ export class EngineLayer extends Component<EngineLayerProps> {
       this.endDrag()
     }
     this.onDragBlur = () => this.endDrag()
-    window.addEventListener('mouseup', this.onDragUp)
+    window.addEventListener('pointerup', this.onDragUp)
+    window.addEventListener('pointercancel', this.onDragBlur)
     window.addEventListener('blur', this.onDragBlur)
   }
 
@@ -1051,8 +1059,11 @@ export class EngineLayer extends Component<EngineLayerProps> {
   }
 
   private endDrag(): void {
-    if (this.onDragUp) window.removeEventListener('mouseup', this.onDragUp)
-    if (this.onDragBlur) window.removeEventListener('blur', this.onDragBlur)
+    if (this.onDragUp) window.removeEventListener('pointerup', this.onDragUp)
+    if (this.onDragBlur) {
+      window.removeEventListener('pointercancel', this.onDragBlur)
+      window.removeEventListener('blur', this.onDragBlur)
+    }
     this.onDragUp = null
     this.onDragBlur = null
     this.dragStart = null
@@ -1364,29 +1375,14 @@ export class EngineLayer extends Component<EngineLayerProps> {
     return candidates.find((id) => id === want || id === `builtin:${want}` || id === `act:${want}`) ?? null
   }
 
-  private makeBubble(svg: SVGSVGElement): void {
-    const NS = 'http://www.w3.org/2000/svg'
-    const g = document.createElementNS(NS, 'g') as SVGGElement
-    const rect = document.createElementNS(NS, 'rect')
-    rect.setAttribute('rx', '8')
-    rect.setAttribute('fill', '#fffdf6')
-    rect.setAttribute('stroke', '#1a1a1a')
-    rect.setAttribute('stroke-width', '2.5')
-    const text = document.createElementNS(NS, 'text')
-    text.setAttribute('font-size', '15')
-    text.setAttribute('font-weight', '700')
-    text.setAttribute('font-family', "'Patrick Hand', 'Comic Sans MS', cursive")
-    g.appendChild(rect)
-    g.appendChild(text)
-    g.style.display = 'none'
-    svg.appendChild(g)
-    this.bubble = g
-  }
+  /** Q6 — engine speech rides the SHARED legacy bubble. Publishes {text, x, y}
+   * to the shell only on change (text or >4px drift), so React isn't churned
+   * per frame; the shell renders the same ReactBubble legacy uses. */
+  private lastSpeech: { text: string; x: number; y: number } | null = null
 
-  private drawBubble(): void {
+  private publishSpeech(): void {
     const s = this.scene
-    const b = this.bubble
-    if (!s || !b) return
+    if (!s || !this.props.onSpeech) return
     let sp = s.rt.speech()
     // Adapter quips (trip 'whoa—', hang 'hup—') fill in when the engine bubble
     // is silent; a real behavior say always wins.
@@ -1394,24 +1390,22 @@ export class EngineLayer extends Component<EngineLayerProps> {
       if (performance.now() < this.bubbleNote.until) sp = { text: this.bubbleNote.text, remainingMs: 1 }
       else this.bubbleNote = null
     }
-    if (!sp) {
-      b.style.display = 'none'
+    if (!sp || this.actorHidden) {
+      if (this.lastSpeech) {
+        this.lastSpeech = null
+        this.props.onSpeech(null)
+      }
       return
     }
     const head = s.rt.solved().bones.find((bn) => bn.id === 'head')
     if (!head) return
-    const tx = head.ex + 18
-    const ty = head.ey - 40
-    const text = b.children[1] as SVGTextElement
-    text.textContent = sp.text
-    text.setAttribute('x', String(tx + 10))
-    text.setAttribute('y', String(ty + 19))
-    const rect = b.children[0] as SVGRectElement
-    rect.setAttribute('x', String(tx))
-    rect.setAttribute('y', String(ty))
-    rect.setAttribute('width', String(sp.text.length * 8.2 + 20))
-    rect.setAttribute('height', '28')
-    b.style.display = ''
+    // the legacy anchor: just right of the head, above the shoulder line.
+    const next = { text: sp.text, x: head.ex + 14, y: head.ey - 43 }
+    const prev = this.lastSpeech
+    if (!prev || prev.text !== next.text || Math.abs(prev.x - next.x) > 4 || Math.abs(prev.y - next.y) > 4) {
+      this.lastSpeech = next
+      this.props.onSpeech(next)
+    }
   }
 
   render(): ReactNode {
@@ -1427,13 +1421,13 @@ export class EngineLayer extends Component<EngineLayerProps> {
         <div
           ref={(r) => { this.pokeBox = r }}
           data-dash-poke
-          onMouseDown={(e) => { e.preventDefault(); this.beginDrag(e) }}
+          onPointerDown={(e) => { e.preventDefault(); this.beginDrag(e) }}
           onClick={() => {
             if (this.dragMoved) { this.dragMoved = false; return } // a drag, not a poke
             this.props.onPoke?.()
             this.poke()
           }}
-          style={{ position: 'absolute', left: 0, top: 0, width: 92, height: 130, pointerEvents: 'auto', cursor: 'grab' }}
+          style={{ position: 'absolute', left: 0, top: 0, width: 92, height: 130, pointerEvents: 'auto', cursor: 'grab', touchAction: 'none' }}
         />
       </div>
     )
