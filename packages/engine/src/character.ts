@@ -126,7 +126,7 @@ export interface CharacterRuntime {
   /** Run a behavior. `opts.travel` binds the from/to panels the doc's travel:*
    * refs resolve against — applied AFTER the run's locomotion reset, so the
    * binding is atomic with the run (a reset clears any previous binding). */
-  runBehavior(doc: BehaviorDoc, opts?: { travel?: { from?: string; to?: string } }): void
+  runBehavior(doc: BehaviorDoc, opts?: { travel?: { from?: string; to?: string }; defaultSpeed?: number }): void
   /** Run an ephemeral one-shot steps list (dynamic quips/beats — text varies per
    * invocation) WITHOUT registering a behavior doc. See BehaviorExecutor.runOneShot. */
   runOneShot(label: string, steps: Intent[]): void
@@ -414,9 +414,12 @@ export function createCharacterRuntime(opts: CharacterRuntimeOptions): Character
     watchdog.tick()
   }
 
-  function runBehavior(doc: BehaviorDoc, opts?: { travel?: { from?: string; to?: string } }): void {
+  function runBehavior(doc: BehaviorDoc, opts?: { travel?: { from?: string; to?: string }; defaultSpeed?: number }): void {
     behavior.run(doc) // resets locomotion (incl. any stale travel binding)
     locomotion.setTravelContext(opts?.travel ?? null)
+    // Q4 adapter timing policy: a per-run default ground speed (legacy walk
+    // duration bounds); authored step {speed} always wins.
+    locomotion.setDefaultSpeed(opts?.defaultSpeed ?? null)
   }
 
   function runOneShot(label: string, steps: Intent[]): void {

@@ -612,7 +612,11 @@ export class EngineLayer extends Component<EngineLayerProps> {
       rt.transform.facing = 1
       this.travelDest = 0
       this.props.sfx('scrib')
-      rt.runBehavior(walkDoc, { travel: { from: `panel:${pageIdx}:0`, to: `panel:${pageIdx}:0` } })
+      rt.runBehavior(walkDoc, {
+        travel: { from: `panel:${pageIdx}:0`, to: `panel:${pageIdx}:0` },
+        // legacy entrance pace (Q4): the same ordinary-walk duration bounds.
+        defaultSpeed: entryDist / Math.min(2.2, Math.max(0.7, entryDist / 190)),
+      })
       return
     }
     this.chainArrival()
@@ -674,7 +678,16 @@ export class EngineLayer extends Component<EngineLayerProps> {
     const pn = this.docV2.pages[pageIdx]?.panels[panelIdx]
     this.pendingHang = doc.id === 'builtin:hop' && !!pn && pn.anchor.dy <= 6 && chance('hop.hang', 0.25)
 
-    s.rt.runBehavior(doc, { travel: { from: fromId, to: toId } })
+    // Q4 — the legacy ordinary-walk timing policy: duration = clamp(dist/190,
+    // 0.7s, 2.2s), expressed as a per-run default ground speed (authored step
+    // speeds always win, so approaches/crossings keep their legacy classes).
+    let defaultSpeed: number | undefined
+    if (doc.id === 'builtin:walk' && from && to) {
+      const dist = Math.hypot(to.x - from.x, to.y - from.y)
+      if (dist > 1) defaultSpeed = dist / Math.min(2.2, Math.max(0.7, dist / 190))
+    }
+
+    s.rt.runBehavior(doc, { travel: { from: fromId, to: toId }, defaultSpeed })
   }
 
   /** Legacy poofTo: smoke → vanish (150) → TELEPORT under cover (520) → smoke at

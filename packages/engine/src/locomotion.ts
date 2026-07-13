@@ -142,6 +142,8 @@ export interface LocomotionState {
   /** Q1 presentation: |dx| within the current ground leg (walk-phase source).
    * Optional for pre-quality snapshots. */
   groundDistance?: number
+  /** Q4 adapter timing policy (per-run default ground speed). Optional. */
+  defaultSpeed?: number | null
   // jump
   jPhase: JumpPhase
   jVx: number
@@ -196,6 +198,10 @@ export interface Locomotion {
   begin(intent: Intent & { verb: MovementVerb }): void
   /** Bind/unbind the from/to panels a travel run resolves travel:* refs against. */
   setTravelContext(ctx: { from?: string; to?: string } | null): void
+  /** Per-run DEFAULT ground speed (px/s) — the adapter's timing policy (legacy
+   * ordinary-walk duration bounds). An authored step {speed} always wins.
+   * Cleared by reset(), exactly like the travel context. */
+  setDefaultSpeed(v: number | null): void
   /** Runs BEFORE blender.tick(): advance gait/steer, set the blender base source,
    * commit ground/fly motion + collision. Movement that needs markers waits. */
   preBlend(): void
@@ -368,6 +374,8 @@ export function createLocomotion(deps: LocomotionDeps): Locomotion {
   let gSpeed = 0
   let gDir: 1 | -1 = 1
   let speedOverride: number | null = null
+  /** Per-run default ground speed (adapter timing policy; step speed wins). */
+  let defaultSpeed: number | null = null
   /** |dx| accumulated within the CURRENT ground leg (quality Q1 — the renderer
    * divides by the skin's authored stride for a distance-locked walk phase). */
   let groundDistance = 0
@@ -707,7 +715,7 @@ export function createLocomotion(deps: LocomotionDeps): Locomotion {
     gHipHeight = deps.hipHeight
     gStartX = t.x
     gDir = to.x >= t.x ? 1 : -1
-    gSpeed = (speedOverride ?? walkSpeed) * gDir
+    gSpeed = (speedOverride ?? defaultSpeed ?? walkSpeed) * gDir
     gElapsedMs = 0
     groundDistance = 0 // each ground leg starts on a contact frame (Q1 policy)
     t.facing = gDir
@@ -1156,6 +1164,7 @@ export function createLocomotion(deps: LocomotionDeps): Locomotion {
   function reset(): void {
     travelCtx = null // stale context must never leak into a later behavior (review)
     speedOverride = null
+    defaultSpeed = null
     groundDistance = 0
     mode = 'idle'
     status = 'idle'
@@ -1194,6 +1203,7 @@ export function createLocomotion(deps: LocomotionDeps): Locomotion {
       gElapsedMs,
       ...(speedOverride !== null ? { speedOverride } : {}),
       ...(groundDistance !== 0 ? { groundDistance } : {}),
+      ...(defaultSpeed !== null ? { defaultSpeed } : {}),
       jPhase,
       jVx,
       jVy,
@@ -1228,6 +1238,7 @@ export function createLocomotion(deps: LocomotionDeps): Locomotion {
     gElapsedMs = s.gElapsedMs
     speedOverride = s.speedOverride ?? null
     groundDistance = s.groundDistance ?? 0
+    defaultSpeed = s.defaultSpeed ?? null
     jPhase = s.jPhase
     jVx = s.jVx
     jVy = s.jVy
@@ -1264,6 +1275,9 @@ export function createLocomotion(deps: LocomotionDeps): Locomotion {
     begin,
     setTravelContext(ctx) {
       travelCtx = ctx ? { ...ctx } : null
+    },
+    setDefaultSpeed(v) {
+      defaultSpeed = v
     },
     preBlend,
     postBlend,
