@@ -76,9 +76,23 @@ recovery code).
 | 4 | Idle/Spray eyes | JSX-parametric eyes in the art | The ENGINE parametric face (blink + look-at + dilation) on the drawing's head anchor | Strictly more alive; same geometry | S5 idle-near |
 | 5 | Easing curves | Authored cubic-bezier per move | Locomotion solver profile (speed IS authored) | The one accepted migration loss — documented equivalence | loss report |
 
+## Final whole-branch codex review (S8)
+
+238k-token independent read-only review: 6 blockers + 12 should-fixes.
+16 fixed in the S8 commit (headline: travel arrivals were being silently
+cleared by a call-order bug — the review earned its keep). 2 accepted as
+documented deferrals (below). Categories engine-determinism / timers /
+acting-contract / schema / migration all clean after fixes; the legacy
+route was judged clean throughout.
+
 ## Remaining / deferred (explicit, per plan rule 3)
 
-- Touch/pointer-event input path (drag is mouse-event based; taps work).
+- Touch/pointer-event input path (drag is mouse-event based; taps work) —
+  codex finding 17, accepted deferral.
+- `prefers-reduced-motion` tames CSS animation only; engine locomotion and
+  camera/page transitions keep full motion — codex finding 18, accepted
+  deferral (story beats preserved; a full profile needs a motion-scale knob
+  through the engine).
 - Assistive reading order (all pages remain in the DOM; aria-hidden pass not done).
 - Full scenario-matrix automation for rows C01/C02/U01–U04 (autoplay full-book
   run exists in soak form; matrix rows not individually asserted).
