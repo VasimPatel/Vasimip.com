@@ -347,6 +347,9 @@ export function createCharacterRuntime(opts: CharacterRuntimeOptions): Character
     // 3. face contributors (blink + look-at pupils) — the active POSE may override
     // brow/mouth (the legacy per-pose expressions: Fight's steep brows + grit).
     lastFace = controllerSet.update(tickCount)
+    // Pose registries are immutable content docs: reading face acting from the
+    // registry (not the snapshot) is safe as long as callers never mutate poses
+    // between getState/setState — the same contract clips already rely on.
     const src = blender.currentSource()
     const poseFace = src.kind === 'pose' ? (poses[src.id] as { face?: { brow?: FaceAux['brow']; mouth?: FaceAux['mouth']; intensity?: number } } | undefined)?.face : undefined
     if (poseFace) {

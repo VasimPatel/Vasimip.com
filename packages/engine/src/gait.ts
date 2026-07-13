@@ -138,15 +138,18 @@ export function createGait(rig: RigTemplate, character: CharacterDoc, opts: Gait
   const stride = (speed < 0 ? -1 : 1) * strideMag
   const cadence = strideMag > 0 ? Math.abs(speed) / strideMag : naturalCadence
 
-  // Max stance reach with the led plants is PLANT_LEAD strides (0.38), not half a
-  // stride — crouching for the old symmetric reach hunched the walk (parity).
-  const maxReach = strideMag * 0.4
-  const reachableHip = Math.sqrt(Math.max(1, legLen * legLen - maxReach * maxReach)) * 0.97
-  const hipHeight = Math.min(opts.hipHeight ?? DEFAULT_HIP_HEIGHT, reachableHip)
   const lift = BASE_LIFT * (0.5 + bounciness)
   const speedNorm = Math.min(1, Math.abs(speed) / REF_SPEED)
   const bob = BASE_BOB * (0.4 + 0.8 * bounciness) * speedNorm
   const armSwing = BASE_ARM_SWING * (0.5 + 0.7 * confidence) * (0.25 + 0.75 * speedNorm)
+  // Max stance reach with the led plants is PLANT_LEAD strides (0.38), not half a
+  // stride — crouching for the old symmetric reach hunched the walk (parity).
+  // The bob LIFTS the hip mid-cycle, so the reach budget must cover hip + bob or
+  // the up-bob tick clamps the IK and slides the plant (independent-review
+  // blocker: 38.1 px demanded of a 37 px leg at site speed).
+  const maxReach = strideMag * 0.4
+  const reachableHip = Math.sqrt(Math.max(1, legLen * legLen - maxReach * maxReach)) * 0.97 - bob
+  const hipHeight = Math.min(opts.hipHeight ?? DEFAULT_HIP_HEIGHT, reachableHip)
 
   // Legs branch from the pelvis ORIGIN, and pelvis is the root joint, so the hip is
   // the root point and the thigh's parent world angle is the pelvis world angle.

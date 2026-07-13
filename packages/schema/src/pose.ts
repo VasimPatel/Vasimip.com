@@ -89,9 +89,20 @@ function checkProps(x: unknown, issues: Issues): void {
       return
     }
     p.elements.forEach((e, j) => {
+      const at = `props[${i}].elements[${j}]`
       if (!isRecord(e) || (e.kind !== 'path' && e.kind !== 'circle' && e.kind !== 'rect')) {
-        issues.push(`props[${i}].elements[${j}].kind: must be 'path' | 'circle' | 'rect'`)
+        issues.push(`${at}.kind: must be 'path' | 'circle' | 'rect'`)
+        return
       }
+      if (e.kind === 'path' && !isStr(e.d)) issues.push(`${at}.d: required string for a path`)
+      for (const num of ['cx', 'cy', 'r', 'x', 'y', 'w', 'h', 'rx', 'strokeWidth', 'opacity'] as const) {
+        if (e[num] !== undefined && !isNum(e[num])) issues.push(`${at}.${num}: must be a finite number`)
+      }
+      for (const str of ['fill', 'stroke'] as const) {
+        if (e[str] !== undefined && !isStr(e[str])) issues.push(`${at}.${str}: must be a string`)
+      }
+      if (e.jitter !== undefined && typeof e.jitter !== 'boolean') issues.push(`${at}.jitter: must be a boolean`)
+      if (e.opacity !== undefined && isNum(e.opacity) && (e.opacity < 0 || e.opacity > 1)) issues.push(`${at}.opacity: must be in [0, 1]`)
     })
   })
 }
@@ -106,7 +117,7 @@ const poseChecks: readonly Check[] = [
       else {
         if (d.face.brow !== undefined && !BROWS.includes(d.face.brow as string)) issues.push(`face.brow: must be one of ${BROWS.join('|')}`)
         if (d.face.mouth !== undefined && !MOUTHS.includes(d.face.mouth as string)) issues.push(`face.mouth: must be one of ${MOUTHS.join('|')}`)
-        if (d.face.intensity !== undefined && !isNum(d.face.intensity)) issues.push('face.intensity: must be a number')
+        if (d.face.intensity !== undefined && (!isNum(d.face.intensity) || d.face.intensity < 0 || d.face.intensity > 1)) issues.push('face.intensity: must be a number in [0, 1]')
       }
     }
     if (d.root !== undefined) {
@@ -142,6 +153,11 @@ export function validatePoseAgainstRig(pose: unknown, rig: unknown): ValidateRes
   for (const key of Object.keys(structural.doc.angles)) {
     if (!known.has(key)) errors.push(`angles.${key}: unknown joint (not in rig ${JSON.stringify(rigResult.doc.id)})`)
   }
+  // Prop anchors must be real joints too — a typo would render the prop
+  // unanchored at the SVG origin (independent-review finding).
+  structural.doc.props?.forEach((p, i) => {
+    if (!known.has(p.joint)) errors.push(`props[${i}].joint: unknown joint (not in rig ${JSON.stringify(rigResult.doc.id)})`)
+  })
   if (errors.length > 0) return { ok: false, errors }
   return structural
 }
