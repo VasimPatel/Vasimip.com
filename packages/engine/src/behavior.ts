@@ -312,6 +312,7 @@ export function createBehaviorExecutor(deps: BehaviorDeps): BehaviorExecutor {
     const step = steps[f.index]
     switch (step.verb) {
       case 'idle':
+        blender.clearActing() // an explicit idle IS a new pose — release any persist
         blender.setSource(idleSource(), { durationMs: 200 })
         complete()
         break

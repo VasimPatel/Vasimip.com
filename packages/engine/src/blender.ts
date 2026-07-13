@@ -70,6 +70,11 @@ interface ActingState {
   elapsedMs: number
   /** Transition duration for the release back to the base source. */
   returnMs: number
+  /** The acting layer's OWN transition envelope. The base layer's setSource
+   * (locomotion retargets every state change) must not stomp an in-flight
+   * acting blend — review finding: shared smoothTime made cue blendMs a lie. */
+  smoothTime: number
+  decayTau: number
 }
 
 /** Fully serializable blender state (plain JSON). Additive FNS are NOT part of it
@@ -187,12 +192,14 @@ export function createBlender(rig: RigTemplate, opts?: BlenderOptions): Blender 
     },
 
     setActing(src, o) {
-      armTransition(o?.durationMs ?? 160)
+      const durationSec = (o?.durationMs ?? 160) / 1000
       acting = {
         source: isClip(src) ? { kind: 'clip', clip: src, timeMs: 0 } : { kind: 'pose', pose: src },
         hold: o?.holdMs ?? 'persist',
         elapsedMs: 0,
         returnMs: o?.returnMs ?? DEFAULT_ACTING_RETURN_MS,
+        smoothTime: Math.max(durationSec * SMOOTH_TIME_FACTOR, trackSmoothTime),
+        decayTau: Math.max(durationSec, DT),
       }
     },
 
@@ -211,46 +218,55 @@ export function createBlender(rig: RigTemplate, opts?: BlenderOptions): Blender 
       tickCount++
 
       // ── sample the target source(s) ─────────────────────────────────────────
-      // The BASE always advances (a walk cycle keeps phase under an acting hold);
-      // markers merge from both layers so the P7 launch-marker binding survives a
-      // concurrent acting cue.
+      // The BASE always advances (a walk cycle keeps phase under an acting hold).
+      // ONLY base markers surface: the launch-marker binding must never be
+      // satisfied by a decorative acting clip's marker (review finding), and an
+      // acting layer's own markers have no consumer by design.
       const markers: string[] = []
       const baseSample = advanceSource(source, markers)
       let sample = baseSample
+      let activeSmooth = smoothTime
       if (acting) {
-        acting.elapsedMs += STEP_MS
-        const actingSample = advanceSource(acting.source, markers)
+        // Expiry check BEFORE sampling (review finding: post-increment released one
+        // tick early and advanced/marked the acting clip on its expired tick).
         if (acting.hold !== 'persist' && acting.elapsedMs >= acting.hold) {
-          releaseActing(acting.returnMs) // expired THIS tick: base regains the target
+          releaseActing(acting.returnMs) // base regains the target this tick
         } else {
-          sample = actingSample
+          const throwaway: string[] = []
+          sample = advanceSource(acting.source, throwaway)
+          acting.elapsedMs += STEP_MS
+          // acting's own envelope (decayed below); base smoothTime keeps its life
+          activeSmooth = acting.smoothTime
         }
       }
       const tRoot = currentTargetRoot(sample)
 
       // ── 1. base blend (persistent velocity, never reset) ────────────────────
+      // activeSmooth = the OWNING layer's envelope: acting's while it holds the
+      // target, the base's otherwise — one integrator, two transition lives.
       for (const id of jointIds) {
         const js = joints.get(id)!
         const target = sample.angles[id]
         const tgt = target === undefined ? js.angle : target
-        const r = smoothDampAngle(js.angle, tgt, js.vel, smoothTime, DT)
+        const r = smoothDampAngle(js.angle, tgt, js.vel, activeSmooth, DT)
         js.angle = r.value
         js.vel = r.velocity
       }
       {
-        const rx = smoothDamp(root.x, tRoot.x, root.vx, smoothTime, DT)
+        const rx = smoothDamp(root.x, tRoot.x, root.vx, activeSmooth, DT)
         root.x = rx.value
         root.vx = rx.velocity
-        const ry = smoothDamp(root.y, tRoot.y, root.vy, smoothTime, DT)
+        const ry = smoothDamp(root.y, tRoot.y, root.vy, activeSmooth, DT)
         root.y = ry.value
         root.vy = ry.velocity
-        const rr = smoothDampAngle(root.rot, tRoot.rot, root.vrot, smoothTime, DT)
+        const rr = smoothDampAngle(root.rot, tRoot.rot, root.vrot, activeSmooth, DT)
         root.rot = rr.value
         root.vrot = rr.velocity
       }
 
-      // decay smoothTime toward the steady tracking constant (velocity-safe).
+      // decay BOTH envelopes toward the steady tracking constant (velocity-safe).
       smoothTime = trackSmoothTime + (smoothTime - trackSmoothTime) * Math.exp(-DT / decayTau)
+      if (acting) acting.smoothTime = trackSmoothTime + (acting.smoothTime - trackSmoothTime) * Math.exp(-DT / acting.decayTau)
 
       // ── 2. additive (throwaway buffer, never written back) ──────────────────
       const angles: Record<string, number> = {}
