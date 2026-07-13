@@ -1,5 +1,11 @@
 # Engine v2 parity recovery — results & evidence
 
+> **Quality checkpoint reopened — 2026-07-13.** The owner reviewed the recovery
+> branch live and rejected the current cape attachment/flight quality, walk
+> smoothness, and overall pacing. The static expressive-skin coverage remains a
+> pass, but the charm and integrated-motion gates are open. See
+> `quality-review-2026-07-13.md` and `quality-plan.md`.
+
 **Branch:** `vasim/engine-v2-parity-recovery` (single PR, one commit per stage)
 **Plan of record:** `parity-plan.md` · **Acceptance contract:** `parity-acceptance.md`
 **Visual target (Decision 1, owner-selected):** expressive data skin.
@@ -70,7 +76,7 @@ recovery code).
 
 | # | Scenario | Legacy | Replacement | Why | Evidence |
 |---|---|---|---|---|---|
-| 1 | All poses | Baked pennant cape per pose | ONE verlet cape (drapes with motion) | Engine-owned charm, owner-reviewed in earlier passes; physical follow-through everywhere | S5 crops |
+| 1 | All poses | Baked pennant cape per pose | ONE verlet cape (drapes with motion) | **Reopened:** owner reports visible detachment/excessive flight; hidden-rig socket and free-ribbon silhouette require redesign | 2026-07-13 live review |
 | 2 | Page-surf variant | Dash rides ON the turning page | Rides in ABOVE the anchor after the flip lands | The engine actor lives in the new page's space; the flip animation hides it (double-actor guard) | S3 |
 | 3 | Wallrun/slide climbs | Root visibly climbs/slides the wall face | Wall-pose beat at the wall + kick-over jump | No climb locomotion mode (closed verb set); silhouette/rhythm preserved | S3 strips |
 | 4 | Idle/Spray eyes | JSX-parametric eyes in the art | The ENGINE parametric face (blink + look-at + dilation) on the drawing's head anchor | Strictly more alive; same geometry | S5 idle-near |
@@ -98,3 +104,21 @@ route was judged clean throughout.
   run exists in soak form; matrix rows not individually asserted).
 - Stage 5 micro-tuning is owner judgment by design — the live loops are the
   checkpoint (run `bun run dev`, compare `/` vs `/legacy`).
+
+## Post-recovery quality review — 2026-07-13
+
+The live checkpoint found that correctness and static pose coverage improved
+substantially, but motion quality is not yet accepted. Primary open findings:
+
+- expressive walk CSS and procedural gait run at unrelated phases;
+- default engine walk is 111.6 px/s while legacy ordinary walk targets 190 px/s
+  and signature approaches target roughly 260–290 px/s;
+- the cape follows the hidden rig rather than the internally animated visible
+  skin;
+- travel camera updates every ~75 ms while easing each update for 450–900 ms;
+- fixed-step presentation has no render interpolation;
+- engine speech bubbles do not use the shared legacy visual component;
+- Stage 5 still crops did not exercise dynamic walk/cape/camera quality.
+
+The development architecture remains viable. Final acceptance is deferred until
+the motion-quality plan passes and the owner approves the complete live journey.
