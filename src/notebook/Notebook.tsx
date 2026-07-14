@@ -8,7 +8,7 @@
 import React, { type CSSProperties } from 'react'
 import type { Pose, HudTab, PageGeom } from './types'
 import { POKE, CHATTER, DROPS, POKEARC, FIDGETARC, type ArcKey } from './constants'
-import { spreadPages, SPREAD_RIGHT_X, STAGE_W, STAGE_H } from './doc/spread'
+import { spreadPages, leftPagePanels, SPREAD_RIGHT_X, STAGE_W, STAGE_H } from './doc/spread'
 import { AudioEngine, type SfxKind } from './audio'
 import { pick, chance, scalar, setReviewRoute, reviewHook, reviewLog } from './review'
 
@@ -17,7 +17,7 @@ import PageRenderer from './PageRenderer'
 import { EngineLayer } from './engine/EngineLayer'
 import { buildEngineDoc } from './engine/engineDoc'
 import { DEFAULT_DOC } from './doc/defaultDoc'
-import type { NotebookDoc, TravelConfig } from './doc/docTypes'
+import type { NotebookDoc, PanelDoc, TravelConfig } from './doc/docTypes'
 import { BUILTIN_MODES, SFX_KINDS } from './doc/docTypes'
 import { compileAction, resolveTravelConfig, whenPasses } from './doc/actions'
 import type { Cue, ActionCtx } from './doc/actions'
@@ -73,6 +73,8 @@ export interface State {
   busyFlip: boolean
   /** engine surf flip: the EngineLayer stays visible so Dash rides the turn. */
   surfFlip: boolean
+  /** direction of the in-flight flip (backward multi-flips stack in reverse). */
+  flipDir: 1 | -1
   flipRange: [number, number] | null
   auto: boolean
   sound: boolean
@@ -142,7 +144,7 @@ export default class Notebook extends React.Component<NotebookProps, State> {
     dragging: false, fidget: null, pokeAnim: 'hop', hopDur: .92,
     smokeOn: false, smokeX: 0, smokeY: 0, bombFlyOn: false, bombX: 0, bombY: 0,
     boomOn: false, holeOn: false, holeX: 0, holeY: 0,
-    busy: false, busyFlip: false, surfFlip: false, flipRange: null,
+    busy: false, busyFlip: false, surfFlip: false, flipDir: 1, flipRange: null,
     auto: false, sound: true, flags: {},
     poking: false, react: null, mx: 640, my: 400,
     camo: null, engineSay: null, shakeOn: false, crackOn: false, crackX: 0, crackY: 0,
@@ -154,6 +156,16 @@ export default class Notebook extends React.Component<NotebookProps, State> {
 
   /** Geometry adapter: cover stub + per-page panel geometry, rebuilt only when
    *  the doc reference changes. Every locomotion routine reads `this.geom()`. */
+  /** The PanelDoc behind flattened spread index `panelIdx` of view page p —
+   * the SAME left-back + right-front order geom() uses (codex: legacy arrival/
+   * travel reads still indexed fronts only, so authored backs skewed every
+   * panel after them and overran the array). */
+  panelDoc(p: number, panelIdx: number): PanelDoc | undefined {
+    if (p <= 0) return undefined
+    const left = leftPagePanels(this.doc.pages, p)
+    return panelIdx < left.length ? left[panelIdx] : this.doc.pages[p - 1]?.panels[panelIdx - left.length]
+  }
+
   geom(): PageGeom[] {
     const doc = this.doc
     if (this._geomDoc !== doc) {
@@ -336,7 +348,7 @@ export default class Notebook extends React.Component<NotebookProps, State> {
     // (skillsRevealed etc.) per keystroke would make gated art flicker and replay.
     const safe: Partial<State> = {
       page, panel,
-      busy: false, busyFlip: false, surfFlip: false, dragging: false, poking: false, camo: null,
+      busy: false, busyFlip: false, surfFlip: false, flipDir: 1, dragging: false, poking: false, camo: null,
       smokeOn: false, bombFlyOn: false, boomOn: false, holeOn: false, crackOn: false,
       shakeOn: false, pageJit: false, pageShove: 0, dtrans: 'none', react: null,
       windup: false, hopping: false, diving: false, popping: false, vaulting: false,
@@ -361,7 +373,7 @@ export default class Notebook extends React.Component<NotebookProps, State> {
     const s = this.state
     const pn = this.geom()[s.page]?.panels[s.panel]
     if (!pn) return
-    const arrival = s.page > 0 ? this.doc.pages[s.page - 1].panels[s.panel].arrival : undefined
+    const arrival = this.panelDoc(s.page, s.panel)?.arrival
     const face = arrival?.face
     const faceExtra: Partial<State> = face ? { face } : {}
     // No pose, or a one-shot arrival that already played → plain idle.
@@ -409,7 +421,7 @@ export default class Notebook extends React.Component<NotebookProps, State> {
       this.to(580, () => { this.sfx('knock'); this.jitPage(); this.shakeCam() })
       this.to(1150, () => { this.setState({ busy: false }); this.panelPose(true) })
     } else {
-      const sdir = (this.state.dx + 52) > 460 ? -1 : 1
+      const sdir = (this.state.dx + 52) > STAGE_W / 2 ? -1 : 1
       this.sfx('scrape')
       this.setState({ busy: true, pose: 'shove', face: sdir, pageShove: sdir * 34 })
       this.to(250, () => this.shakeCam())
@@ -435,7 +447,7 @@ export default class Notebook extends React.Component<NotebookProps, State> {
     // and the legacy PAGE VISUAL replays alongside it (review: engine mode played
     // a whoosh with no shove/jitter/shake).
     if (kind === 'fx:pageShove') {
-      const dir = this.engineRef && this.state.dx > 460 ? -1 : 1
+      const dir = this.engineRef && this.state.dx > STAGE_W / 2 ? -1 : 1
       this.setState({ pageShove: dir * 34 })
       this.to(1000, () => this.setState({ pageShove: 0 }))
     } else if (kind === 'fx:jitPage') this.jitPage()
@@ -462,7 +474,7 @@ export default class Notebook extends React.Component<NotebookProps, State> {
     // travel() only ever runs on real pages, so page-1 is always a valid page index.
     const pageDoc = s.page > 0 ? this.doc.pages[s.page - 1] : undefined
     const cfg: TravelConfig = pageDoc
-      ? resolveTravelConfig(this.doc, pageDoc, pageDoc.panels[j])
+      ? resolveTravelConfig(this.doc, pageDoc, this.panelDoc(s.page, j) ?? pageDoc.panels[0])
       : {}
     const comboExcluded = !!cfg.builtins && !cfg.builtins.includes('combo')
     if (dist > 380 && horiz > 240 && vert > 60 && chance('travel.combo', .18) && this._lastMode !== 'combo' && !comboExcluded) {
@@ -837,7 +849,7 @@ export default class Notebook extends React.Component<NotebookProps, State> {
       const a = this.anch(p, 0)
       this.sfx('whoosh')
       this.setState({
-        busy: true, busyFlip: true, flipRange: [lo, hi], page: p, panel: 0,
+        busy: true, busyFlip: true, flipDir: 1, flipRange: [lo, hi], page: p, panel: 0,
         pose: 'surf', face: 1, fidget: null,
         dx: a.x, dy: a.y - 96,
         dtrans: 'left .78s cubic-bezier(.5,.08,.28,1), top .78s cubic-bezier(.5,.08,.28,1), opacity .25s'
@@ -849,7 +861,7 @@ export default class Notebook extends React.Component<NotebookProps, State> {
       return
       }
     }
-    this.setState({ busy: true, busyFlip: true, surfFlip, flipRange: [lo, hi], page: p, panel: landPanel, pose: 'hidden', dop: 0 })
+    this.setState({ busy: true, busyFlip: true, surfFlip, flipDir: p > s.page ? 1 : -1, flipRange: [lo, hi], page: p, panel: landPanel, pose: 'hidden', dop: 0 })
     this.to(820, () => {
       this.setState({ busyFlip: false, surfFlip: false })
       if (p === 0) this.setState({ busy: false })
@@ -1111,13 +1123,24 @@ export default class Notebook extends React.Component<NotebookProps, State> {
     else if (standingNow && !s.busy && !s.dragging) lean = ((s.mx ?? 0) < bodySX ? 1 : -1) * near * 8
     const eyeR = (2 + near * 1.1)
 
+    // page fx land on the sheet DASH'S PANEL is on: a flattened LEFT-page panel
+    // belongs to the previous (flipped) sheet, not the current right one.
+    const leftN = s.page > 0 ? leftPagePanels(this.doc.pages, s.page).length : 0
+    const fxSheet = s.panel < leftN ? s.page - 1 : s.page
     const pg = (i: number): CSSProperties => {
       const flipped = i < s.page
       let z = flipped ? 2 + i : 40 - i
-      if (s.busyFlip && s.flipRange && i >= s.flipRange[0] && i <= s.flipRange[1]) z = 50 + i
+      // in-flight sheets stack by DIRECTION: forward = later sheet on top,
+      // backward = earlier sheet on top (codex: content-bearing backs made the
+      // old always-ascending order flash the wrong page on backward jumps)
+      if (s.busyFlip && s.flipRange && i >= s.flipRange[0] && i <= s.flipRange[1]) {
+        z = 50 + (s.flipDir === 1 ? i : s.flipRange[1] - i)
+      }
       let tf = 'rotateY(' + (flipped ? -179.6 : 0) + 'deg)'
-      if (!flipped && i === s.page && s.pageShove) tf += ' translateX(' + s.pageShove + 'px)'
-      const jit = (!flipped && i === s.page && s.pageJit) ? '; animation:pagejit .5s linear' : ''
+      // a flipped sheet's local +x is mirrored — negate the shove so the left
+      // page still shoves away from Dash
+      if (i === fxSheet && s.pageShove) tf += ' translateX(' + (flipped ? -s.pageShove : s.pageShove) + 'px)'
+      const jit = (i === fxSheet && s.pageJit) ? '; animation:pagejit .5s linear' : ''
       return styleFromCss('transform:' + tf + '; z-index:' + z + jit)
     }
 

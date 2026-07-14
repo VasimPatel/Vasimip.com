@@ -14,7 +14,7 @@ export const GRID = 8
 export function allFlagsOn(doc: NotebookDoc): Record<string, boolean> {
   const flags: Record<string, boolean> = {}
   for (const page of doc.pages) {
-    for (const panel of page.panels) {
+    for (const panel of [...page.panels, ...(page.back?.panels ?? [])]) {
       if (panel.arrival?.setFlag) flags[panel.arrival.setFlag] = true
       for (const box of panel.boxes) if (box.showIfFlag) flags[box.showIfFlag] = true
     }

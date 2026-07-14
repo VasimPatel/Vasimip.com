@@ -147,15 +147,22 @@ export default function Admin({ devBypass = false }: { devBypass?: boolean }) {
     setSel((s) => (s.kind === 'page' && s.page > doc.pages.length - 1) ? { kind: 'page', page: doc.pages.length - 1 } : s)
     const s = docRef.current!
     const pg = sel.kind === 'page' ? s.pages[Math.min(sel.page, s.pages.length - 1)] : null
-    setPanelSel((ps) => (ps == null || !pg) ? ps : (ps > pg.panels.length - 1 ? Math.max(0, pg.panels.length - 1) : ps))
+    // clamp against the SIDE being edited (codex: clamping backs against the
+    // FRONT list yanked/strand-ed the selection when the counts differed)
+    const list = pg ? (side === 'back' ? pg.back?.panels ?? [] : pg.panels) : null
+    setPanelSel((ps) => {
+      if (ps == null || !list) return ps
+      if (list.length === 0) return null
+      return ps > list.length - 1 ? list.length - 1 : ps
+    })
     setBoxSel((bs) => {
-      if (bs == null || !pg || panelSel == null) return bs
-      const pn = pg.panels[Math.min(panelSel, pg.panels.length - 1)]
+      if (bs == null || !list || list.length === 0 || panelSel == null) return bs == null ? bs : null
+      const pn = list[Math.min(panelSel, list.length - 1)]
       return pn && bs > pn.boxes.length - 1 ? null : bs
     })
     setActionSel((as) => (as && !(doc.actions ?? {})[as]) ? null : as)
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [doc])
+  }, [doc, side])
 
   // Esc closes the DASH DOJO overlay (capture phase, before the preview's own
   // window handlers see the key — matches the keydown shield's precedence).
@@ -293,7 +300,8 @@ export default function Admin({ devBypass = false }: { devBypass?: boolean }) {
   // ── page-list operations ───────────────────────────────────────────────────
   const renamePage = (i: number, name: string) => {
     const clean = name.trim()
-    if (clean.length > 0) updatePage(i, (p) => ({ ...p, name: clean }))
+    // unchanged → no doc write (a bogus snapshot dirtied the draft + undo)
+    if (clean.length > 0 && clean !== doc.pages[i]?.name) updatePage(i, (p) => ({ ...p, name: clean }))
     setRenaming(null)
   }
   const setPageSnark = (i: number, snark: string) => updatePage(i, (p) => ({ ...p, snark }))
@@ -309,7 +317,7 @@ export default function Admin({ devBypass = false }: { devBypass?: boolean }) {
   const addPage = () => {
     update((d) => ({ ...d, pages: [...d.pages, { name: 'PAGE ' + (d.pages.length + 1), snark: '', panels: [{ ...NEW_PANEL, boxes: [seedTextBox(240)] }] }] }))
     setSel({ kind: 'page', page: doc.pages.length })
-    setPanelSel(0); setBoxSel(null)
+    setPanelSel(0); setBoxSel(null); setSide('front'); setRenaming(null)
   }
 
   // ── canvas plumbing ─────────────────────────────────────────────────────────
@@ -455,10 +463,16 @@ export default function Admin({ devBypass = false }: { devBypass?: boolean }) {
         <div className="tbtn" onClick={() => addBox('text')}>+ text box</div>
         <div className="tbtn" onClick={() => addBox('draw')}>+ drawing</div>
         <div className="tbtn" onClick={addPanelDefault}>+ new panel</div>
-        {page && (
+        {page && (curPage ?? 0) < doc.pages.length - 1 && (
           <div className="seg-group" title="two-sided sheet: the back is the NEXT spread's left page">
             <div className={`seg${side === 'front' ? ' on' : ''}`} onClick={() => selectSide('front')}>▹ front</div>
             <div className={`seg${side === 'back' ? ' on' : ''}`} onClick={() => selectSide('back')}>back ◃</div>
+          </div>
+        )}
+        {page && (curPage ?? 0) === doc.pages.length - 1 && (
+          <div className="seg-group dim" title="the LAST sheet's back is never on view — tear in a page after it first">
+            <div className="seg dim">▹ front</div>
+            <div className="seg dim">back ◃</div>
           </div>
         )}
         <div className="seg-group">
@@ -484,7 +498,11 @@ export default function Admin({ devBypass = false }: { devBypass?: boolean }) {
                     autoFocus
                     defaultValue={p.name}
                     onKeyUp={(e) => { if (e.key === 'Enter') renamePage(i, (e.target as HTMLInputElement).value); if (e.key === 'Escape') setRenaming(null) }}
-                    onBlur={(e) => renamePage(i, e.target.value)}
+                    onBlur={(e) => {
+                      // tabbing/clicking into the sibling snark field keeps the editor open
+                      if ((e.relatedTarget as HTMLElement | null)?.classList?.contains('pc-edit')) return
+                      renamePage(i, e.target.value)
+                    }}
                   />
                   <input
                     className="pc-edit pc-edit-snark"
