@@ -50,6 +50,11 @@ const SCENARIOS = {
   // parity 3 (page-turn flying): the forced surf flip — Dash must be VISIBLE
   // riding over the turning page, then tuck-drop 880 / land 1240 / done 1780.
   'surf-flip': { page: 2, ms: 4500, force: { 'flip.surf': true }, recordFromDrive: true, drive: (p) => p.evaluate(() => window.__notebookGoTo(3)) },
+  // parity 3b (actions): the staged legacy choreographies — swing hangs at the
+  // bar then sag-arcs down; wallrun crosses, runs UP the wall, tucks onto the
+  // anchor. Both must land feet-on-line with no poof recovery.
+  'swing-travel': { page: 3, ms: 6000, force: {}, drive: (p) => p.evaluate(() => window.__notebookRunBuiltin('swing')) },
+  'wallrun-travel': { page: 3, ms: 7000, force: {}, drive: (p) => p.evaluate(() => window.__notebookRunBuiltin('wallrun')) },
   'walk-to-land': { page: 4, ms: 6000, force: { 'walk.trip': false }, recordFromDrive: true, drive: (p) => p.evaluate(() => window.__notebookGoTo(5)) },
   'fight-loop': { page: 2, ms: 5500, force: {}, drive: async () => {} },
   poof: { page: 3, ms: 4000, force: {}, drive: (p) => p.evaluate(() => window.__notebookRunBuiltin('poof')) },

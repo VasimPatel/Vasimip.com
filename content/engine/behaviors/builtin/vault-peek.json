@@ -15,60 +15,6 @@
       "verb": "strikePose",
       "ref": "peek",
       "holdMs": 760
-    },
-    {
-      "verb": "jumpTo",
-      "target": "travel:to#interior"
-    },
-    {
-      "verb": "wait",
-      "ms": 540
-    }
-  ],
-  "cues": [
-    {
-      "at": "onLaunch",
-      "do": {
-        "verb": "strikePose",
-        "ref": "vault",
-        "holdMs": 520
-      }
-    },
-    {
-      "at": "onLaunch",
-      "do": {
-        "verb": "camera",
-        "to": "travel:to#interior",
-        "mult": 1.15,
-        "fast": true
-      }
-    },
-    {
-      "at": "onLaunch",
-      "do": {
-        "verb": "sfx",
-        "kind": "whoosh"
-      }
-    },
-    {
-      "at": "onLand",
-      "do": {
-        "verb": "sfx",
-        "kind": "hop"
-      }
-    },
-    {
-      "at": "onLand",
-      "do": {
-        "verb": "sfx",
-        "kind": "fx:shake"
-      }
-    },
-    {
-      "at": "onLand",
-      "do": {
-        "verb": "camera"
-      }
     }
   ]
 }

@@ -37,24 +37,6 @@
     },
     {
       "verb": "camera"
-    },
-    {
-      "verb": "sfx",
-      "kind": "scrib"
-    },
-    {
-      "verb": "moveTo",
-      "target": "travel:to#interior",
-      "speed": 220
-    },
-    {
-      "verb": "strikePose",
-      "ref": "squash-land",
-      "holdMs": 220
-    },
-    {
-      "verb": "wait",
-      "ms": 320
     }
   ],
   "reactions": {

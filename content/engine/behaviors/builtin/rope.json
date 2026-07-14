@@ -10,39 +10,6 @@
       "verb": "moveTo",
       "target": "travel:from#edge",
       "speed": 270
-    },
-    {
-      "verb": "camera",
-      "to": "travel:to#interior",
-      "mult": 1.22,
-      "fast": false
-    },
-    {
-      "verb": "moveTo",
-      "target": "travel:to#interior",
-      "pose": "rope",
-      "speed": 115,
-      "timeoutMs": 14000
-    },
-    {
-      "verb": "sfx",
-      "kind": "hop"
-    },
-    {
-      "verb": "sfx",
-      "kind": "fx:shake"
-    },
-    {
-      "verb": "strikePose",
-      "ref": "squash-land",
-      "holdMs": 280
-    },
-    {
-      "verb": "camera"
-    },
-    {
-      "verb": "wait",
-      "ms": 320
     }
   ]
 }

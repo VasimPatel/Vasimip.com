@@ -8,60 +8,8 @@
     },
     {
       "verb": "moveTo",
-      "target": "travel:to#edge",
+      "target": "travel:from#edge",
       "speed": 290
-    },
-    {
-      "verb": "camera",
-      "to": "travel:to#interior",
-      "mult": 1.1,
-      "fast": true
-    },
-    {
-      "verb": "sfx",
-      "kind": "whoosh"
-    },
-    {
-      "verb": "strikePose",
-      "ref": "wallrun",
-      "holdMs": 480
-    },
-    {
-      "verb": "jumpTo",
-      "target": "travel:to#interior"
-    },
-    {
-      "verb": "sfx",
-      "kind": "fx:shake"
-    },
-    {
-      "verb": "strikePose",
-      "ref": "squash-land",
-      "holdMs": 280
-    },
-    {
-      "verb": "camera"
-    },
-    {
-      "verb": "wait",
-      "ms": 260
-    }
-  ],
-  "cues": [
-    {
-      "at": "onLaunch",
-      "do": {
-        "verb": "strikePose",
-        "ref": "jump-tuck",
-        "holdMs": 450
-      }
-    },
-    {
-      "at": "onLand",
-      "do": {
-        "verb": "sfx",
-        "kind": "hop"
-      }
     }
   ]
 }
