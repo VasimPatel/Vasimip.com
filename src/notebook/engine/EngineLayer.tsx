@@ -114,6 +114,9 @@ export class EngineLayer extends Component<EngineLayerProps> {
   private arcWrap: SVGGElement | null = null
   private arcTimer = 0
   private fidgetTimer = 0
+  /** Battle-beat timer (the ABOUT sword fight): fires on the FightScene's shared
+   * 3.2s cycle at the clang phases while Dash holds the fight stance. */
+  private battleTimer = 0
   /** Smoothed cursor-lean (rad) — the legacy .22s ease-out transition. */
   private lean = 0
   /** Scripted root motion (back-nav hop-to-hole) — render-layer, like drag.
@@ -319,6 +322,7 @@ export class EngineLayer extends Component<EngineLayerProps> {
     }
     this.raf = requestAnimationFrame(frame)
     this.scheduleFidget()
+    this.scheduleBattle()
   }
 
   /** Q0 motion recorder: one presentation sample per rAF (review-mode only).
@@ -390,6 +394,7 @@ export class EngineLayer extends Component<EngineLayerProps> {
   componentWillUnmount(): void {
     cancelAnimationFrame(this.raf)
     window.clearTimeout(this.fidgetTimer)
+    window.clearTimeout(this.battleTimer)
     this.teardown()
   }
 
@@ -1603,7 +1608,7 @@ export class EngineLayer extends Component<EngineLayerProps> {
 
   /** Play a one-shot legacy arc on the whole figure. Timings verbatim from
    * POKEARC/FIDGETARC in constants.ts; origins at the live figure points. */
-  private playArc(kind: 'hop' | 'spin' | 'wob' | 'dive' | 'pop', fidget: boolean): void {
+  private playArc(kind: 'hop' | 'spin' | 'wob' | 'dive' | 'pop' | 'lungeL' | 'lungeR', fidget: boolean): void {
     const w = this.arcWrap
     const pts = this.figurePoints()
     if (!w || !pts) return
@@ -1614,6 +1619,8 @@ export class EngineLayer extends Component<EngineLayerProps> {
           ? { origin: pts.mid, anim: 'diveout .55s ease-in forwards', ms: 560 }
           : kind === 'pop'
             ? { origin: pts.ground, anim: 'popout .6s cubic-bezier(.3,.7,.4,1)', ms: 620 }
+        : kind === 'lungeL' || kind === 'lungeR'
+            ? { origin: pts.ground, anim: `battlelunge${kind === 'lungeL' ? 'l' : 'r'} .46s cubic-bezier(.4,.08,.4,1)`, ms: 480 }
             : kind === 'hop'
               ? fidget
                 ? { origin: pts.ground, anim: 'fidgethop .7s cubic-bezier(.4,.1,.3,1)', ms: 750 }
@@ -1668,6 +1675,60 @@ export class EngineLayer extends Component<EngineLayerProps> {
       }
       this.scheduleFidget()
     }, scalar('fidget.delayMs', () => 2800 + Math.random() * 3200))
+  }
+
+  /** The ABOUT-page sword fight (parity 3c): while Dash HOLDS the fight stance
+   * (the battle panel's persist arrival) and is otherwise idle, he trades blows
+   * with the FightScene attackers. The scene runs one 3.2s CSS master cycle
+   * from document time with clangs at 24% and 70%; both clocks are wall-clock,
+   * so scheduling each beat at the next clang phase keeps Dash's lunge landing
+   * on the burst, drift-free, without any DOM coupling. Alternates lunge (his
+   * hit) and a shoved recoil (theirs); occasional battle quip. */
+  private static BATTLE_CYCLE_MS = 3200
+  private static BATTLE_LINES = ['HYAA!', 'en garde.', 'back!! back!!', 'not the fact sheet!!', 'you shall not doodle.', 'parried. obviously.']
+
+  private scheduleBattle(): void {
+    const cycle = EngineLayer.BATTLE_CYCLE_MS
+    const now = performance.now()
+    const phase = (now % cycle) / cycle
+    // next clang phase (0.24 = duelist's CLANG, 0.70 = the queue's CLANK), with
+    // ~120ms lead so the lunge's 26% contact frame lands on the burst.
+    const targets = [0.24, 0.7]
+    let waitMs = Number.POSITIVE_INFINITY
+    for (const t of targets) {
+      const dt = ((t - phase + 1) % 1) * cycle
+      waitMs = Math.min(waitMs, dt < 90 ? dt + cycle : dt)
+    }
+    this.battleTimer = window.setTimeout(() => {
+      const s = this.scene
+      const fighting =
+        !!s &&
+        !s.rt.running() &&
+        !this.dragging &&
+        !this.airborne &&
+        s.rt.activeSource().id === 'fight' &&
+        performance.now() >= this.stagingUntil
+      if (fighting && s) {
+        if (chance('battle.shoved', 0.22)) {
+          // their hit lands — Dash recoils, then RE-STRIKES the stance (a bare
+          // act would release to plain stand when its hold expired, dropping
+          // the sword: the persist-held fight acting is what it replaced)
+          s.rt.runOneShot('__battle:shoved', [
+            { verb: 'strikePose', ref: 'shove', holdMs: 300 },
+            { verb: 'strikePose', ref: 'fight', hold: 'persist' },
+          ])
+          this.props.sfx('knock')
+        } else {
+          const facing = s.rt.transform.facing
+          this.playArc(facing === -1 ? 'lungeL' : 'lungeR', false)
+          this.props.sfx('knock')
+          if (chance('battle.line', 0.3)) {
+            this.bubbleNote = { text: pick('battle.line.pick', EngineLayer.BATTLE_LINES), until: performance.now() + 1000 }
+          }
+        }
+      }
+      this.scheduleBattle()
+    }, Math.max(60, waitMs - 120))
   }
 
   // ── internals ────────────────────────────────────────────────────────────────
