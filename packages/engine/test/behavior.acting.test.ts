@@ -124,6 +124,73 @@ test('forceRelease clears a persist hold', () => {
   expect(r.rt.getState().blender.acting ?? null).toBeNull()
 })
 
+test('onLaunch acting is FLIGHT-SCOPED: released at landing, not at holdMs expiry', () => {
+  // Parity 3 (the excessive-rolling bug): a roll's onLaunch tuck (900ms hold)
+  // outlived a ~460ms hop and kept tucking through the walk legs of multi-leg
+  // routes. An onLaunch cue's acting must release at the NEXT jump:land no
+  // matter how long its hold is.
+  const r = grounded()
+  r.rt.runBehavior({
+    schemaVersion: 2,
+    id: 'roll-hop',
+    steps: [{ verb: 'jumpTo', target: 'entity:goal', timeoutMs: 8000 }],
+    cues: [{ at: 'onLaunch', do: { verb: 'strikePose', ref: 'cheer', holdMs: 60000 } }],
+  } as never)
+  let landTick = -1
+  for (let i = 0; i < 2000 && r.rt.running(); i++) {
+    step(r)
+    if (eventsOf(r, 'jump:land').length > 0) {
+      landTick = i
+      break
+    }
+    // mid-flight (cue fired, not yet landed): the tuck/pose is acting
+    if (eventsOf(r, 'cue:strikePose').length > 0) expect(r.rt.getState().blender.acting).toBeTruthy()
+  }
+  expect(landTick).toBeGreaterThanOrEqual(0)
+  // released AT the landing tick — the 60s hold never gets a say
+  expect(r.rt.getState().blender.acting ?? null).toBeNull()
+  // …and it stays released through the rest of the run (no tuck-while-walking)
+  driveToCompletion(r, 4000)
+  expect(r.rt.getState().blender.acting ?? null).toBeNull()
+})
+
+test('flight release is OWNED: a replaced overlay is NOT cleared at landing', () => {
+  // codex (parity 3): if the launch hold expires mid-flight and a DIFFERENT
+  // overlay is installed before landing, the landing release must not clear it.
+  const r = grounded()
+  r.rt.runBehavior({
+    schemaVersion: 2,
+    id: 'v',
+    steps: [{ verb: 'jumpTo', target: 'entity:goal', timeoutMs: 8000 }],
+    cues: [{ at: 'onLaunch', do: { verb: 'strikePose', ref: 'cheer', holdMs: 100 } }],
+  } as never)
+  for (let i = 0; i < 2000 && eventsOf(r, 'jump:launch').length === 0; i++) step(r)
+  for (let i = 0; i < 30; i++) step(r) // ~250ms: the 100ms hold expires mid-flight
+  r.rt.act('think', { holdMs: 60000 }) // a newer overlay, not the flight's
+  for (let i = 0; i < 2000 && eventsOf(r, 'jump:land').length === 0 && r.rt.running(); i++) step(r)
+  expect(eventsOf(r, 'jump:land').length).toBeGreaterThan(0)
+  // the landing released NOTHING — the live overlay is not the one it armed
+  expect(r.rt.activeSource().id).toBe('think')
+})
+
+test('an ABANDONED flight releases its own overlay (interrupt mid-flight)', () => {
+  // codex (parity 3): a run interrupted after launch must not leave the launch
+  // pose active-but-unowned (the landing that would release it never comes).
+  const r = grounded()
+  r.rt.runBehavior({
+    schemaVersion: 2,
+    id: 'v',
+    steps: [{ verb: 'jumpTo', target: 'entity:goal', timeoutMs: 8000 }],
+    cues: [{ at: 'onLaunch', do: { verb: 'strikePose', ref: 'cheer', holdMs: 60000 } }],
+  } as never)
+  for (let i = 0; i < 2000 && eventsOf(r, 'jump:launch').length === 0; i++) step(r)
+  for (let i = 0; i < 10; i++) step(r)
+  expect(r.rt.getState().blender.acting).toBeTruthy()
+  // interrupt with a non-movement behavior — no step would clear the acting
+  r.rt.runBehavior({ schemaVersion: 2, id: 'chat', steps: [{ verb: 'wait', ms: 200 }] } as never)
+  expect(r.rt.getState().blender.acting ?? null).toBeNull()
+})
+
 test('snapshot/restore mid-acting continues bit-identically', () => {
   const doc = {
     schemaVersion: 2,

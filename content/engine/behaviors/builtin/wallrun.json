@@ -8,7 +8,7 @@
     },
     {
       "verb": "moveTo",
-      "target": "travel:to#edge",
+      "target": "travel:from#edge",
       "speed": 290
     },
     {

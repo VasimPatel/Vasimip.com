@@ -116,17 +116,29 @@ export class EngineLayer extends Component<EngineLayerProps> {
   private fidgetTimer = 0
   /** Smoothed cursor-lean (rad) — the legacy .22s ease-out transition. */
   private lean = 0
-  /** Scripted root motion (back-nav hop-to-hole) — render-layer, like drag. */
-  private scriptMove: { fromX: number; fromY: number; toX: number; toY: number; t0: number; dur: number; arcH: number } | null = null
+  /** Scripted root motion (back-nav hop-to-hole) — render-layer, like drag.
+   * `ease` shapes k (surf ride/drop use the legacy flipTo easings); default linear. */
+  private scriptMove: {
+    fromX: number
+    fromY: number
+    toX: number
+    toY: number
+    t0: number
+    dur: number
+    arcH: number
+    ease?: (k: number) => number
+  } | null = null
   /** Actor visibility (back-nav dive/poof vanish). */
   private actorHidden = false
   private actorHiddenApplied = false
   /** The NEXT enterPage's staging (back-nav landings replace the entrance stroll). */
-  private pendingEntrance: { kind: 'bombPop' | 'poofIn' | 'surfIn'; panel: number } | null = null
+  private pendingEntrance: { kind: 'bombPop' | 'poofIn' | 'surfIn'; panel: number; fromX?: number; fromY?: number } | null = null
 
-  /** The next forward flip rides in surfing (legacy 38% page-surf variant). */
+  /** The next forward flip rides in surfing (legacy 38% page-surf variant).
+   * Captures the CURRENT position — the ride glides from it to the new anchor. */
   surfNext(): void {
-    this.pendingEntrance = { kind: 'surfIn', panel: 0 }
+    const t = this.scene?.rt.transform
+    this.pendingEntrance = { kind: 'surfIn', panel: 0, fromX: t?.x, fromY: t?.y }
   }
   /** Back-nav timeline timers (cancellable as a set). */
   private backNavTimers: number[] = []
@@ -147,6 +159,21 @@ export class EngineLayer extends Component<EngineLayerProps> {
   private capeFacing: 1 | -1 = 1
   /** The hop-hang variant rolled for the in-flight travel. */
   private pendingHang = false
+  /** Staged crossing for the running travel (parity 3b — "fix the actions"): the
+   * engine runs the REAL approach leg (and beats like the smash punches); the
+   * legacy crossing choreography stages at behavior:complete, like pendingHang.
+   * Why staged: legacy crossings are fixed-tempo tweens over ANY geometry — the
+   * wall climb and rope bar aren't engine modes (owner deferred climb), ballistic
+   * jump arcs can clip panel walls (no arc-clearance in the planner yet), and
+   * far/high pairs have no ground route at all. */
+  private pendingStage: { kind: 'wallrun' | 'vault' | 'rope' | 'slide' | 'smash'; dest: number } | null = null
+  /** The running travel's behavior id — recovery picks its shape by verb (a
+   * failed hop/roll re-plays the legacy hop ARC; everything else poofs). */
+  private travelKind: string | null = null
+  /** Approach-only copies of staged-crossing docs, keyed by the SOURCE doc id.
+   * Cached so re-runs pass the registry's reference-stability contract; the
+   * copy carries its own '#approach' id — the full doc is already registered. */
+  private approachDocs = new Map<string, BehaviorDoc>()
   /** Adapter speech (trip 'whoa—', hang 'hup—') — shown when the engine bubble
    * is otherwise silent; a real say wins. */
   private bubbleNote: { text: string; until: number } | null = null
@@ -170,11 +197,12 @@ export class EngineLayer extends Component<EngineLayerProps> {
       // the snapshots taken below now include them coherently.
       if (this.scriptMove) {
         const m = this.scriptMove
-        const k = Math.min(1, (performance.now() - m.t0) / m.dur)
+        const kRaw = Math.min(1, (performance.now() - m.t0) / m.dur)
+        const k = m.ease ? m.ease(kRaw) : kRaw
         const t = s.rt.transform
         t.x = m.fromX + (m.toX - m.fromX) * k
         t.y = m.fromY + (m.toY - m.fromY) * k - m.arcH * 4 * k * (1 - k)
-        if (k >= 1) this.scriptMove = null
+        if (kRaw >= 1) this.scriptMove = null
       }
       if (this.dragging && this.dragMoved && this.look) {
         const t = s.rt.transform
@@ -380,6 +408,7 @@ export class EngineLayer extends Component<EngineLayerProps> {
     for (const t of this.backNavTimers) window.clearTimeout(t)
     this.backNavTimers = []
     this.scriptMove = null
+    this.approachDocs.clear() // an admin doc-swap must not serve stale approach copies
     this.actorHidden = false
     this.actorHiddenApplied = false
     this.stagingUntil = 0
@@ -507,6 +536,17 @@ export class EngineLayer extends Component<EngineLayerProps> {
       }),
       ctx.events.on('behavior:complete', () => {
         this.travelDest = null
+        if (this.pendingStage) {
+          const st = this.pendingStage
+          this.pendingStage = null
+          // each staging owns the camera and ends with chainArrival
+          if (st.kind === 'wallrun') this.wallrunStaging(st.dest)
+          else if (st.kind === 'vault') this.vaultStaging(st.dest)
+          else if (st.kind === 'rope') this.ropeStaging(st.dest)
+          else if (st.kind === 'slide') this.slideStaging(st.dest)
+          else this.smashStaging(st.dest)
+          return
+        }
         this.lastCam = null
         this.props.onDashCam?.(null)
         if (this.pendingHang) {
@@ -578,27 +618,42 @@ export class EngineLayer extends Component<EngineLayerProps> {
       return
     }
     if (pe?.kind === 'surfIn') {
-      // Legacy page-surf: Dash rides the flip in, hangs above the anchor in the
-      // surf art, then drops with a tuck and lands (legacy 880/1240/1780 beats,
-      // re-based to the flip's end — the engine actor shows post-busyFlip).
-      this.stagingUntil = performance.now() + 1000
-      const t0 = rt.transform
-      t0.y -= 96
+      // Legacy page-surf (the owner's "flying page to page"): Dash RIDES the flip.
+      // The Notebook keeps this layer VISIBLE through a surf flip (surfFlip), so
+      // the whole legacy timeline plays on screen, beats from the flip start:
+      // glide in surf art from the OLD page's position to a hover 96px above the
+      // new anchor (0–780ms, over the turning page), tuck-drop at 880 (340ms),
+      // squash-land at 1240, arrival pose at 1780 — flipTo's exact choreography.
+      this.stagingUntil = performance.now() + 1800
+      const t = rt.transform
+      // t.y is the grounded ROOT Y at the anchor (feet on spot.y — set above);
+      // the whole timeline runs in root space (codex: landing at spot.y put the
+      // ROOT on the foot line, a torso-length low).
+      const groundY = t.y
+      const fromX = pe.fromX ?? spot.x - 240
+      const fromY = pe.fromY ?? groundY - 96
+      t.x = fromX
+      t.y = fromY
+      t.facing = 1
       rt.act('surf', { holdMs: 'persist' })
+      // legacy flipTo easings: ride cubic-bezier(.5,.08,.28,1), drop (.55,.05,.6,1)
+      // — both read as smoothstep at this scale.
+      const smooth = (k: number): number => k * k * (3 - 2 * k)
+      this.scriptMove = { fromX, fromY, toX: spot.x, toY: groundY - 96, t0: performance.now(), dur: 780, arcH: 0, ease: smooth }
       const at = (ms: number, fn: () => void): void => {
         this.backNavTimers.push(window.setTimeout(fn, ms))
       }
-      at(60, () => {
+      at(880, () => {
         this.props.sfx('hop')
         rt.act('jump-tuck', { holdMs: 400 })
-        this.scriptMove = { fromX: t0.x, fromY: t0.y, toX: t0.x, toY: t0.y + 96, t0: performance.now(), dur: 340, arcH: 0 }
+        this.scriptMove = { fromX: spot.x, fromY: groundY - 96, toX: spot.x, toY: groundY, t0: performance.now(), dur: 340, arcH: 0, ease: smooth }
       })
-      at(420, () => {
+      at(1240, () => {
         rt.clearAct()
-        rt.runOneShot('__surf:land', [{ verb: 'strikePose', ref: 'squash-land', holdMs: 280 }])
+        rt.runOneShot('__surf:land', [{ verb: 'strikePose', ref: 'squash-land', holdMs: 300 }])
         this.props.sfx('fx:shake')
       })
-      at(960, () => this.chainArrival())
+      at(1780, () => this.chainArrival())
       return
     }
     if (pe?.kind === 'poofIn') {
@@ -662,9 +717,42 @@ export class EngineLayer extends Component<EngineLayerProps> {
       this.poofTravel(panelIdx)
       return
     }
-    // clearTravel FIRST — it nulls pendingArrival (review BLOCKER: the old order
-    // set the arrival and then wiped it, so travel arrivals never played).
+    // SWING is code choreography too (legacy swingTo): the bar hangs above the
+    // destination panel's near top corner — not a standable node, so no engine
+    // route reaches it. Hop to the bar, hang & swing, release into a sag arc.
+    if (doc.id === 'builtin:swing') {
+      this.swingTravel(panelIdx)
+      return
+    }
+    // clearTravel FIRST — it nulls pendingArrival AND pendingStage (review
+    // BLOCKER class: the old order set the arrival and then wiped it, so travel
+    // arrivals never played — the same trap bit pendingStage on first cut).
     this.clearTravel()
+    // Staged-crossing travels: the doc is the approach (+ in-place beats); the
+    // legacy crossing choreography attaches at behavior:complete.
+    const stageKind = EngineLayer.STAGED_CROSSINGS[doc.id]
+    this.pendingStage = stageKind ? { kind: stageKind, dest: panelIdx } : null
+    this.travelKind = doc.id
+    // Staged verbs run an APPROACH-ONLY copy: the content doc keeps its full
+    // crossing so HEADLESS consumers still travel truthfully (codex P2); the
+    // cut falls at the first step referencing the DESTINATION (travel:to…),
+    // where the adapter's legacy crossing choreography takes over.
+    let runDoc = doc
+    if (stageKind) {
+      const cached = this.approachDocs.get(doc.id)
+      if (cached) {
+        runDoc = cached
+      } else {
+        const cut = doc.steps.findIndex((st) => {
+          const ref = (st as { target?: unknown }).target ?? (st as { to?: unknown }).to
+          return typeof ref === 'string' && ref.startsWith('travel:to')
+        })
+        if (cut >= 0) {
+          runDoc = { ...doc, id: `${doc.id}#approach`, steps: doc.steps.slice(0, cut) }
+          this.approachDocs.set(doc.id, runDoc)
+        }
+      }
+    }
     this.travelFrom = this.currentPanel
     this.pendingArrival = this.arrivalId(pageIdx, panelIdx)
     this.currentPanel = panelIdx
@@ -718,7 +806,7 @@ export class EngineLayer extends Component<EngineLayerProps> {
       if (dist > 1) defaultSpeed = dist / Math.min(2.2, Math.max(0.7, dist / 190))
     }
 
-    s.rt.runBehavior(doc, { travel: { from: fromId, to: toId }, defaultSpeed })
+    s.rt.runBehavior(runDoc, { travel: { from: fromId, to: toId }, defaultSpeed })
   }
 
   /** Legacy poofTo: smoke → vanish (150) → TELEPORT under cover (520) → smoke at
@@ -793,18 +881,327 @@ export class EngineLayer extends Component<EngineLayerProps> {
     at(1950, () => this.chainArrival())
   }
 
+  /** Travels whose crossing beat is adapter choreography (see pendingStage). */
+  private static STAGED_CROSSINGS: Record<string, 'wallrun' | 'vault' | 'rope' | 'slide' | 'smash'> = {
+    'builtin:wallrun': 'wallrun',
+    'builtin:vault': 'vault',
+    'builtin:vault-peek': 'vault',
+    'builtin:rope': 'rope',
+    'builtin:slide': 'slide',
+    'builtin:smash': 'smash',
+  }
+
+  /** Legacy swingTo: the bar hangs above the destination panel's NEAR top corner
+   * — not a standable node, so this is code choreography end-to-end (like poof).
+   * Beats from legacy: windup pause, tuck hop to the bar (180–780), hang in the
+   * swing art with the bar-framed camera (800–1440), release into a SAG arc to
+   * the anchor (1440–1940, the pendulum dip), squash-land 1980, arrival 2520. */
+  private swingTravel(destIdx: number): void {
+    const s = this.scene
+    if (!s) return
+    const pageIdx = s.pageIdx
+    const B = this.docV2.pages[pageIdx]?.panels[destIdx]
+    const spot = this.panelSpot(pageIdx, destIdx)
+    if (!B || !spot) {
+      this.poofTravel(destIdx) // no bar geometry → the legacy escape hatch
+      return
+    }
+    this.clearTravel() // FIRST — it nulls pendingArrival (same review blocker)
+    this.travelFrom = this.currentPanel
+    this.pendingArrival = this.arrivalId(pageIdx, destIdx)
+    this.currentPanel = destIdx
+    this.travelDest = null
+    this.stagingUntil = performance.now() + 2560
+    this.props.onHeading?.(destIdx)
+    const t = s.rt.transform
+    const cap = s.rt.capsule()
+    const rootDy = t.y - (Math.max(cap.y0, cap.y1) + cap.r) // root offset above the feet
+    const dir: 1 | -1 = spot.x >= t.x ? 1 : -1
+    const barX = dir === 1 ? B.x + 34 : B.x + B.w - 34 // legacy barDx+52
+    const barRootY = B.y + 101 + rootDy // legacy dy=B.y−12, feet at +113 → B.y+101
+    const fromX = t.x
+    const fromY = t.y
+    t.facing = dir
+    const smooth = (k: number): number => k * k * (3 - 2 * k)
+    const at = (ms: number, fn: () => void): void => {
+      this.backNavTimers.push(window.setTimeout(fn, ms))
+    }
+    at(180, () => {
+      this.props.sfx('hop')
+      s.rt.act('jump-tuck', { holdMs: 'persist' })
+      this.scriptMove = { fromX, fromY, toX: barX, toY: barRootY, t0: performance.now(), dur: 600, arcH: 34, ease: smooth }
+    })
+    at(800, () => {
+      this.props.sfx('whoosh')
+      s.rt.act('swing', { holdMs: 'persist' })
+      this.lastCam = { x: barX, y: B.y + 58 }
+      this.props.onDashCam?.({ x: barX, y: B.y + 58, mult: 1.2, fast: true })
+    })
+    at(1440, () => {
+      this.props.sfx('whoosh')
+      t.facing = spot.x >= barX ? 1 : -1
+      s.rt.act('jump-tuck', { holdMs: 'persist' })
+      // negative arc = the pendulum SAG (legacy top ease dips below the line)
+      this.scriptMove = { fromX: barX, fromY: barRootY, toX: spot.x, toY: spot.y + rootDy, t0: performance.now(), dur: 500, arcH: -44, ease: smooth }
+    })
+    at(1980, () => {
+      s.rt.clearAct()
+      s.rt.runOneShot('__swing:land', [{ verb: 'strikePose', ref: 'squash-land', holdMs: 300 }])
+      this.props.sfx('hop')
+      this.props.sfx('fx:shake')
+    })
+    at(2520, () => {
+      this.lastCam = null
+      this.props.onDashCam?.(null)
+      this.chainArrival()
+    })
+  }
+
+  /** Legacy wallrunTo's back half — runs at the wallrun approach's completion
+   * (pendingStage), with Dash grounded at his own panel's edge: tuck-hop to
+   * the destination's near WALL BASE, run UP the wall in the wallrun art
+   * (legacy 330px/s to 70px above the panel top), tuck onto the anchor, land.
+   * The climb is scripted — there is no engine climb mode yet (owner-deferred). */
+  private wallrunStaging(destIdx: number): void {
+    const s = this.scene
+    if (!s) return
+    const pageIdx = s.pageIdx
+    const B = this.docV2.pages[pageIdx]?.panels[destIdx]
+    const spot = this.panelSpot(pageIdx, destIdx)
+    if (!B || !spot) {
+      this.chainArrival()
+      return
+    }
+    const t = s.rt.transform
+    const cap = s.rt.capsule()
+    const rootDy = t.y - (Math.max(cap.y0, cap.y1) + cap.r)
+    const sideX = t.x < B.x + B.w / 2 ? B.x : B.x + B.w
+    const wdir: 1 | -1 = t.x <= sideX ? 1 : -1
+    const crossDur = Math.min(600, Math.max(240, (Math.abs(sideX - t.x) / 290) * 1000))
+    const climbTopY = B.y + 43 + rootDy // legacy midDy=B.y−70, feet at B.y+43 (mid-wall)
+    const climbDur = Math.max(450, (Math.abs(climbTopY - t.y) / 330) * 1000)
+    const fromX = t.x
+    const fromY = t.y
+    const tHop = crossDur + 60 + climbDur + 60
+    this.stagingUntil = performance.now() + tHop + 1120
+    const smooth = (k: number): number => k * k * (3 - 2 * k)
+    const at = (ms: number, fn: () => void): void => {
+      this.backNavTimers.push(window.setTimeout(fn, ms))
+    }
+    t.facing = wdir
+    this.lastCam = { x: sideX, y: B.y + 40 }
+    this.props.onDashCam?.({ x: sideX, y: B.y + 40, mult: 1.1, fast: true })
+    this.props.sfx('hop')
+    s.rt.act('jump-tuck', { holdMs: 'persist' })
+    this.scriptMove = { fromX, fromY, toX: sideX, toY: fromY, t0: performance.now(), dur: crossDur, arcH: 26, ease: smooth }
+    at(crossDur + 60, () => {
+      this.props.sfx('whoosh')
+      s.rt.act('wallrun', { holdMs: 'persist' })
+      this.scriptMove = { fromX: sideX, fromY, toX: sideX, toY: climbTopY, t0: performance.now(), dur: climbDur, arcH: 0, ease: smooth }
+    })
+    at(tHop, () => {
+      this.props.sfx('hop')
+      t.facing = spot.x >= sideX ? 1 : -1
+      s.rt.act('jump-tuck', { holdMs: 'persist' })
+      this.scriptMove = { fromX: sideX, fromY: climbTopY, toX: spot.x, toY: spot.y + rootDy, t0: performance.now(), dur: 450, arcH: 40, ease: smooth }
+    })
+    at(tHop + 540, () => {
+      s.rt.clearAct()
+      s.rt.runOneShot('__wallrun:land', [{ verb: 'strikePose', ref: 'squash-land', holdMs: 280 }])
+      this.props.sfx('fx:shake')
+    })
+    at(tHop + 1080, () => {
+      this.lastCam = null
+      this.props.onDashCam?.(null)
+      this.chainArrival()
+    })
+  }
+
+  /** Legacy vaultTo's flight: one authored 500ms arc from the edge to the anchor
+   * in the vault art — legacy never asked physics; the planner's ballistic arc
+   * can clip panel walls (page 4 repro), so neither do we. Land beats verbatim:
+   * hop + shake at 540, arrival at 1080. */
+  private vaultStaging(destIdx: number): void {
+    const s = this.scene
+    if (!s) return
+    const spot = this.panelSpot(s.pageIdx, destIdx)
+    if (!spot) {
+      this.chainArrival()
+      return
+    }
+    const t = s.rt.transform
+    const cap = s.rt.capsule()
+    const rootDy = t.y - (Math.max(cap.y0, cap.y1) + cap.r)
+    const fromX = t.x
+    const fromY = t.y
+    this.stagingUntil = performance.now() + 1120
+    const smooth = (k: number): number => k * k * (3 - 2 * k)
+    const at = (ms: number, fn: () => void): void => {
+      this.backNavTimers.push(window.setTimeout(fn, ms))
+    }
+    this.props.sfx('whoosh')
+    t.facing = spot.x >= fromX ? 1 : -1
+    this.lastCam = { x: (fromX + spot.x) / 2, y: spot.y - 83 }
+    this.props.onDashCam?.({ x: (fromX + spot.x) / 2, y: spot.y - 83, mult: 1.15, fast: true })
+    s.rt.act('vault', { holdMs: 'persist' })
+    this.scriptMove = { fromX, fromY, toX: spot.x, toY: spot.y + rootDy, t0: performance.now(), dur: 500, arcH: 34, ease: smooth }
+    at(540, () => {
+      s.rt.clearAct()
+      s.rt.runOneShot('__vault:land', [{ verb: 'strikePose', ref: 'squash-land', holdMs: 280 }])
+      this.props.sfx('hop')
+      this.props.sfx('fx:shake')
+    })
+    at(1080, () => {
+      this.lastCam = null
+      this.props.onDashCam?.(null)
+      this.chainArrival()
+    })
+  }
+
+  /** Legacy ropeTo's crossing: a LINEAR tightrope glide in the rope art at
+   * 115px/s (min 0.9s) straight to the anchor — the balance walk is the point,
+   * so no arc and no easing. Camera holds the midpoint at 1.22, unhurried. */
+  private ropeStaging(destIdx: number): void {
+    const s = this.scene
+    if (!s) return
+    const spot = this.panelSpot(s.pageIdx, destIdx)
+    if (!spot) {
+      this.chainArrival()
+      return
+    }
+    const t = s.rt.transform
+    const cap = s.rt.capsule()
+    const rootDy = t.y - (Math.max(cap.y0, cap.y1) + cap.r)
+    const fromX = t.x
+    const fromY = t.y
+    const dur = Math.max(900, (Math.hypot(spot.x - fromX, spot.y + rootDy - fromY) / 115) * 1000)
+    this.stagingUntil = performance.now() + dur + 700
+    const at = (ms: number, fn: () => void): void => {
+      this.backNavTimers.push(window.setTimeout(fn, ms))
+    }
+    t.facing = spot.x >= fromX ? 1 : -1
+    this.lastCam = { x: (fromX + spot.x) / 2, y: spot.y - 93 }
+    this.props.onDashCam?.({ x: (fromX + spot.x) / 2, y: spot.y - 93, mult: 1.22, fast: false })
+    s.rt.act('rope', { holdMs: 'persist' })
+    this.scriptMove = { fromX, fromY, toX: spot.x, toY: spot.y + rootDy, t0: performance.now(), dur, arcH: 0 }
+    at(dur + 60, () => {
+      s.rt.clearAct()
+      s.rt.runOneShot('__rope:land', [{ verb: 'strikePose', ref: 'squash-land', holdMs: 280 }])
+      this.props.sfx('hop')
+      this.props.sfx('fx:shake')
+    })
+    at(dur + 660, () => {
+      this.lastCam = null
+      this.props.onDashCam?.(null)
+      this.chainArrival()
+    })
+  }
+
+  /** Legacy slideTo's back half: from the own-panel edge, slide DOWN the outer
+   * wall face in the slide art (380px/s, min 0.4s, feet to 8px past the panel
+   * bottom), then a 500ms tuck arc onto the anchor. Scrape in, hop+shake out. */
+  private slideStaging(destIdx: number): void {
+    const s = this.scene
+    if (!s) return
+    const pageIdx = s.pageIdx
+    const A = this.docV2.pages[pageIdx]?.panels[this.travelFrom]
+    const spot = this.panelSpot(pageIdx, destIdx)
+    if (!A || !spot) {
+      this.chainArrival()
+      return
+    }
+    const t = s.rt.transform
+    const cap = s.rt.capsule()
+    const rootDy = t.y - (Math.max(cap.y0, cap.y1) + cap.r)
+    const fromX = t.x
+    const fromY = t.y
+    const sideX = spot.x >= fromX ? A.x + A.w : A.x // the edge faces the destination
+    const botY = A.y + A.h + 8 + rootDy // legacy botDy=A.y+A.h−105, feet at +113
+    const slideDur = Math.max(400, (Math.abs(botY - fromY) / 380) * 1000)
+    const tHop = slideDur + 60
+    this.stagingUntil = performance.now() + tHop + 1170
+    const smooth = (k: number): number => k * k * (3 - 2 * k)
+    const at = (ms: number, fn: () => void): void => {
+      this.backNavTimers.push(window.setTimeout(fn, ms))
+    }
+    t.facing = spot.x >= fromX ? 1 : -1
+    this.props.sfx('scrape')
+    this.lastCam = { x: sideX, y: A.y + A.h - 40 }
+    this.props.onDashCam?.({ x: sideX, y: A.y + A.h - 40, mult: 1.12, fast: true })
+    s.rt.act('slide', { holdMs: 'persist' })
+    this.scriptMove = { fromX, fromY, toX: sideX, toY: botY, t0: performance.now(), dur: slideDur, arcH: 0, ease: smooth }
+    at(tHop, () => {
+      this.props.sfx('hop')
+      s.rt.act('jump-tuck', { holdMs: 'persist' })
+      this.scriptMove = { fromX: sideX, fromY: botY, toX: spot.x, toY: spot.y + rootDy, t0: performance.now(), dur: 500, arcH: 30, ease: smooth }
+    })
+    at(tHop + 590, () => {
+      s.rt.clearAct()
+      s.rt.runOneShot('__slide:land', [{ verb: 'strikePose', ref: 'squash-land', holdMs: 280 }])
+      this.props.sfx('fx:shake')
+    })
+    at(tHop + 1130, () => {
+      this.lastCam = null
+      this.props.onDashCam?.(null)
+      this.chainArrival()
+    })
+  }
+
+  /** Legacy smashTo's exit: after the punches crack the border, burst THROUGH
+   * the crack to the anchor at the legacy 220px/s (min 0.5s). Legacy strolled
+   * it in the walk pose; a scripted glide can't drive the distance-locked walk
+   * skin (frozen feet), so the burst is a tuck — punchier, same beats. */
+  private smashStaging(destIdx: number): void {
+    const s = this.scene
+    if (!s) return
+    const spot = this.panelSpot(s.pageIdx, destIdx)
+    if (!spot) {
+      this.chainArrival()
+      return
+    }
+    const t = s.rt.transform
+    const cap = s.rt.capsule()
+    const rootDy = t.y - (Math.max(cap.y0, cap.y1) + cap.r)
+    const fromX = t.x
+    const fromY = t.y
+    const dur = Math.max(500, (Math.hypot(spot.x - fromX, spot.y + rootDy - fromY) / 220) * 1000)
+    this.stagingUntil = performance.now() + dur + 640
+    const smooth = (k: number): number => k * k * (3 - 2 * k)
+    const at = (ms: number, fn: () => void): void => {
+      this.backNavTimers.push(window.setTimeout(fn, ms))
+    }
+    t.facing = spot.x >= fromX ? 1 : -1
+    s.rt.act('jump-tuck', { holdMs: 'persist' })
+    this.scriptMove = { fromX, fromY, toX: spot.x, toY: spot.y + rootDy, t0: performance.now(), dur, arcH: 24, ease: smooth }
+    at(dur + 40, () => {
+      s.rt.clearAct()
+      s.rt.runOneShot('__smash:land', [{ verb: 'strikePose', ref: 'squash-land', holdMs: 220 }])
+    })
+    at(dur + 600, () => this.chainArrival())
+  }
+
   /** A travel run blocked/failed → the legacy escape hatch: POOF. Smoke, teleport
    * to the destination spot (driver-owned placement, like enterPage), arrival. */
   private recoverOrArrive(): void {
     const s = this.scene
     if (!s) return
     const dest = this.travelDest
+    const kind = this.travelKind
     this.travelDest = null
+    this.travelKind = null
+    this.pendingStage = null // a failed approach never stages a crossing from the recovery spot
     this.lastCam = null
     this.props.onDashCam?.(null)
     if (dest != null) {
       const spot = this.panelSpot(s.pageIdx, dest)
       if (spot) {
+        // A hop/roll/combo whose ballistic route the planner refuses (owner-edited
+        // geometry can make every arc clip a wall — parity 3b) still HOPS: the
+        // legacy hopTo tween arc, not a poof. The verb the pool promised plays.
+        if (kind === 'builtin:hop' || kind === 'builtin:roll' || kind === 'builtin:combo') {
+          this.hopArcRecovery(spot)
+          return
+        }
         this.props.sfx('fx:smoke')
         s.rt.transform.x = spot.x
         const cap = s.rt.capsule()
@@ -813,6 +1210,38 @@ export class EngineLayer extends Component<EngineLayerProps> {
       }
     }
     this.chainArrival()
+  }
+
+  /** Legacy hopTo, as failure recovery: windup pause 180, one 920ms tuck arc to
+   * the anchor (legacy cubic-bezier ≈ smoothstep), squash-land + shake, arrival. */
+  private hopArcRecovery(spot: { x: number; y: number }): void {
+    const s = this.scene
+    if (!s) return
+    const t = s.rt.transform
+    const cap = s.rt.capsule()
+    const rootDy = t.y - (Math.max(cap.y0, cap.y1) + cap.r)
+    const fromX = t.x
+    const fromY = t.y
+    const dist = Math.hypot(spot.x - fromX, spot.y + rootDy - fromY)
+    const arcH = Math.min(110, Math.max(40, dist * 0.22))
+    this.stagingUntil = performance.now() + 1740
+    const smooth = (k: number): number => k * k * (3 - 2 * k)
+    const at = (ms: number, fn: () => void): void => {
+      this.backNavTimers.push(window.setTimeout(fn, ms))
+    }
+    t.facing = spot.x >= fromX ? 1 : -1
+    at(180, () => {
+      this.props.sfx('hop')
+      s.rt.act('jump-tuck', { holdMs: 'persist' })
+      this.scriptMove = { fromX, fromY, toX: spot.x, toY: spot.y + rootDy, t0: performance.now(), dur: 920, arcH, ease: smooth }
+    })
+    at(1140, () => {
+      s.rt.clearAct()
+      s.rt.runOneShot('__hoprec:land', [{ verb: 'strikePose', ref: 'squash-land', holdMs: 280 }])
+      this.props.sfx('hop')
+      this.props.sfx('fx:shake')
+    })
+    at(1680, () => this.chainArrival())
   }
 
   /** Resolve a camera-cue TargetRef against the live scene (the common refs the
@@ -1016,6 +1445,17 @@ export class EngineLayer extends Component<EngineLayerProps> {
     }
     this.dragMoved = true
     this.clearTravel()
+    // Cancel staged choreography outright — the grab owns the figure now
+    // (codex P1: a pointer held through an approach's completion let the new
+    // staging timeline fight the drag, and a mid-poof cancel could lock the
+    // actor hidden / leave overlay fx stranded).
+    for (const tm of this.backNavTimers) window.clearTimeout(tm)
+    this.backNavTimers = []
+    this.scriptMove = null
+    this.stagingUntil = 0
+    this.actorHidden = false
+    this.props.onFx?.({ kind: 'smoke', on: false })
+    this.props.onFx?.({ kind: 'crack', on: false })
     if (s.rt.running()) s.rt.forceRelease()
     s.ctx.events.emit('expression:poke', { characterId: this.dash.id })
     // The legacy grab staging: dangle art (kicking legs) + the protest quip.
@@ -1031,6 +1471,8 @@ export class EngineLayer extends Component<EngineLayerProps> {
     this.travelDest = null
     this.pendingArrival = null
     this.pendingHang = false // a superseded hop must not attach hang staging later
+    this.pendingStage = null // a superseded/recovered travel must not stage its crossing later
+    this.travelKind = null
     this.rolling = false
     this.airborne = false
     this.spin = 0

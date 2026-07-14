@@ -323,16 +323,19 @@ const STRIDES = { Walk: 152 }
 const FIXUPS = {
   Idle: {
     face: 'parametric',
-    dropD: ['M3,-21'],
-    // the legacy head + bandana ties live inside the PARAMETRIC head-tilt group
-    // (skipped by the parser) — re-inject them; the engine's look-at head + face
-    // ride the head anchor instead of the JSX headTilt.
+    // drop the baked smirk AND the baked V-brows — the parametric face draws
+    // both (the baked pair sat ~1px above the parametric pair and read as a
+    // DOUBLE brow whenever the pupils dropped away — owner-reported).
+    dropD: ['M3,-21', 'M-5,-36'],
+    // the legacy head lives inside the PARAMETRIC head-tilt group (skipped by
+    // the parser) — re-inject it. NOT the two-stroke V path: that idiom is the
+    // BROWS (mislabeled 'ties' in the first extraction — injecting it doubled
+    // the brows over the parametric pair), and the engine face draws brows.
     inject: [
       { kind: 'circle', cx: 2, cy: -30, r: 14, fill: '#fffdf6', stroke: '#1a1a1a', strokeWidth: 4 },
-      { kind: 'path', d: 'M-5,-36 l9,2.5 M9,-34 l9,-2.5', fill: 'none', stroke: '#1a1a1a', strokeWidth: 2.6, linecap: 'round' },
     ],
   },
-  Spray: { face: 'parametric', dropD: ['M3,-21'], dropInkEyeDots: true },
+  Spray: { face: 'parametric', dropD: ['M3,-21', 'M-5,-36'], dropInkEyeDots: true },
 }
 
 function applyFixups(base, skin, warn) {

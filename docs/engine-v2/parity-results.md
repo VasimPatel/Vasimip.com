@@ -181,3 +181,54 @@ substantially, but motion quality is not yet accepted. Primary open findings:
 
 The development architecture remains viable. Final acceptance is deferred until
 the motion-quality plan passes and the owner approves the complete live journey.
+
+## Parity 3 — owner live-review round (branch vasim/engine-v2-parity3)
+
+Owner findings after the Q0–Q7 merge, each diagnosed and fixed:
+
+| Owner report | Diagnosis | Fix | Evidence |
+|---|---|---|---|
+| "cursor below Dash → eyebrows double up" | The stand/spray skins carried the legacy Idle BAKED V-brow path (mislabeled "bandana ties" since extraction), layered under the parametric brows; visible when pupils dropped | Extractor FIXUPS drop the baked path (and stop re-injecting it); skins re-extracted | `shoot-brow.mjs` crops: two brow pairs below-cursor before, one after |
+| "excessive rolling on some roll jumps… is there a bug?" | TWO bugs: (1) jump clip launch marker at 320 ms vs legacy 180 ms windup — every jump leg paid +140 ms; (2) onLaunch acting cues (roll's 900 ms tuck) outlived short ~460 ms hops and kept tucking into walk legs | (1) clip retimed (launch 180 / land 640 / end 860); (2) flight-scoped acting: onLaunch cues release at the next `jump:land`, serialized (`flightHold`) so snapshot/restore releases on the identical tick | Live capture: tuck active 548 ms of a 548 ms flight (hop: 742/742), **0 ms grounded tuck**; new engine test (60 s hold releases at the landing tick) |
+| "legacy is a bit snappier, faster, slightly more fun" | The +140 ms per-leg windup was the dominant lag; Q4 pace was already at legacy classes | Same windup retime | Dual-route timelines: hop launch 183 ms vs legacy 186 ms, complete 1608 vs 1604 ms; roll complete 1683 vs legacy 1961 ms (engine now leads) |
+| "legacy kept a flying page-to-page effect on plain flips" | The surf ride staging existed but played entirely while the layer was hidden behind the `busyFlip` visibility gate — Dash popped in post-landing | `surfFlip` state keeps the EngineLayer visible through a surf flip; staging rewritten to the exact legacy flipTo timeline from flip start (glide from the OLD page position 0–780 ms, tuck-drop 880, squash-land + shake 1240, arrival 1780) | Capture: old page mid-turn with Dash gliding at ~200 ms, surf stance over the new page ~500 ms, tuck ball ~1000 ms, landed ~1300 ms |
+
+Also this round: the byte-exact traversal golden moved onto a pinned fixture of
+the committed notebook pages (owner `/admin` content edits must never break
+engine goldens; live content stays covered by the sanity/scoping invariants).
+
+Marked by the owner as **engine upgrades for later** (not this branch):
+IK-planted skin feet, a real climb mode (verb sign-off needed), a teleport
+intent for poof, physics-assisted cape deformation.
+
+## Parity 3b — "fix the actions" (same branch)
+
+Owner: "some of them do not work, like wall run or swing." A clean-state
+action × page matrix (10 verbs × pages 2–5, engine traces) found 21 failing
+cells with one root cause: crossing beats authored as engine `moveTo`/`jumpTo`
+fail where no route exists, while legacy crossed any geometry with fixed-tempo
+tweens. Wallrun additionally approached via `travel:to#edge` (unreachable by
+walk — its siblings all use `from`), and swing "completed" while reading
+broken (a swing pose standing on the roof; the legacy bar hangs above the
+panel corner, which no route can reach).
+
+Fix pattern (the poof/hang staging precedent, applied systematically): the
+engine runs the real approach legs and in-place beats; the adapter stages the
+legacy crossing choreography verbatim (swing bar-hang + pendulum sag, wallrun
+wall climb, vault 500 ms flight, rope 115 px/s balance glide, slide wall
+descent, smash burst-through-crack). A hop/roll/combo whose every ballistic
+arc the planner refuses (arc-clearance vs owner-edited geometry) recovers with
+the legacy hopTo ARC instead of a poof — the verb the pool promised plays.
+
+Matrix after: **37/40 ok**; the 3 remaining are forced-walk-across-chasm
+dev-hook cells (organic pools exclude walk there — verified by forcing walk on
+every adjacent pair; the poof escape covers the forced case). Zero page errors.
+
+Deliberate legacy deviation for owner review: the smash exit bursts through
+the crack as a tuck — legacy strolled it in the walk pose, but a scripted
+glide cannot drive the distance-locked walk skin (frozen feet read worse).
+
+Engine-upgrade candidates surfaced by this round (deferred, owner list):
+ballistic arc-clearance in the jump planner's edge pruning is CONSERVATIVE
+(refuses arcs legacy played); a climb mode would let wallrun's wall leg be a
+real engine route; a rope/bar surface kind would do the same for swing/rope.
