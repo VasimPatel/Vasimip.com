@@ -16,7 +16,7 @@
           "w": 360,
           "h": 392,
           "anchor": {
-            "dx": 240,
+            "dx": 269,
             "dy": 0
           },
           "rotate": -0.5,
@@ -38,7 +38,7 @@
               "y": 112,
               "w": 328,
               "h": 46,
-              "text": "VASIM PATEL",
+              "text": "DASH!",
               "fam": "marker",
               "size": 36,
               "hl": "yellow",
@@ -50,41 +50,21 @@
               "y": 170,
               "w": 328,
               "h": 62,
-              "text": "a portfolio told in ink, marker & questionable stunts",
+              "text": "A Vasim I.P. Story",
               "fam": "caveat",
               "size": 24,
               "color": "#5a544a"
             },
             {
               "kind": "text",
-              "x": 16,
-              "y": 242,
+              "x": 32,
+              "y": 362,
               "w": 328,
               "h": 30,
               "text": "issue #01 · self-published · priceless",
               "fam": "hand",
               "size": 16,
               "color": "#8a8378"
-            },
-            {
-              "kind": "draw",
-              "x": 18,
-              "y": 64,
-              "w": 220,
-              "h": 130,
-              "strokes": [],
-              "strokeColor": "#1a1a1a",
-              "strokeW": 6
-            },
-            {
-              "kind": "draw",
-              "x": 18,
-              "y": 64,
-              "w": 220,
-              "h": 130,
-              "strokes": [],
-              "strokeColor": "#1a1a1a",
-              "strokeW": 3.5
             }
           ],
           "arrival": {
@@ -167,96 +147,67 @@
               "h": 20,
               "text": "HOW TO READ THIS THING",
               "fam": "marker",
-              "size": 19
+              "size": 19,
+              "color": "#d9534f"
             },
             {
-              "kind": "art",
-              "x": 24,
-              "y": 36,
-              "w": 264,
-              "h": 60,
-              "component": "howToRead"
+              "kind": "text",
+              "x": 18,
+              "y": 40,
+              "w": 190,
+              "h": 44,
+              "text": "",
+              "fam": "hand",
+              "size": 20
             }
           ]
         },
         {
-          "x": 594,
-          "y": 272,
-          "w": 180,
-          "h": 120,
+          "x": 496,
+          "y": 456,
+          "w": 404,
+          "h": 160,
           "anchor": {
-            "dx": 100,
-            "dy": 0
+            "dx": 41,
+            "dy": 147
           },
           "boxes": [
             {
               "kind": "text",
               "x": 0,
               "y": 0,
-              "w": 200,
-              "h": 21,
-              "text": "NEW PANEL",
+              "w": 404,
+              "h": 160,
+              "text": "Adventures Await!",
               "fam": "marker",
-              "size": 20
+              "size": 20,
+              "note": true
+            },
+            {
+              "kind": "draw",
+              "x": 184,
+              "y": 80,
+              "w": 220,
+              "h": 80,
+              "strokes": [
+                "M8.0,17.5 L9.7,16.0 L11.6,14.1 L14.1,12.3 L15.8,10.9 L18.2,9.7 L20.3,9.2 L22.3,9.2 L24.9,9.2 L27.5,9.2 L29.8,9.2 L32.0,9.2 L34.7,9.8 L36.6,10.5",
+                "M57.7,10.1 L59.9,10.1 L62.9,10.0 L65.4,9.2 L68.3,8.0 L71.7,7.2 L74.3,6.3 L77.1,5.5 L79.3,5.2 L81.8,4.7 L84.2,4.5 L87.0,4.0 L89.3,4.0 L91.7,4.0 L94.1,4.0 L96.4,4.1 L98.2,5.1 L100.2,6.2 L102.3,7.6 L103.8,9.0 L105.3,10.4",
+                "M21.1,16.5 L19.6,18.2 L18.0,19.8 L17.4,21.7 L18.8,23.5 L20.5,25.0 L22.4,26.2 L24.8,26.2 L27.9,25.7 L30.0,24.6 L31.0,22.7 L31.0,20.2 L30.3,18.3 L28.2,18.2 L25.3,17.8 L22.5,17.4 L20.4,17.0",
+                "M87.3,13.2 L84.9,13.2 L83.2,14.4 L80.9,15.7 L79.1,17.0 L78.6,18.9 L80.5,20.0 L82.0,21.4 L84.1,22.3 L85.8,23.3 L88.1,23.9 L90.3,23.9 L92.3,23.9 L94.0,22.7 L95.8,20.8 L97.4,19.5 L97.9,17.5 L96.4,16.2 L94.3,15.0 L92.2,14.1 L89.8,14.1 L87.5,14.1",
+                "M47.9,28.8 L47.9,30.9 L46.8,33.1 L45.6,35.0 L44.3,36.8 L42.5,38.4 L40.7,39.5 L38.6,40.6 L36.8,42.0 L38.9,42.5 L41.4,43.3 L43.8,43.7 L46.0,43.9 L48.2,43.9 L51.2,43.9 L54.1,43.9 L56.2,43.6 L58.4,43.3",
+                "M39.7,57.9 L42.1,57.9 L44.2,57.9 L46.3,57.9 L48.6,57.9 L50.7,57.9 L53.1,57.9 L55.4,57.7 L57.4,56.9 L59.6,56.2 L61.9,55.7 L64.1,54.7 L66.0,53.9 L68.0,52.9 L70.1,52.3 L72.2,51.5 L74.1,50.7 L76.2,49.9 L78.0,48.8 L79.8,47.2 L81.7,46.1"
+              ],
+              "strokeW": 3.5
             }
           ],
-          "rotate": -6,
-          "arrival": {
-            "pose": "cheer",
-            "face": -1,
-            "once": true,
-            "revertMs": 10,
-            "setFlag": "No"
-          },
           "travel": {
             "actions": [
               "action2"
             ]
+          },
+          "arrival": {
+            "flourish": true
           }
-        },
-        {
-          "x": 680,
-          "y": 424,
-          "w": 200,
-          "h": 160,
-          "anchor": {
-            "dx": 100,
-            "dy": 0
-          },
-          "boxes": [
-            {
-              "kind": "text",
-              "x": 0,
-              "y": 0,
-              "w": 200,
-              "h": 21,
-              "text": "NEW PANEL",
-              "fam": "marker",
-              "size": 20
-            }
-          ]
-        },
-        {
-          "x": 576,
-          "y": 480,
-          "w": 200,
-          "h": 160,
-          "anchor": {
-            "dx": 100,
-            "dy": 0
-          },
-          "boxes": [
-            {
-              "kind": "text",
-              "x": 0,
-              "y": 0,
-              "w": 200,
-              "h": 21,
-              "text": "NEW PANEL",
-              "fam": "marker",
-              "size": 20
-            }
-          ]
         }
       ]
     },
@@ -286,7 +237,7 @@
               "y": 16,
               "w": 456,
               "h": 23,
-              "text": "THE HERO'S FILE",
+              "text": "VASIM FACTS",
               "fam": "marker",
               "size": 22,
               "hl": "yellow"
@@ -297,29 +248,22 @@
               "y": 62,
               "w": 230,
               "h": 248,
-              "text": "Builds things for the web. Draws in the margins. Jumps off the occasional deadline (professionally). Currently accepting quests — freelance or full-time. Weakness: unclosed browser tabs. Based in the internet.",
+              "text": "BIG CODER\nBIG BUILDER\nBIG EATER\nNOT SO GOOD DANCER\n",
               "fam": "hand",
               "size": 16,
               "note": true
             },
             {
-              "kind": "art",
-              "x": 0,
-              "y": 0,
-              "w": 500,
-              "h": 340,
-              "component": "fightScene"
-            },
-            {
               "kind": "text",
-              "x": 256,
-              "y": 290,
+              "x": 280,
+              "y": 203,
               "w": 220,
               "h": 38,
-              "text": "the bio is under constant attack. it survives.",
+              "text": "Fact Sheet Is UNDER ATTACK!\nOur Hero Dash Defends it",
               "fam": "caveat",
               "size": 16,
-              "color": "#8a8378"
+              "color": "#8a8378",
+              "rot": 1
             }
           ]
         },
@@ -341,7 +285,7 @@
               "y": 16,
               "w": 210,
               "h": 19,
-              "text": "FUN FACTS",
+              "text": "More About Vasim ",
               "fam": "marker",
               "size": 18
             },
@@ -358,15 +302,57 @@
             },
             {
               "kind": "text",
-              "x": 20,
-              "y": 35,
+              "x": 29,
+              "y": 60,
               "w": 210,
               "h": 179,
-              "text": "✓ ships fast, refactors faster\n✓ has strong opinions about spacing\n✓ the cape is one CSS gradient, load-bearing\n✓ narrates his own commit messages",
+              "text": "✓Grew up in NJ\n✓Went to School at the University of Rochester\n✓Seattle 2019 - Present Day\n✓Serial Hobbyist ",
               "fam": "hand",
               "size": 16
             }
           ]
+        },
+        {
+          "x": 336,
+          "y": 504,
+          "w": 208,
+          "h": 120,
+          "anchor": {
+            "dx": 120,
+            "dy": 0
+          },
+          "sketch": "b",
+          "boxes": [
+            {
+              "kind": "text",
+              "x": 8,
+              "y": 0,
+              "w": 200,
+              "h": 30,
+              "text": "Dash Facts",
+              "fam": "marker",
+              "size": 20,
+              "rot": -10
+            },
+            {
+              "kind": "text",
+              "x": 36,
+              "y": 25,
+              "w": 172,
+              "h": 44,
+              "text": "Extremeley Handsome\nExtremely Brave\nMaster of Parkour\nUnbound by The Laws of Physics",
+              "fam": "hand",
+              "size": 12,
+              "color": "#2a4b8d",
+              "rot": -12
+            }
+          ],
+          "rotate": -1,
+          "travel": {
+            "builtins": [
+              "wallrun"
+            ]
+          }
         }
       ]
     },
@@ -632,21 +618,21 @@
       "snark": "hire him so he stops rolling indoors.",
       "panels": [
         {
-          "x": 90,
-          "y": 90,
+          "x": 88,
+          "y": 88,
           "w": 480,
-          "h": 300,
+          "h": 343,
           "anchor": {
-            "dx": 240,
-            "dy": 0
+            "dx": 61,
+            "dy": 327
           },
           "arrival": {
             "pose": "cheer",
-            "once": true,
             "revertMs": 1750,
-            "say": "made it! ta-da!",
-            "sfx": "hop",
-            "setFlag": "contactCheered"
+            "sfx": "boom",
+            "setFlag": "contactCheered",
+            "say": "End of the Road!",
+            "flourish": true
           },
           "rotate": -0.4,
           "sketch": "a",
@@ -680,16 +666,30 @@
               "y": 152,
               "w": 412,
               "h": 24,
-              "text": "responds within 1–2 business rolls.",
+              "text": "@vasimip on most things \nVasimPatel on LinkedIn\n",
               "fam": "hand",
               "size": 17,
               "color": "#5a544a"
+            },
+            {
+              "kind": "draw",
+              "x": 260,
+              "y": 170,
+              "w": 220,
+              "h": 130,
+              "strokes": [
+                "M19.6,14.6 L21.4,13.5 L23.8,13.0 L27.1,12.5 L29.4,12.5 L33.6,12.5 L35.9,12.5 L37.3,14.2 L38.4,17.3 L39.2,20.0 L40.2,22.7 L41.5,26.1 L42.6,30.1 L43.6,33.4 L44.8,36.5 L45.7,39.4 L46.2,42.4 L47.2,46.2 L48.2,50.1 L48.9,53.6 L49.6,57.0 L50.3,60.4 L51.0,63.3 L51.6,65.7 L52.2,69.1 L52.7,71.0 L53.7,74.2 L54.8,77.8 L55.3,81.4 L56.2,83.6 L56.7,81.4 L56.7,78.2 L56.7,73.9 L57.1,68.7 L57.8,64.1 L58.5,60.4 L59.1,56.6 L59.7,53.0 L60.3,49.8 L60.9,47.1 L61.3,45.0 L61.6,42.7 L61.8,40.5 L61.8,37.3 L62.2,34.4 L62.8,31.9 L63.2,29.4 L63.7,27.4 L64.3,24.9 L65.0,22.7 L65.8,20.5 L66.6,17.6 L67.6,14.3 L69.3,11.3 L70.4,9.3 L71.9,7.9 L74.0,7.9 L76.1,8.3 L77.8,9.5 L79.6,11.3 L81.1,13.7 L81.9,15.7 L81.9,18.0 L81.5,20.5 L80.0,22.7 L78.4,25.0 L76.9,26.6 L74.6,27.0 L72.6,27.3 L70.3,28.0 L68.0,28.4",
+                "M7.8,17.0 L9.9,17.0 L13.7,17.0 L32.7,16.4 L46.1,14.9 L58.5,13.2 L71.2,11.3 L85.5,8.3 L101.2,5.0 L114.6,1.5 L122.1,-1.0 L126.3,-1.9 L132.0,-2.9 L138.0,-4.2 L142.6,-5.1 L146.0,-5.5 L148.2,-6.1 L150.3,-6.4",
+                "M16.3,102.3 L19.2,101.0 L24.3,97.8 L33.2,91.9 L45.1,84.2 L61.6,74.5 L83.4,63.5 L106.7,52.2 L121.9,45.3 L149.4,31.6 L161.3,25.8 L173.7,19.7 L181.3,15.7 L187.4,12.6 L193.4,9.1 L198.0,6.7 L201.8,4.7 L203.6,3.3 L205.5,2.5 L207.5,1.5"
+              ],
+              "strokeColor": "#d9534f",
+              "strokeW": 6
             }
           ]
         },
         {
-          "x": 610,
-          "y": 130,
+          "x": 608,
+          "y": 128,
           "w": 250,
           "h": 240,
           "anchor": {
@@ -715,7 +715,7 @@
               "y": 45,
               "w": 206,
               "h": 22,
-              "text": "sequel pending funding.",
+              "text": "No way.... \nDash Will Return....",
               "fam": "hand",
               "size": 16,
               "color": "#1a1a1a"
@@ -727,6 +727,52 @@
               "w": 206,
               "h": 154,
               "component": "birdFin"
+            },
+            {
+              "kind": "text",
+              "x": 60,
+              "y": 196,
+              "w": 190,
+              "h": 44,
+              "text": "...IN THE SKETCHBOOK!",
+              "fam": "hand",
+              "size": 20
+            }
+          ]
+        },
+        {
+          "x": 600,
+          "y": 440,
+          "w": 240,
+          "h": 180,
+          "anchor": {
+            "dx": 120,
+            "dy": 0
+          },
+          "sketch": "b",
+          "boxes": [
+            {
+              "kind": "text",
+              "x": 18,
+              "y": 24,
+              "w": 200,
+              "h": 30,
+              "text": "",
+              "fam": "marker",
+              "size": 20
+            },
+            {
+              "kind": "draw",
+              "x": 18,
+              "y": 60,
+              "w": 204,
+              "h": 100,
+              "strokes": [
+                "M3.3,59.1 L8.2,59.1 L11.5,59.1 L17.3,58.7 L41.2,54.5 L54.7,52.0 L66.7,50.5 L96.9,47.2 L106.3,45.6 L112.3,45.3 L126.7,43.1 L129.8,42.6 L133.3,42.1 L135.6,41.9 L137.7,41.4 L140.0,41.2 L144.0,41.2 L147.4,41.0 L151.2,40.7 L154.4,40.3 L156.6,40.2 L154.7,42.5 L150.3,48.8 L147.2,52.2 L143.2,56.7 L138.9,61.4 L134.6,66.2 L131.6,69.6 L126.8,75.1 L124.1,77.8 L121.6,80.3 L119.7,82.2 L118.2,83.7 L116.3,85.0 L117.6,82.6 L118.9,81.0",
+                "M154.1,39.1 L151.8,39.1 L149.3,39.1 L147.2,39.1 L142.9,39.1 L140.2,39.1 L136.8,39.1 L132.8,38.8 L129.3,38.2 L125.8,36.9 L124.1,35.8 L122.1,35.3 L120.1,34.8 L117.8,33.6 L115.9,32.7 L114.2,31.4 L111.7,29.9 L106.4,27.3 L103.5,25.7 L101.2,24.2 L98.7,22.6 L96.4,21.4 L94.6,20.4 L92.4,19.1 L89.9,17.7 L87.6,16.5 L85.0,15.5 L82.3,14.3 L80.1,13.6 L77.9,12.9"
+              ],
+              "strokeColor": "#2e8b57",
+              "strokeW": 6
             }
           ]
         }
