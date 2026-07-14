@@ -10,6 +10,8 @@
 import { migrateNotebookV1, type MigrationBase, type NotebookDocV2 } from '../../../packages/schema/src/index'
 import { worldFromNotebook, type PageWorld } from '../../../packages/engine/src/index'
 import notebookV1 from '../notebook.json'
+import { spreadPages } from '../doc/spread'
+import type { NotebookDoc } from '../doc/docTypes'
 
 import rig from '../../../content/engine/rig.dash.json'
 import character from '../../../content/engine/character.dash.json'
@@ -126,7 +128,13 @@ let cache: { v1: unknown; built: EngineDoc } | null = null
 
 export function buildEngineDoc(v1doc: unknown): EngineDoc {
   if (cache && cache.v1 === v1doc) return cache.built
-  const { doc, report } = migrateNotebookV1(v1doc, base)
+  // Two-sided book: fold each view's LEFT page (the previous sheet's back)
+  // into flat SPREAD pages with stage-placed panels BEFORE migration — the
+  // engine world, arrivals, and travel pools then treat a spread exactly as
+  // they treated a page (same mapping geom() uses; the routes always agree).
+  const v1 = v1doc as NotebookDoc
+  const spread = { ...v1, pages: spreadPages(v1) }
+  const { doc, report } = migrateNotebookV1(spread, base)
   const built: EngineDoc = { docV2: doc, pageWorlds: worldFromNotebook(doc.pages as never) }
   cache = { v1: v1doc, built }
   if (import.meta.env.DEV && report.lossy.length > 0) {

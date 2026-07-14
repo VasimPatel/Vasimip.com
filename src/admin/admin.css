@@ -605,3 +605,12 @@
 .invite-meta { flex: 1; min-width: 0; }
 .invite-label { font-size: 14px; display: flex; align-items: center; gap: 8px; }
 .invite-sub { font-family: 'Caveat', cursive; font-size: 13px; color: #9a937f; line-height: 1.1; }
+
+/* page-rail tools (rename / tear out) + inline editors */
+.pagecard { position: relative; }
+.pc-tools { position: absolute; top: 4px; right: 6px; display: none; gap: 6px; font-size: 13px; }
+.pc-tools span { cursor: pointer; opacity: .75; }
+.pc-tools span:hover { opacity: 1; }
+.pagecard:hover .pc-tools, .pagecard.active .pc-tools { display: flex; }
+.pc-edit { width: 100%; box-sizing: border-box; font: inherit; font-weight: 700; border: 1.5px dashed #8a8378; border-radius: 4px; background: #fffdf6; padding: 2px 4px; }
+.pc-edit-snark { font-weight: 400; font-size: 12px; margin-top: 3px; }

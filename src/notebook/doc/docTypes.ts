@@ -185,6 +185,10 @@ export interface PageDoc {
   travel?: TravelConfig
   /** ≥1 panel (validator-enforced). */
   panels: PanelDoc[]
+  /** The sheet's BACK — the LEFT page of the NEXT spread (two-sided book).
+   * Absent/empty = blank ruled paper. Panels are full PanelDocs in their own
+   * 0..920 page space; spread.ts places them into stage coordinates. */
+  back?: { panels: PanelDoc[] }
 }
 
 export interface CoverDoc {

@@ -355,7 +355,7 @@ export default function PageCanvas({
           </div>
         ) : (
           <div className="stage" style={stageStyle}>
-            <CoverRenderer cover={cover} style={{ transform: 'none', transition: 'none' }} onOpen={() => {}} />
+            <CoverRenderer cover={cover} style={{ transform: 'none', transition: 'none', left: 0 }} onOpen={() => {}} />
           </div>
         )}
       </div>

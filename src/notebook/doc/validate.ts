@@ -87,6 +87,14 @@ function checkPage(x: unknown, path: string, issues: Issues, actionNames: Set<st
   } else {
     x.panels.forEach((pnl, i) => checkPanel(pnl, `${path}.panels[${i}]`, issues, actionNames))
   }
+  // the sheet's BACK (two-sided book): optional; may be empty (blank left page)
+  if (x.back !== undefined) {
+    if (!isPlainObject(x.back) || !Array.isArray((x.back as { panels?: unknown }).panels)) {
+      issues.push(`${path}.back: must be an object { panels: PanelDoc[] }`)
+    } else {
+      ;(x.back as { panels: unknown[] }).panels.forEach((pnl, i) => checkPanel(pnl, `${path}.back.panels[${i}]`, issues, actionNames))
+    }
+  }
 }
 
 function checkCover(x: unknown, path: string, issues: Issues): void {

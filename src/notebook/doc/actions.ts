@@ -16,6 +16,7 @@
 // and runs `panelPose()`+`busy:false` on the `finish` cue. This module stays
 // pure and side-effect free (NO Math.random — deterministic).
 // ─────────────────────────────────────────────────────────────────────────────
+import { STAGE_W } from './spread'
 import type { Pose } from '../types'
 import type { PanelGeom } from '../types'
 import type { SfxKind } from '../audio'
@@ -34,8 +35,10 @@ export const DASH_H = 113
 // executor's watchdog uses the true post-epilogue total, so no wedge risk.
 const MAX_STEPS = 32
 const MAX_TOTAL_MS = 8000
-// World box the simulated cursor must stay inside (dx/dy space).
-const WORLD_X: [number, number] = [-500, 1500]
+// World box the simulated cursor must stay inside (dx/dy space) — spans the
+// two-sided SPREAD stage (codex: right-page anchors past x=1500 made valid
+// authored actions fall back to a hop with 'anchor out of world').
+const WORLD_X: [number, number] = [-500, STAGE_W + 500]
 const WORLD_Y: [number, number] = [-500, 1200]
 // Default horizontal speed when a `move` gives neither `ms` nor `speed` (px/s;
 // close to the built-ins' /270 run pacing).
