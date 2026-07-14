@@ -1134,10 +1134,19 @@ export default class Notebook extends React.Component<NotebookProps, State> {
       : s.poking ? POKEARC[s.pokeAnim]
       : s.fidget ? FIDGETARC[s.fidget] : ''
 
+    // HUD tabs gate on the ENGINE's busy too (codex, parity 3): Notebook busy
+    // clears at 820ms but a surf/back-nav landing stages until ~1800ms — a tab
+    // flip in that window would cut the staging mid-flight. next()/prev()
+    // already gate; flipTo itself must stay ungated (the back-nav done() chain
+    // calls it from inside its own staging).
+    const userFlip = (p: number): void => {
+      if (this.engineMode && this.engineRef?.busy()) return
+      this.flipTo(p)
+    }
     const tabs: HudTab[] = this.geom().slice(1).map((p, i) => ({
       name: p.name,
       active: s.page === i + 1,
-      go: () => { this.ensureAC(); this.flipTo(i + 1) }
+      go: () => { this.ensureAC(); userFlip(i + 1) }
     }))
 
     return {
@@ -1169,7 +1178,7 @@ export default class Notebook extends React.Component<NotebookProps, State> {
       tabs,
       onNext: () => { this.ensureAC(); this.next() },
       onPrev: () => { this.ensureAC(); this.prev() },
-      onOpen: () => { this.ensureAC(); if (this.state.page === 0) this.flipTo(1) },
+      onOpen: () => { this.ensureAC(); if (this.state.page === 0) userFlip(1) },
       onAuto: () => this.toggleAuto(),
       onSound: () => this.toggleSound(),
       autoLabel: 'auto: ' + (s.auto ? 'ON' : 'off'),

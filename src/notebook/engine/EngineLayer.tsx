@@ -599,8 +599,12 @@ export class EngineLayer extends Component<EngineLayerProps> {
       // squash-land at 1240, arrival pose at 1780 — flipTo's exact choreography.
       this.stagingUntil = performance.now() + 1800
       const t = rt.transform
+      // t.y is the grounded ROOT Y at the anchor (feet on spot.y — set above);
+      // the whole timeline runs in root space (codex: landing at spot.y put the
+      // ROOT on the foot line, a torso-length low).
+      const groundY = t.y
       const fromX = pe.fromX ?? spot.x - 240
-      const fromY = pe.fromY ?? spot.y - 96
+      const fromY = pe.fromY ?? groundY - 96
       t.x = fromX
       t.y = fromY
       t.facing = 1
@@ -608,14 +612,14 @@ export class EngineLayer extends Component<EngineLayerProps> {
       // legacy flipTo easings: ride cubic-bezier(.5,.08,.28,1), drop (.55,.05,.6,1)
       // — both read as smoothstep at this scale.
       const smooth = (k: number): number => k * k * (3 - 2 * k)
-      this.scriptMove = { fromX, fromY, toX: spot.x, toY: spot.y - 96, t0: performance.now(), dur: 780, arcH: 0, ease: smooth }
+      this.scriptMove = { fromX, fromY, toX: spot.x, toY: groundY - 96, t0: performance.now(), dur: 780, arcH: 0, ease: smooth }
       const at = (ms: number, fn: () => void): void => {
         this.backNavTimers.push(window.setTimeout(fn, ms))
       }
       at(880, () => {
         this.props.sfx('hop')
         rt.act('jump-tuck', { holdMs: 400 })
-        this.scriptMove = { fromX: spot.x, fromY: spot.y - 96, toX: spot.x, toY: spot.y, t0: performance.now(), dur: 340, arcH: 0, ease: smooth }
+        this.scriptMove = { fromX: spot.x, fromY: groundY - 96, toX: spot.x, toY: groundY, t0: performance.now(), dur: 340, arcH: 0, ease: smooth }
       })
       at(1240, () => {
         rt.clearAct()
