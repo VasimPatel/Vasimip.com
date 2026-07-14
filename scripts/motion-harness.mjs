@@ -43,6 +43,10 @@ const SCENARIOS = {
   'walk-entrance': { page: 2, ms: 5500, force: { 'walk.trip': false }, recordFromDrive: true, drive: (p) => p.evaluate(() => window.__notebookGoTo(3)) },
   'walk-med': { page: 3, ms: 6000, force: { 'walk.trip': false }, drive: (p) => p.evaluate(() => window.__notebookRunBuiltin('walk')) },
   'approach-vault': { page: 3, ms: 6000, force: { 'vault.peek': false }, drive: (p) => p.evaluate(() => window.__notebookRunBuiltin('vault')) },
+  // parity 3 (excessive rolling): a multi-leg hop route with the 900ms onLaunch
+  // tuck — the tuck must release at each landing (no grounded tuck frames).
+  'roll-route': { page: 3, ms: 6000, force: {}, drive: (p) => p.evaluate(() => window.__notebookRunBuiltin('roll')) },
+  'hop-route': { page: 2, ms: 6000, force: {}, drive: (p) => p.evaluate(() => window.__notebookRunBuiltin('hop')) },
   'walk-to-land': { page: 4, ms: 6000, force: { 'walk.trip': false }, recordFromDrive: true, drive: (p) => p.evaluate(() => window.__notebookGoTo(5)) },
   'fight-loop': { page: 2, ms: 5500, force: {}, drive: async () => {} },
   poof: { page: 3, ms: 4000, force: {}, drive: (p) => p.evaluate(() => window.__notebookRunBuiltin('poof')) },
