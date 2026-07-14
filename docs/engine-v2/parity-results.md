@@ -200,3 +200,35 @@ engine goldens; live content stays covered by the sanity/scoping invariants).
 Marked by the owner as **engine upgrades for later** (not this branch):
 IK-planted skin feet, a real climb mode (verb sign-off needed), a teleport
 intent for poof, physics-assisted cape deformation.
+
+## Parity 3b — "fix the actions" (same branch)
+
+Owner: "some of them do not work, like wall run or swing." A clean-state
+action × page matrix (10 verbs × pages 2–5, engine traces) found 21 failing
+cells with one root cause: crossing beats authored as engine `moveTo`/`jumpTo`
+fail where no route exists, while legacy crossed any geometry with fixed-tempo
+tweens. Wallrun additionally approached via `travel:to#edge` (unreachable by
+walk — its siblings all use `from`), and swing "completed" while reading
+broken (a swing pose standing on the roof; the legacy bar hangs above the
+panel corner, which no route can reach).
+
+Fix pattern (the poof/hang staging precedent, applied systematically): the
+engine runs the real approach legs and in-place beats; the adapter stages the
+legacy crossing choreography verbatim (swing bar-hang + pendulum sag, wallrun
+wall climb, vault 500 ms flight, rope 115 px/s balance glide, slide wall
+descent, smash burst-through-crack). A hop/roll/combo whose every ballistic
+arc the planner refuses (arc-clearance vs owner-edited geometry) recovers with
+the legacy hopTo ARC instead of a poof — the verb the pool promised plays.
+
+Matrix after: **37/40 ok**; the 3 remaining are forced-walk-across-chasm
+dev-hook cells (organic pools exclude walk there — verified by forcing walk on
+every adjacent pair; the poof escape covers the forced case). Zero page errors.
+
+Deliberate legacy deviation for owner review: the smash exit bursts through
+the crack as a tuck — legacy strolled it in the walk pose, but a scripted
+glide cannot drive the distance-locked walk skin (frozen feet read worse).
+
+Engine-upgrade candidates surfaced by this round (deferred, owner list):
+ballistic arc-clearance in the jump planner's edge pruning is CONSERVATIVE
+(refuses arcs legacy played); a climb mode would let wallrun's wall leg be a
+real engine route; a rope/bar surface kind would do the same for swing/rope.
