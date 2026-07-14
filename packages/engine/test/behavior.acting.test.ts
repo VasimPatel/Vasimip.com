@@ -124,6 +124,36 @@ test('forceRelease clears a persist hold', () => {
   expect(r.rt.getState().blender.acting ?? null).toBeNull()
 })
 
+test('onLaunch acting is FLIGHT-SCOPED: released at landing, not at holdMs expiry', () => {
+  // Parity 3 (the excessive-rolling bug): a roll's onLaunch tuck (900ms hold)
+  // outlived a ~460ms hop and kept tucking through the walk legs of multi-leg
+  // routes. An onLaunch cue's acting must release at the NEXT jump:land no
+  // matter how long its hold is.
+  const r = grounded()
+  r.rt.runBehavior({
+    schemaVersion: 2,
+    id: 'roll-hop',
+    steps: [{ verb: 'jumpTo', target: 'entity:goal', timeoutMs: 8000 }],
+    cues: [{ at: 'onLaunch', do: { verb: 'strikePose', ref: 'cheer', holdMs: 60000 } }],
+  } as never)
+  let landTick = -1
+  for (let i = 0; i < 2000 && r.rt.running(); i++) {
+    step(r)
+    if (eventsOf(r, 'jump:land').length > 0) {
+      landTick = i
+      break
+    }
+    // mid-flight (cue fired, not yet landed): the tuck/pose is acting
+    if (eventsOf(r, 'cue:strikePose').length > 0) expect(r.rt.getState().blender.acting).toBeTruthy()
+  }
+  expect(landTick).toBeGreaterThanOrEqual(0)
+  // released AT the landing tick — the 60s hold never gets a say
+  expect(r.rt.getState().blender.acting ?? null).toBeNull()
+  // …and it stays released through the rest of the run (no tuck-while-walking)
+  driveToCompletion(r, 4000)
+  expect(r.rt.getState().blender.acting ?? null).toBeNull()
+})
+
 test('snapshot/restore mid-acting continues bit-identically', () => {
   const doc = {
     schemaVersion: 2,

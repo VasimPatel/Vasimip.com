@@ -134,6 +134,9 @@ export interface BehaviorState {
    * and force-release on the next tick — review blocker). Optional so pre-parity
    * snapshots (doc-bound, recomputable) restore unchanged. */
   budget?: number
+  /** onLaunch acting armed to release at the next jump:land (flight scope). Present
+   * only when armed, so pre-parity-3 snapshots serialize byte-identically. */
+  flightHold?: true
 }
 
 export interface BehaviorDeps {
@@ -206,6 +209,8 @@ export function createBehaviorExecutor(deps: BehaviorDeps): BehaviorExecutor {
   let speech: Speech | null = null
   let runId = 0
   let budget = 0
+  /** onLaunch acting is armed to release at the next jump:land (see the flight-scope block). */
+  let flightHold = false
   /** Monotonic count of locomotion.begin() calls — the retasking detector (item: a
    * movement inside a continue-reaction replaces the parent's solver state). */
   let moveSeq = 0
@@ -277,6 +282,7 @@ export function createBehaviorExecutor(deps: BehaviorDeps): BehaviorExecutor {
     if (status === 'running' && doc) {
       emit('behavior:interrupted', { behaviorId: doc.id, depth: stack.length })
     }
+    clearFlightRelease()
     locomotion.reset()
     doc = behavior
     status = 'running'
@@ -295,6 +301,7 @@ export function createBehaviorExecutor(deps: BehaviorDeps): BehaviorExecutor {
     if (status === 'running') {
       emit('behavior:interrupted', { behaviorId: doc?.id ?? top()?.reason ?? '__one-shot', depth: stack.length })
     }
+    clearFlightRelease()
     locomotion.reset()
     doc = null
     status = 'running'
@@ -463,6 +470,7 @@ export function createBehaviorExecutor(deps: BehaviorDeps): BehaviorExecutor {
 
   // ── terminal ────────────────────────────────────────────────────────────────────
   function endBehavior(terminal: 'complete' | 'halted', reason: string | null): void {
+    clearFlightRelease()
     const id = doc?.id ?? null
     status = terminal
     stack = []
@@ -689,6 +697,7 @@ export function createBehaviorExecutor(deps: BehaviorDeps): BehaviorExecutor {
 
   // ── watchdog surface ────────────────────────────────────────────────────────────
   function forceRelease(): void {
+    clearFlightRelease()
     locomotion.reset()
     stack = []
     status = 'idle'
@@ -737,12 +746,35 @@ export function createBehaviorExecutor(deps: BehaviorDeps): BehaviorExecutor {
   )
 
   // ── performance-cue scheduler ─────────────────────────────────────────────────────
+  // FLIGHT-SCOPED acting (parity 3 — the excessive-rolling fix): an onLaunch
+  // strikePose/playClip cue releases its acting at the NEXT landing, whichever
+  // of {jump:land, holdMs} comes first. Without this, a roll's 900ms tuck
+  // outlived a ~460ms hop and kept tucking through the walk legs of multi-leg
+  // routes. The arm is a SERIALIZED flag checked by a permanent subscription
+  // (never a dynamically-attached listener) so a mid-flight snapshot/restore
+  // releases on the identical tick. Cleared on any run/end/forceRelease so it
+  // can never release a LATER behavior's acting.
+  function clearFlightRelease(): void {
+    flightHold = false
+  }
+  function armFlightRelease(): void {
+    flightHold = true
+  }
+  busUnsubs.push(
+    events.on('jump:land', (p) => {
+      if (!flightHold) return
+      if ((p as { characterId?: string })?.characterId !== characterId) return
+      flightHold = false
+      blender.clearActing()
+    }),
+  )
+
   const cueScheduler: CueScheduler = createCueScheduler({
     events,
     characterId,
     cues: () => doc?.cues ?? [],
     running: () => status === 'running',
-    execCue: (intent) => {
+    execCue: (intent, at) => {
       // Cues run CONCURRENTLY (never on the step stack). say drives the bubble;
       // strikePose/playClip act on the blender's ACTING layer (parity recovery,
       // Stage 2a — the review's core gap: these were trace-only, so vault/roll/
@@ -767,6 +799,7 @@ export function createBehaviorExecutor(deps: BehaviorDeps): BehaviorExecutor {
               durationMs: intent.blendMs ?? 160,
               holdMs: intent.hold === 'persist' ? 'persist' : (intent.holdMs ?? STRIKE_HOLD_MS),
             })
+            if (at === 'onLaunch') armFlightRelease()
           }
           emit('cue:strikePose', { ref: intent.ref, acted: pose !== undefined })
           break
@@ -776,6 +809,7 @@ export function createBehaviorExecutor(deps: BehaviorDeps): BehaviorExecutor {
           if (clip) {
             // A cue clip plays ONCE over the movement (looping clips get one cycle).
             blender.setActing(clip, { durationMs: intent.blendMs ?? 160, holdMs: Math.max(clipDuration(clip), STEP_MS) })
+            if (at === 'onLaunch') armFlightRelease()
           }
           emit('cue:playClip', { ref: intent.ref, acted: clip !== undefined })
           break
@@ -813,6 +847,7 @@ export function createBehaviorExecutor(deps: BehaviorDeps): BehaviorExecutor {
         runId,
         moveSeq,
         budget,
+        ...(flightHold ? { flightHold: true as const } : {}),
       }
     },
     setState(s: BehaviorState) {
@@ -837,8 +872,10 @@ export function createBehaviorExecutor(deps: BehaviorDeps): BehaviorExecutor {
       speech = s.speech ? { ...s.speech } : null
       runId = s.runId
       moveSeq = s.moveSeq
+      flightHold = s.flightHold ?? false
     },
     dispose() {
+      clearFlightRelease()
       cueScheduler.dispose()
       for (const u of busUnsubs) u()
       busUnsubs.length = 0
