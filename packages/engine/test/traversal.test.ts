@@ -92,17 +92,23 @@ test('ground-path pruning: a hop whose straight path crosses a wall is pruned', 
   expect(rep.groundEdgesCrossingWall).toBe(0) // nothing crossing survived
 })
 
-// ── PER-PAGE SNAPSHOT against the REAL notebook layout ────────────────────────────
+// ── PER-PAGE SNAPSHOT against a PINNED notebook layout ────────────────────────────
 // Pages are separate spaces (one WorldDocV2 per page; a page change is a flip, P7),
 // so the graph is built per page — zero inter-page edges by construction. The
 // snapshot uses Dash's GROUND caps (walk/hop/jump): his real doc also has 'fly',
 // which would connect ~every same-page pair and add no regression value; the fly
 // clause is covered by the focused test above.
+// The byte-exact golden guards the GRAPH BUILDER, so it runs on a pinned fixture
+// copy of the notebook pages — owner content edits via /admin must never break
+// engine goldens. The invariant tests below still run on the LIVE notebook.json,
+// so real content is always checked for standability/scoping.
+const fixturePages = JSON.parse(readFileSync(new URL('./fixtures/notebook-pages.json', import.meta.url), 'utf8')).pages as typeof notebook.pages
 const pageWorlds = worldFromNotebook(notebook.pages)
+const fixtureWorlds = worldFromNotebook(fixturePages)
 const dashGround = char({ modes: ['walk', 'hop'], maxJumpDistance: 180, maxJumpHeight: 120 })
 
-test('SNAPSHOT: real notebook traversal graphs, one per page (ground caps)', () => {
-  const summary = pageWorlds.map((pw) => {
+test('SNAPSHOT: pinned notebook traversal graphs, one per page (ground caps)', () => {
+  const summary = fixtureWorlds.map((pw) => {
     const g = buildTraversalGraph(pw.world, dashGround)
     return {
       page: pw.pageIndex,
@@ -136,9 +142,10 @@ test('every page graph passes the sanity invariants', () => {
   }
 })
 
-test('page scoping: 5 page worlds, every panel standable, no foreign panels in a page graph', () => {
-  expect(pageWorlds).toHaveLength(5)
-  const perPagePanels = [6, 2, 3, 2, 2] // notebook.json panel counts
+test('page scoping: one world per page, every panel standable, no foreign panels in a page graph', () => {
+  expect(pageWorlds).toHaveLength(notebook.pages.length)
+  // derived from the live doc — owner content edits change counts, not scoping
+  const perPagePanels = notebook.pages.map((p) => p.panels.length)
   pageWorlds.forEach((pw, i) => {
     const g = buildTraversalGraph(pw.world, dashGround)
     expect(new Set(g.nodes.map((n) => n.panel)).size).toBe(perPagePanels[i])
