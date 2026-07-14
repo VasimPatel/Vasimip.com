@@ -82,6 +82,65 @@ recovery code).
 | 4 | Idle/Spray eyes | JSX-parametric eyes in the art | The ENGINE parametric face (blink + look-at + dilation) on the drawing's head anchor | Strictly more alive; same geometry | S5 idle-near |
 | 5 | Easing curves | Authored cubic-bezier per move | Locomotion solver profile (speed IS authored) | The one accepted migration loss — documented equivalence | loss report |
 
+## Motion-quality recovery (Q0–Q7, branch vasim/engine-v2-quality)
+
+The 2026-07-13 quality review reopened the charm checkpoint (five animation
+systems without a shared clock/phase/anchor). Q0 built the instrument first;
+Q1–Q6 removed each conflicting authority; measured before → after:
+
+| Metric (Q0 motion recorder) | Before | After |
+|---|---|---|
+| Ground-anchor tremor while walking | 6.7–7.2 Hz at ±3.4 px (the dual gait) | **0 / 0** — one bob, the drawing's own |
+| Ordinary walk speed | 112 px/s | **190.8 px/s** (legacy 190, with the 0.7–2.2 s bounds) |
+| Vault/rope approaches | 112 px/s | **271 px/s** (legacy ~270); wallrun/slide 290, smash 260/220, combo 300 |
+| Camera-target sawtooth | ~4 stepped updates/s chased by 0.9 s CSS | **0** — one establishing shot per travel + authored cue shots |
+| Cape attachment | free verlet ribbon ~7 px off the hidden rig's neck (owner-rejected) | **authored legacy cape inside the drawing** (structurally attached) + bounded ≤0.16 rad velocity lag |
+| Fixed-step presentation | rendered raw (micro-stutter class) | **interpolated at accumulator alpha**, teleports snap |
+| Walk cycle time base | wall-clock CSS (0.8 s regardless of motion) | **distance-locked phase** (stride 152 px; refresh-rate invariant) |
+| Speech bubble | white SVG lookalike | **the shared legacy ReactBubble** (yellow marker + pop-in) |
+| Drag input | mouse events only | **pointer events** (touch parity, staged recovery included) |
+
+Negative controls prove the instrument: injected root-stepping and a displaced
+cape socket are both detected; the clean run is quiet. Regenerate the evidence
+(metrics + 0.25×/1× flipbook clips per scenario) with:
+`node scripts/motion-harness.mjs <outDir>` (add `--negative-control`).
+
+Cape metric semantics (post-review): `sockSep` compares the RENDERED knot (live
+CTM probe on the authored cape) against the expected placement — walk/idle sit
+within the plan's ≤2px envelope (1.3px avg). Poses whose whole drawing shifts
+(fightshift) carry the knot with the body BY DESIGN; the expectation model
+excludes group animations, so their larger readings are placement-model
+variance, not detachment (the knot is structurally inside the drawing).
+
+Accepted edges (codex final review findings 4/8/11, documented):
+- Refresh-rate invariance is by construction (distance phase) + throttle-
+  induced irregularity — headless Chrome can't sweep literal 60/90/120Hz.
+- A snapshot captured synchronously from a behavior:start listener restores
+  before the per-run defaultSpeed installs (nothing in production snapshots
+  from event handlers).
+- The ordinary-walk 0.7–2.2s bound derives from straight-line distance; a
+  graph-routed walk with hop legs can exceed the total (rare page geometries).
+
+### Reopened-gate status after Q0–Q7
+
+| Gate (quality review) | Status now |
+|---|---|
+| Walk timing | Legacy speed classes authored + walk duration bounds (Q4) |
+| Walk motion | One phase, one bob, distance-locked (Q1); interpolated (Q2) |
+| Cape charm | Authored legacy cape restored per pose (Q3) — owner reel to confirm |
+| Camera smoothness | Authored shots; zero sawtooth (Q5) |
+| Interaction feedback | Shared ReactBubble + pointer/touch drag (Q6) |
+| Integrated smoothness | Motion metrics (not frame delivery) green at 1× and 4× throttle |
+| Static skin coverage | Pass (unchanged) |
+| Core engine correctness | Pass — sim untouched; goldens byte-identical |
+
+### Acceptance record (owner to complete)
+
+Per the quality plan, a capture script cannot close the charm gate. To record:
+review date, scenarios watched live (`bun run dev`, `/` vs `/legacy` — walk,
+vault, swing, smash, poof, bomb-back, poke, drag, fight/spray arrivals),
+accepted/rejected differences, and the go/no-go decision.
+
 ## Final whole-branch codex review (S8)
 
 238k-token independent read-only review: 6 blockers + 12 should-fixes.

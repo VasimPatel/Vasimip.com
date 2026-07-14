@@ -94,6 +94,22 @@
       "linecap": "round"
     }
   ],
+  "cape": {
+    "socket": {
+      "x": 4,
+      "y": -10
+    },
+    "elements": [
+      {
+        "kind": "path",
+        "d": "M4,-10 L-28,-4 L-20,2 L-32,14 L-4,8 Z",
+        "fill": "#ff5ca8",
+        "stroke": "#1a1a1a",
+        "strokeWidth": 3,
+        "opacity": 0.55
+      }
+    ]
+  },
   "head": {
     "cx": 12,
     "cy": -22,

@@ -108,6 +108,28 @@
       "transform": "rotate(14)"
     }
   ],
+  "cape": {
+    "socket": {
+      "x": -3,
+      "y": -14
+    },
+    "elements": [
+      {
+        "kind": "group",
+        "transform": "rotate(14)",
+        "children": [
+          {
+            "kind": "path",
+            "d": "M-3,-14 L-34,-8 L-26,-2 L-36,10 L-7,8 Z",
+            "fill": "#ff5ca8",
+            "stroke": "#1a1a1a",
+            "strokeWidth": 3,
+            "opacity": 0.55
+          }
+        ]
+      }
+    ]
+  },
   "head": {
     "cx": 4,
     "cy": -29,

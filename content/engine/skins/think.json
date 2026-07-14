@@ -81,7 +81,10 @@
         }
       ],
       "anim": {
-        "name": "thinkchin"
+        "name": "thinkchin",
+        "durationSec": 3,
+        "ease": "ease-in-out",
+        "iterations": "infinite"
       },
       "origin": "50% 100%"
     },
@@ -133,7 +136,10 @@
             }
           ],
           "anim": {
-            "name": "thinktap"
+            "name": "thinktap",
+            "durationSec": 0.55,
+            "ease": "ease-in-out",
+            "iterations": "infinite"
           },
           "origin": "0% 0%"
         }
@@ -141,6 +147,34 @@
       "transform": "translate(-2,16)"
     }
   ],
+  "cape": {
+    "socket": {
+      "x": -3,
+      "y": -14
+    },
+    "elements": [
+      {
+        "kind": "group",
+        "anim": {
+          "name": "capeidle",
+          "durationSec": 1.4,
+          "ease": "ease-in-out",
+          "iterations": "infinite"
+        },
+        "origin": "100% 0%",
+        "children": [
+          {
+            "kind": "path",
+            "d": "M-3,-14 L-34,3 L-25,8 L-37,24 L-7,12 Z",
+            "fill": "#ff5ca8",
+            "stroke": "#1a1a1a",
+            "strokeWidth": 3,
+            "opacity": 0.55
+          }
+        ]
+      }
+    ]
+  },
   "head": {
     "cx": 2,
     "cy": -30,

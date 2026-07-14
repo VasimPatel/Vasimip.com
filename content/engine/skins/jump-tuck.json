@@ -53,6 +53,22 @@
       "linecap": "round"
     }
   ],
+  "cape": {
+    "socket": {
+      "x": -13,
+      "y": -10
+    },
+    "elements": [
+      {
+        "kind": "path",
+        "d": "M-13,-10 L-26,2 L-14,6 Z",
+        "fill": "#ff5ca8",
+        "stroke": "#1a1a1a",
+        "strokeWidth": 3,
+        "opacity": 0.55
+      }
+    ]
+  },
   "head": {
     "cx": 0,
     "cy": -14,

@@ -90,6 +90,34 @@
       "linecap": "round"
     }
   ],
+  "cape": {
+    "socket": {
+      "x": -3,
+      "y": -14
+    },
+    "elements": [
+      {
+        "kind": "group",
+        "anim": {
+          "name": "capewalk",
+          "durationSec": 0.35,
+          "ease": "ease-in-out",
+          "iterations": "infinite"
+        },
+        "origin": "100% 0%",
+        "children": [
+          {
+            "kind": "path",
+            "d": "M-3,-14 L-40,-2 L-30,4 L-44,18 L-8,12 Z",
+            "fill": "#ff5ca8",
+            "stroke": "#1a1a1a",
+            "strokeWidth": 3,
+            "opacity": 0.55
+          }
+        ]
+      }
+    ]
+  },
   "head": {
     "cx": 2,
     "cy": -30,

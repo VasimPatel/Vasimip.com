@@ -2,18 +2,67 @@
   "schemaVersion": 2,
   "id": "builtin:smash",
   "steps": [
-    { "verb": "sfx", "kind": "scrib" },
-    { "verb": "moveTo", "target": "travel:from#edge" },
-    { "verb": "camera", "to": "entity:dash", "mult": 1.28, "fast": true },
-    { "verb": "strikePose", "ref": "punch", "holdMs": 300 },
-    { "verb": "sfx", "kind": "fx:crack" },
-    { "verb": "sfx", "kind": "fx:shake" },
-    { "verb": "strikePose", "ref": "punch", "holdMs": 650 },
-    { "verb": "camera" },
-    { "verb": "sfx", "kind": "scrib" },
-    { "verb": "moveTo", "target": "travel:to#interior" },
-    { "verb": "strikePose", "ref": "squash-land", "holdMs": 220 },
-    { "verb": "wait", "ms": 320 }
+    {
+      "verb": "sfx",
+      "kind": "scrib"
+    },
+    {
+      "verb": "moveTo",
+      "target": "travel:from#edge",
+      "speed": 260
+    },
+    {
+      "verb": "camera",
+      "to": "entity:dash",
+      "mult": 1.28,
+      "fast": true
+    },
+    {
+      "verb": "strikePose",
+      "ref": "punch",
+      "holdMs": 300
+    },
+    {
+      "verb": "sfx",
+      "kind": "fx:crack"
+    },
+    {
+      "verb": "sfx",
+      "kind": "fx:shake"
+    },
+    {
+      "verb": "strikePose",
+      "ref": "punch",
+      "holdMs": 650
+    },
+    {
+      "verb": "camera"
+    },
+    {
+      "verb": "sfx",
+      "kind": "scrib"
+    },
+    {
+      "verb": "moveTo",
+      "target": "travel:to#interior",
+      "speed": 220
+    },
+    {
+      "verb": "strikePose",
+      "ref": "squash-land",
+      "holdMs": 220
+    },
+    {
+      "verb": "wait",
+      "ms": 320
+    }
   ],
-  "reactions": { "onLand": [{ "verb": "sfx", "kind": "thud" }] }
+  "reactions": {
+    "onLand": [
+      {
+        "verb": "sfx",
+        "kind": "thud"
+      }
+    ]
+  }
 }

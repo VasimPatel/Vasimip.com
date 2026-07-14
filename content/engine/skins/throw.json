@@ -112,13 +112,19 @@
                             }
                           ],
                           "anim": {
-                            "name": "sparkfuse"
+                            "name": "sparkfuse",
+                            "durationSec": 0.25,
+                            "ease": "linear",
+                            "iterations": "infinite"
                           },
                           "origin": "50% 50%"
                         }
                       ],
                       "anim": {
-                        "name": "throwfa"
+                        "name": "throwfa",
+                        "durationSec": 0.3,
+                        "ease": "cubic-bezier(.5,0,.5,1)",
+                        "fill": "forwards"
                       },
                       "origin": "20% 90%"
                     }
@@ -127,7 +133,10 @@
                 }
               ],
               "anim": {
-                "name": "throwua"
+                "name": "throwua",
+                "durationSec": 0.3,
+                "ease": "cubic-bezier(.5,0,.5,1)",
+                "fill": "forwards"
               },
               "origin": "10% 90%"
             }
@@ -153,6 +162,34 @@
       ]
     }
   ],
+  "cape": {
+    "socket": {
+      "x": -3,
+      "y": -14
+    },
+    "elements": [
+      {
+        "kind": "group",
+        "anim": {
+          "name": "capeidle",
+          "durationSec": 0.5,
+          "ease": "ease-in-out",
+          "iterations": "infinite"
+        },
+        "origin": "100% 0%",
+        "children": [
+          {
+            "kind": "path",
+            "d": "M-3,-14 L-36,4 L-27,9 L-40,26 L-8,13 Z",
+            "fill": "#ff5ca8",
+            "stroke": "#1a1a1a",
+            "strokeWidth": 3,
+            "opacity": 0.55
+          }
+        ]
+      }
+    ]
+  },
   "head": {
     "cx": 2,
     "cy": -30,

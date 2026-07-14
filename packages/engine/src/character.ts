@@ -126,7 +126,7 @@ export interface CharacterRuntime {
   /** Run a behavior. `opts.travel` binds the from/to panels the doc's travel:*
    * refs resolve against — applied AFTER the run's locomotion reset, so the
    * binding is atomic with the run (a reset clears any previous binding). */
-  runBehavior(doc: BehaviorDoc, opts?: { travel?: { from?: string; to?: string } }): void
+  runBehavior(doc: BehaviorDoc, opts?: { travel?: { from?: string; to?: string }; defaultSpeed?: number }): void
   /** Run an ephemeral one-shot steps list (dynamic quips/beats — text varies per
    * invocation) WITHOUT registering a behavior doc. See BehaviorExecutor.runOneShot. */
   runOneShot(label: string, steps: Intent[]): void
@@ -148,6 +148,11 @@ export interface CharacterRuntime {
   activeSource(): { kind: 'pose' | 'clip'; id: string }
   /** Current world collision capsule. */
   capsule(): Capsule
+  /** Presentation contract (quality Q1): where the VISIBLE figure anchors and
+   * how far it has walked. `supportY` is the support line while ground-moving —
+   * a skinned renderer must anchor there, never to the bobbing hip/capsule;
+   * `groundDistance` feeds the distance-locked walk phase. */
+  presentation(): { x: number; y: number; supportY: number | null; facing: 1 | -1; groundDistance: number; groundMoving: boolean }
   /** Verlet endpoint overrides for the renderer (secondary follow-through). */
   overrides(): Record<string, { ex: number; ey: number }>
   /** A behavior is in progress. 7b's watchdog force-release wraps this. */
@@ -409,9 +414,12 @@ export function createCharacterRuntime(opts: CharacterRuntimeOptions): Character
     watchdog.tick()
   }
 
-  function runBehavior(doc: BehaviorDoc, opts?: { travel?: { from?: string; to?: string } }): void {
+  function runBehavior(doc: BehaviorDoc, opts?: { travel?: { from?: string; to?: string }; defaultSpeed?: number }): void {
     behavior.run(doc) // resets locomotion (incl. any stale travel binding)
     locomotion.setTravelContext(opts?.travel ?? null)
+    // Q4 adapter timing policy: a per-run default ground speed (legacy walk
+    // duration bounds); authored step {speed} always wins.
+    locomotion.setDefaultSpeed(opts?.defaultSpeed ?? null)
   }
 
   function runOneShot(label: string, steps: Intent[]): void {
@@ -472,6 +480,10 @@ export function createCharacterRuntime(opts: CharacterRuntimeOptions): Character
     // The VISIBLE identity: an acting overlay (cue pose, persist arrival) wins over
     // the base — pose props (sword, spray can) and pose-scoped site acting ride it.
     activeSource: () => blender.actingSource() ?? blender.currentSource(),
+    presentation() {
+      const lp = locomotion.presentation()
+      return { x: transform.x, y: transform.y, supportY: lp.supportY, facing: transform.facing, groundDistance: lp.groundDistance, groundMoving: lp.groundMoving }
+    },
     capsule,
     overrides: () => secondary.overrides(),
     running: () => behavior.running(),

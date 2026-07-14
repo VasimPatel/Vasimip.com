@@ -79,6 +79,8 @@ export interface State {
   mx: number
   my: number
   camo: Camo | null
+  /** Engine speech (Q6) — rendered with the SHARED ReactBubble in page coords. */
+  engineSay: { text: string; x: number; y: number } | null
   shakeOn: boolean
   crackOn: boolean
   crackX: number
@@ -140,7 +142,7 @@ export default class Notebook extends React.Component<NotebookProps, State> {
     busy: false, busyFlip: false, flipRange: null,
     auto: false, sound: true, flags: {},
     poking: false, react: null, mx: 640, my: 400,
-    camo: null, shakeOn: false, crackOn: false, crackX: 0, crackY: 0,
+    camo: null, engineSay: null, shakeOn: false, crackOn: false, crackX: 0, crackY: 0,
     pageShove: 0, pageJit: false, vaulting: false, squish: false,
     vw: 1280, vh: 800
   }
@@ -208,9 +210,13 @@ export default class Notebook extends React.Component<NotebookProps, State> {
         this.engineRef?.notePointer(e.clientX, e.clientY)
       }
     }
-    window.addEventListener('mousemove', this._onM)
+    // POINTER events (Q6): one input path for mouse AND touch — pointermove/up
+    // fire for both, so the drag pipeline gains touch parity for free.
+    window.addEventListener('pointermove', this._onM)
     this._onU = () => { if (this.state.dragging) this.drop(); this._maybeDrag = false }
-    window.addEventListener('mouseup', this._onU)
+    window.addEventListener('pointerup', this._onU)
+    window.addEventListener('pointercancel', this._onU)
+    window.addEventListener('blur', this._onU)
     this.scheduleFidget()
     this.setState({ sound: this.props.soundOn ?? true })
     // dev hook for headless verification; clamp to a valid page so it can't crash
@@ -285,8 +291,10 @@ export default class Notebook extends React.Component<NotebookProps, State> {
     (this._tt || []).forEach(clearTimeout)
     window.removeEventListener('resize', this._onR)
     window.removeEventListener('keydown', this._onK)
-    window.removeEventListener('mousemove', this._onM)
-    window.removeEventListener('mouseup', this._onU)
+    window.removeEventListener('pointermove', this._onM)
+    window.removeEventListener('pointerup', this._onU)
+    window.removeEventListener('pointercancel', this._onU)
+    window.removeEventListener('blur', this._onU)
     if (this._ft) clearTimeout(this._ft)
     if (this._mraf) cancelAnimationFrame(this._mraf)
     if (this._ro) this._ro.disconnect()
@@ -1065,7 +1073,11 @@ export default class Notebook extends React.Component<NotebookProps, State> {
       sc = Math.max(.15, sc * (s.camo.mult || 1))
       if (s.camo.cx != null) { cx = s.camo.cx; cy = s.camo.cy }
     }
-    const px = (((s.mx ?? vw / 2) / vw) - .5) * 12, py = (((s.my ?? vh / 2) / vh) - .5) * 8
+    // Pointer parallax damps to a whisper while an AUTHORED shot (camo) holds —
+    // parallax noise during a choreographed move reads as camera drift (Q5).
+    // ENGINE mode only: /legacy stays the untouched comparison baseline.
+    const pk = s.camo && this.engineMode ? 0.25 : 1
+    const px = (((s.mx ?? vw / 2) / vw) - .5) * 12 * pk, py = (((s.my ?? vh / 2) / vh) - .5) * 8 * pk
     const tx = vw / 2 - sc * cx + px, ty = (vh - 70) / 2 - sc * cy + py
     this._cam = { tx: tx, ty: ty, sc: sc }
     const cameraTf = 'translate(' + tx.toFixed(1) + 'px, ' + ty.toFixed(1) + 'px) scale(' + sc.toFixed(3) + ')'
@@ -1198,6 +1210,7 @@ export default class Notebook extends React.Component<NotebookProps, State> {
                     sfx={(kind) => this.engineSfx(kind)}
                     onPoke={() => { this.ensureAC(); this.sfx('hop') }}
                     onDashCam={(p) => this.setState({ camo: p ? { cx: p.x, cy: p.y, mult: p.mult ?? 0.92, fast: p.fast ?? false } : null })}
+                    onSpeech={(sp) => this.setState({ engineSay: sp })}
                     onFx={(fx) => {
                       // The engine drives the SHARED overlays (legacy staging owns
                       // their look; the engine owns the timing).
@@ -1230,8 +1243,8 @@ export default class Notebook extends React.Component<NotebookProps, State> {
             <div
               data-dash-actor
               onClick={v.onPoke}
-              onMouseDown={v.onGrab}
-              style={{ position: 'absolute', width: 104, height: 113, zIndex: 60, pointerEvents: 'auto', cursor: 'pointer', ...v.dashStyle }}
+              onPointerDown={v.onGrab}
+              style={{ position: 'absolute', width: 104, height: 113, zIndex: 60, pointerEvents: 'auto', cursor: 'pointer', touchAction: 'none', ...v.dashStyle }}
             >
               <div style={{ width: '100%', height: '100%', ...v.dashArcStyle }}>
                 <Dash pose={v.pose} faceTf={v.dashFaceTf} headTilt={v.headTilt} lookXf={v.lookXf} lookY={v.lookY} eyeR={v.eyeR} />
@@ -1240,6 +1253,12 @@ export default class Notebook extends React.Component<NotebookProps, State> {
             )}
 
             {v.reactOn && <ReactBubble style={v.reactStyle} text={v.react ?? ''} />}
+            {this.engineMode && this.state.engineSay && (
+              <ReactBubble
+                style={styleFromCss('left:' + this.state.engineSay.x.toFixed(0) + 'px; top:' + this.state.engineSay.y.toFixed(0) + 'px')}
+                text={this.state.engineSay.text}
+              />
+            )}
             {v.snarkOn && <PipSnark text={v.snark} />}
           </div>
         </div>

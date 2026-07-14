@@ -30,7 +30,7 @@ import {
 import { evalGate, type BehaviorDoc, type GateExpr } from '../../../packages/schema/src/index'
 import { createCharacterRenderer, type CharacterRenderer } from '../../../packages/renderer-svg/src/index'
 import { engineSkins, type EngineDoc } from './engineDoc'
-import { pick, chance, scalar, reviewHook, reviewLog } from '../review'
+import { pick, chance, scalar, reviewHook, reviewLog, type MotionSample } from '../review'
 
 export interface EngineLayerProps {
   /** The engine doc derived from the SAME v1 doc the site renders (hot-swappable). */
@@ -52,6 +52,10 @@ export interface EngineLayerProps {
   /** Visual effect overlays (bomb/boom/hole/smoke/crack) — the Notebook owns the
    * shared overlay components; the engine drives them for its performances. */
   onFx?(fx: { kind: 'bomb' | 'boom' | 'hole' | 'smoke' | 'crack'; on: boolean; x?: number; y?: number }): void
+  /** Engine speech (Q6): published to the shell, which renders the SHARED
+   * legacy ReactBubble (yellow marker bubble + pop-in) — the engine never
+   * draws a lookalike. Page coordinates; null clears. */
+  onSpeech?(s: { text: string; x: number; y: number } | null): void
   /** Quips for the end of a drag (the legacy DROPS list) — spoken via the
    * engine's own bubble so positioning always tracks the figure. */
   dropLines?: string[]
@@ -74,7 +78,6 @@ export class EngineLayer extends Component<EngineLayerProps> {
   private svgRef = createRef<SVGSVGElement>()
   private scene: Scene | null = null
   private renderer: CharacterRenderer | null = null
-  private bubble: SVGGElement | null = null
   private raf = 0
   private last = 0
   private acc = 0
@@ -95,8 +98,7 @@ export class EngineLayer extends Component<EngineLayerProps> {
   /** Destination of the in-flight travel run — poof-recovery lands here if the
    * picked behavior blocks/fails (the legacy poof teleport, driver-owned). */
   private travelDest: number | null = null
-  /** Camera-follow throttle + airborne-roll state (render-layer charm). */
-  private camTick = 0
+  /** Airborne-roll state (render-layer charm). */
   private rolling = false
   private airborne = false
   private spin = 0
@@ -114,8 +116,6 @@ export class EngineLayer extends Component<EngineLayerProps> {
   private fidgetTimer = 0
   /** Smoothed cursor-lean (rad) — the legacy .22s ease-out transition. */
   private lean = 0
-  /** An authored camera cue owns the shot (suppresses the follow cam). */
-  private camOverride = false
   /** Scripted root motion (back-nav hop-to-hole) — render-layer, like drag. */
   private scriptMove: { fromX: number; fromY: number; toX: number; toY: number; t0: number; dur: number; arcH: number } | null = null
   /** Actor visibility (back-nav dive/poof vanish). */
@@ -134,6 +134,17 @@ export class EngineLayer extends Component<EngineLayerProps> {
   private travelFrom = 0
   /** Back-nav staging window: busy() holds and fidgets stay quiet until then. */
   private stagingUntil = 0
+  /** Q0 motion recorder state: sim-tick counter + the last camera target sent. */
+  private simTicks = 0
+  private lastCam: { x: number; y: number } | null = null
+  /** Q2 render interpolation: sim-step snapshots of the root. Presentation-only —
+   * the deterministic sim is untouched; a big prev→cur jump (teleport) snaps. */
+  private prevSnap: { x: number; y: number } | null = null
+  private curSnap: { x: number; y: number } | null = null
+  /** Q3 bounded cape secondary: eased velocity lag (rad), reset on teleports/
+   * facing flips — momentum must never drag the cape through the body. */
+  private capeLag = 0
+  private capeFacing: 1 | -1 = 1
   /** The hop-hang variant rolled for the in-flight travel. */
   private pendingHang = false
   /** Adapter speech (trip 'whoa—', hang 'hup—') — shown when the engine bubble
@@ -153,12 +164,33 @@ export class EngineLayer extends Component<EngineLayerProps> {
       this.last = now
       const s = this.scene
       if (!s || !this.renderer) return
+      // Scripted root motion (back-nav hop-to-hole) and the drag follow run
+      // BEFORE the sim steps (review: mutating after the snapshot made their
+      // interpolation cadence-dependent) — they are wall-clock continuous and
+      // the snapshots taken below now include them coherently.
+      if (this.scriptMove) {
+        const m = this.scriptMove
+        const k = Math.min(1, (performance.now() - m.t0) / m.dur)
+        const t = s.rt.transform
+        t.x = m.fromX + (m.toX - m.fromX) * k
+        t.y = m.fromY + (m.toY - m.fromY) * k - m.arcH * 4 * k * (1 - k)
+        if (k >= 1) this.scriptMove = null
+      }
+      if (this.dragging && this.dragMoved && this.look) {
+        const t = s.rt.transform
+        const ease = 0.45
+        t.x = t.x + (this.look.x - t.x) * ease
+        t.y = t.y + (this.look.y - 24 - t.y) * ease
+      }
       while (this.acc >= STEP_MS) {
         this.acc -= STEP_MS
+        this.prevSnap = this.curSnap
         s.ctx.clock.advance()
         s.rt.tick()
         s.verlet.step()
         s.mw.stepMutations()
+        this.curSnap = { x: s.rt.transform.x, y: s.rt.transform.y }
+        this.simTicks++
         // The legacy roll: spin the tuck through the arc (~1 turn / 600ms) —
         // advanced PER SIM TICK so rotation speed is refresh-rate independent.
         if (this.rolling && this.airborne) this.spin += (Math.PI * 2 * STEP_MS) / 600
@@ -187,6 +219,48 @@ export class EngineLayer extends Component<EngineLayerProps> {
       // A skinned source carries its own internal animation (the tuck skin's
       // tuckspin already rotates) — the render-layer roll spin would double it.
       const skinned = EngineLayer.SKINNED.has(src.id)
+      // Q0 negative control: injected root stepping — the motion metrics must
+      // catch exactly this class of defect (review-forced, never organic).
+      const negStep = reviewHook()?.force?.['negctl.step'] ? (this.simTicks & 8 ? 4 : -4) : 0
+      // Q1 — ONE visible locomotion authority: while ground-moving, the skin
+      // anchors to the SUPPORT LINE (never the bobbing hip/capsule — the skin's
+      // own bobw is the only bob) and its walk cycle is PHASE-LOCKED to distance
+      // traveled over the drawing's authored stride.
+      const pres = s.rt.presentation()
+      // Q2 — interpolate the fixed-step root between sim snapshots (alpha = the
+      // accumulator remainder). Offsets, not absolutes: scripted/drag motion
+      // mutates the transform per-rAF (already continuous) and must not fight
+      // the sim snapshots. Teleport-scale jumps snap (poof, page placement).
+      const alpha = Math.max(0, Math.min(1, this.acc / STEP_MS))
+      let offX = 0
+      let offY = 0
+      if (this.prevSnap && this.curSnap) {
+        const jx = this.prevSnap.x - this.curSnap.x
+        const jy = this.prevSnap.y - this.curSnap.y
+        if (Math.abs(jx) < 48 && Math.abs(jy) < 48) {
+          offX = jx * (1 - alpha)
+          offY = jy * (1 - alpha)
+        }
+      }
+      const skinRoot = { x: pres.x + offX, y: (pres.supportY ?? Math.max(cap.y0, cap.y1) + cap.r + offY) + negStep }
+      const stride = EngineLayer.STRIDES.get(src.id)
+      const phase = stride && pres.groundMoving ? (pres.groundDistance / stride) % 1 : undefined
+      // Q3 cape lag: trail the authored cape by horizontal velocity, softly eased,
+      // hard-clamped to a small envelope; snap to rest on teleports/facing flips.
+      let vx = 0
+      if (this.prevSnap && this.curSnap) {
+        const jx = this.curSnap.x - this.prevSnap.x
+        if (Math.abs(jx) < 48) vx = jx / (STEP_MS / 1000)
+        else this.capeLag = 0 // teleport: momentum must not survive (review)
+      }
+      if (pres.facing !== this.capeFacing) {
+        this.capeFacing = pres.facing
+        this.capeLag = 0
+      }
+      // facing mirroring flips the group's x-axis, so lag is authored in FACING
+      // space: positive = trailing behind the motion.
+      const target = Math.max(-0.16, Math.min(0.16, vx * pres.facing * 0.0009))
+      this.capeLag += (target - this.capeLag) * 0.1
       this.renderer.render(solved, s.rt.face(), s.rt.overrides(), {
         flourish: s.rt.flourish(),
         spin: this.rolling && this.airborne && !skinned ? this.spin : 0,
@@ -195,43 +269,19 @@ export class EngineLayer extends Component<EngineLayerProps> {
         lean: this.lean,
         props: (activePose as { props?: never[] } | undefined)?.props,
         skinId: src.id,
-        skinRoot: { x: s.rt.transform.x, y: Math.max(cap.y0, cap.y1) + cap.r },
+        skinRoot,
         facing: s.rt.transform.facing as 1 | -1,
+        phase,
+        offset: { dx: offX, dy: offY },
+        capeLag: this.capeLag,
       })
+      if (reviewHook()?.motion) this.recordMotion(s, solved, skinRoot, src.id)
 
-      // Camera follows Dash while a travel is in flight (throttled ~9 ticks; the
-      // Notebook's CSS cam transition glides between updates) — unless an
-      // AUTHORED camera cue owns the shot (cleared by cue or behavior end).
-      if (this.travelDest != null && !this.camOverride && ++this.camTick % 9 === 0) {
-        this.props.onDashCam?.({ x: s.rt.transform.x, y: s.rt.transform.y })
-      }
-      // Scripted root motion (back-nav hop-to-hole): a render-layer arc, exactly
-      // like the drag's direct transform drive.
-      if (this.scriptMove) {
-        const m = this.scriptMove
-        const k = Math.min(1, (performance.now() - m.t0) / m.dur)
-        const t = s.rt.transform
-        t.x = m.fromX + (m.toX - m.fromX) * k
-        t.y = m.fromY + (m.toY - m.fromY) * k - m.arcH * 4 * k * (1 - k)
-        if (k >= 1) this.scriptMove = null
-      }
       if (this.actorHidden !== this.actorHiddenApplied && this.svgRef.current) {
         this.svgRef.current.style.opacity = this.actorHidden ? '0' : '1'
         this.actorHiddenApplied = this.actorHidden
       }
-      this.drawBubble()
-      // DRAG: while grabbed, the transform follows the cursor (page coords from
-      // the Notebook's look feed) with a light ease; the verlet secondary and
-      // bandana trail it for free — the legacy grab, reborn on physics.
-      if (this.dragging && this.dragMoved && this.look) {
-        const t = s.rt.transform
-        const ease = 0.45
-        const nx = t.x + (this.look.x - t.x) * ease
-        const ny = t.y + (this.look.y - 24 - t.y) * ease
-        if (Math.abs(nx - t.x) + Math.abs(ny - t.y) > 0.8) this.dragMoved = true
-        t.x = nx
-        t.y = ny
-      }
+      this.publishSpeech(skinRoot)
       // Poke hitbox tracks the figure (the wrapper must NOT catch page-wide
       // clicks — review finding: it swallowed the cover's open handler).
       if (this.pokeBox) {
@@ -241,6 +291,66 @@ export class EngineLayer extends Component<EngineLayerProps> {
     }
     this.raf = requestAnimationFrame(frame)
     this.scheduleFidget()
+  }
+
+  /** Q0 motion recorder: one presentation sample per rAF (review-mode only).
+   * The DOM rect read forces layout — acceptable in a review run, never active
+   * for real visitors. Capped so a forgotten recorder can't grow unbounded. */
+  private recordMotion(s: Scene, solved: ReturnType<CharacterRuntime['solved']>, skinRoot: { x: number; y: number }, srcId: string): void {
+    const arr = (window.__dashMotion ??= [])
+    if (arr.length >= 30000) return
+    const t = s.rt.transform
+    const neck = solved.bones.find((b) => b.id === 'neck')
+    const pts = s.rt.accessories[0]?.points() ?? []
+    const tip = pts[pts.length - 1]
+    const rect = this.svgRef.current?.querySelector('[data-dash-renderer]')?.getBoundingClientRect()
+    // The VISIBLE cape (review blocker: the metric sampled the hidden ribbon):
+    // for authored skin capes, capeRoot = the RENDERED knot via the live CTM and
+    // sock = the EXPECTED world socket from the placement math — an independent
+    // DOM measurement that catches real render defects.
+    const probe = this.renderer?.capeProbe() ?? null
+    // Q0 negative control: a displaced cape socket the separation metric must flag.
+    const sockBias = reviewHook()?.force?.['negctl.socket'] ? 6 : 0
+    const sample: MotionSample = {
+      t: performance.now(),
+      tick: this.simTicks,
+      acc: this.acc,
+      rootX: t.x,
+      rootY: t.y,
+      skinX: skinRoot.x,
+      skinY: skinRoot.y,
+      src: srcId,
+      air: this.airborne,
+      sockX: (probe ? probe.x : (neck?.ex ?? NaN)) + sockBias,
+      sockY: probe ? probe.y : (neck?.ey ?? NaN),
+      capeRootX: probe ? this.expectedCapeSocket(skinRoot, srcId)?.x ?? NaN : (pts[0]?.x ?? NaN),
+      capeRootY: probe ? this.expectedCapeSocket(skinRoot, srcId)?.y ?? NaN : (pts[0]?.y ?? NaN),
+      capeTipX: tip?.x ?? NaN,
+      capeTipY: tip?.y ?? NaN,
+      camX: this.lastCam?.x ?? NaN,
+      camY: this.lastCam?.y ?? NaN,
+      scrX: rect ? rect.x + rect.width / 2 : NaN,
+      scrY: rect ? rect.y + rect.height / 2 : NaN,
+    }
+    arr.push(sample)
+  }
+
+  /** Where the authored cape knot SHOULD be in page coords (the same placement
+   * math the renderer applies): skinRoot + scale(104/120·facing, 113/130) about
+   * the (0,55) foot origin. Static-transform cape wrappers (slide/vault) shift
+   * the knot too — this expectation intentionally ignores them, so the CTM
+   * probe comparison measures ONLY unexpected displacement for plain capes and
+   * those poses are excluded from the ≤2px assertion (documented). */
+  private expectedCapeSocket(skinRoot: { x: number; y: number }, srcId: string): { x: number; y: number } | null {
+    const doc = engineSkins.docs.find((d) => d.sources.includes(srcId))
+    if (!doc?.cape) return null
+    const s = this.scene
+    if (!s) return null
+    const facing = s.rt.transform.facing
+    return {
+      x: skinRoot.x + (104 / 120) * facing * doc.cape.socket.x,
+      y: skinRoot.y + (113 / 130) * (doc.cape.socket.y - 55),
+    }
   }
 
   componentDidUpdate(prev: EngineLayerProps): void {
@@ -256,8 +366,11 @@ export class EngineLayer extends Component<EngineLayerProps> {
   }
 
   private teardown(): void {
-    if (this.onDragUp) window.removeEventListener('mouseup', this.onDragUp)
-    if (this.onDragBlur) window.removeEventListener('blur', this.onDragBlur)
+    if (this.onDragUp) window.removeEventListener('pointerup', this.onDragUp)
+    if (this.onDragBlur) {
+      window.removeEventListener('pointercancel', this.onDragBlur)
+      window.removeEventListener('blur', this.onDragBlur)
+    }
     this.onDragUp = null
     this.onDragBlur = null
     this.dragging = false
@@ -270,6 +383,10 @@ export class EngineLayer extends Component<EngineLayerProps> {
     this.actorHidden = false
     this.actorHiddenApplied = false
     this.stagingUntil = 0
+    this.prevSnap = null
+    this.curSnap = null
+    this.capeLag = 0
+    this.bubbleNote = null
     if (this.svgRef.current) this.svgRef.current.style.opacity = '1'
     this.clearTravel()
     for (const off of this.scene?.offs ?? []) off()
@@ -280,8 +397,10 @@ export class EngineLayer extends Component<EngineLayerProps> {
     this.arcWrap?.remove()
     this.arcWrap = null
     this.lean = 0
-    this.bubble?.remove()
-    this.bubble = null
+    if (this.lastSpeech) {
+      this.lastSpeech = null
+      this.props.onSpeech?.(null)
+    }
     this.scene = null
   }
 
@@ -362,7 +481,7 @@ export class EngineLayer extends Component<EngineLayerProps> {
       ctx.events.on('intent:camera', (p) => {
         const c = p as { to?: string; mult?: number; fast?: boolean }
         if (!c.to) {
-          this.camOverride = false
+          this.lastCam = null
           this.props.onDashCam?.(null)
           return
         }
@@ -371,7 +490,7 @@ export class EngineLayer extends Component<EngineLayerProps> {
         const inFlight = this.travelDest != null
         const cx = inFlight ? (rt.transform.x + pt.x) / 2 : pt.x
         const cy = inFlight ? pt.y - 26 : pt.y - 40
-        this.camOverride = true
+        this.lastCam = { x: cx, y: cy }
         this.props.onDashCam?.({ x: cx, y: cy, mult: c.mult, fast: c.fast })
       }),
       ctx.events.on('jump:launch', () => {
@@ -388,7 +507,7 @@ export class EngineLayer extends Component<EngineLayerProps> {
       }),
       ctx.events.on('behavior:complete', () => {
         this.travelDest = null
-        this.camOverride = false
+        this.lastCam = null
         this.props.onDashCam?.(null)
         if (this.pendingHang) {
           this.pendingHang = false
@@ -430,7 +549,6 @@ export class EngineLayer extends Component<EngineLayerProps> {
       arc.appendChild(rg)
       this.arcWrap = arc
     }
-    this.makeBubble(svg)
 
     this.pendingArrival = this.arrivalId(pageIdx, spawnPanel)
 
@@ -511,7 +629,11 @@ export class EngineLayer extends Component<EngineLayerProps> {
       rt.transform.facing = 1
       this.travelDest = 0
       this.props.sfx('scrib')
-      rt.runBehavior(walkDoc, { travel: { from: `panel:${pageIdx}:0`, to: `panel:${pageIdx}:0` } })
+      rt.runBehavior(walkDoc, {
+        travel: { from: `panel:${pageIdx}:0`, to: `panel:${pageIdx}:0` },
+        // legacy entrance pace (Q4): the same ordinary-walk duration bounds.
+        defaultSpeed: entryDist / Math.min(2.2, Math.max(0.7, entryDist / 190)),
+      })
       return
     }
     this.chainArrival()
@@ -573,7 +695,30 @@ export class EngineLayer extends Component<EngineLayerProps> {
     const pn = this.docV2.pages[pageIdx]?.panels[panelIdx]
     this.pendingHang = doc.id === 'builtin:hop' && !!pn && pn.anchor.dy <= 6 && chance('hop.hang', 0.25)
 
-    s.rt.runBehavior(doc, { travel: { from: fromId, to: toId } })
+    // Q5 — AUTHORED camera: one establishing shot per travel framing departure
+    // AND destination before root motion begins (the comic-panel staging the
+    // review recommends — Dash stays visible without a follow chase). Cue shots
+    // (vault 1.15× etc.) override mid-flight; completion releases to the
+    // destination panel focus. Short in-panel trips skip the shot entirely.
+    if (from && to) {
+      const span = Math.abs(to.x - from.x)
+      if (span >= 200 && pn) {
+        const mult = Math.max(0.55, Math.min(1, (pn.w + 60) / (span + 140)))
+        this.lastCam = { x: (from.x + to.x) / 2, y: (from.y + to.y) / 2 - 26 }
+        this.props.onDashCam?.({ ...this.lastCam, mult, fast: true })
+      }
+    }
+
+    // Q4 — the legacy ordinary-walk timing policy: duration = clamp(dist/190,
+    // 0.7s, 2.2s), expressed as a per-run default ground speed (authored step
+    // speeds always win, so approaches/crossings keep their legacy classes).
+    let defaultSpeed: number | undefined
+    if (doc.id === 'builtin:walk' && from && to) {
+      const dist = Math.hypot(to.x - from.x, to.y - from.y)
+      if (dist > 1) defaultSpeed = dist / Math.min(2.2, Math.max(0.7, dist / 190))
+    }
+
+    s.rt.runBehavior(doc, { travel: { from: fromId, to: toId }, defaultSpeed })
   }
 
   /** Legacy poofTo: smoke → vanish (150) → TELEPORT under cover (520) → smoke at
@@ -655,7 +800,7 @@ export class EngineLayer extends Component<EngineLayerProps> {
     if (!s) return
     const dest = this.travelDest
     this.travelDest = null
-    this.camOverride = false
+    this.lastCam = null
     this.props.onDashCam?.(null)
     if (dest != null) {
       const spot = this.panelSpot(s.pageIdx, dest)
@@ -856,7 +1001,8 @@ export class EngineLayer extends Component<EngineLayerProps> {
       this.endDrag()
     }
     this.onDragBlur = () => this.endDrag()
-    window.addEventListener('mouseup', this.onDragUp)
+    window.addEventListener('pointerup', this.onDragUp)
+    window.addEventListener('pointercancel', this.onDragBlur)
     window.addEventListener('blur', this.onDragBlur)
   }
 
@@ -888,7 +1034,7 @@ export class EngineLayer extends Component<EngineLayerProps> {
     this.rolling = false
     this.airborne = false
     this.spin = 0
-    this.camOverride = false
+    this.lastCam = null
     this.clearArc()
     this.props.onDashCam?.(null)
   }
@@ -909,6 +1055,11 @@ export class EngineLayer extends Component<EngineLayerProps> {
   }
 
   private static SKINNED = new Set(engineSkins.docs.flatMap((d) => d.sources))
+
+  /** Source id → authored stride (px) for phase-driven skins (Q1). */
+  private static STRIDES = new Map(
+    engineSkins.docs.filter((d) => d.strideLen !== undefined).flatMap((d) => d.sources.map((s) => [s, d.strideLen as number] as const)),
+  )
 
   private actPose: string | null = null
 
@@ -932,8 +1083,11 @@ export class EngineLayer extends Component<EngineLayerProps> {
   }
 
   private endDrag(): void {
-    if (this.onDragUp) window.removeEventListener('mouseup', this.onDragUp)
-    if (this.onDragBlur) window.removeEventListener('blur', this.onDragBlur)
+    if (this.onDragUp) window.removeEventListener('pointerup', this.onDragUp)
+    if (this.onDragBlur) {
+      window.removeEventListener('pointercancel', this.onDragBlur)
+      window.removeEventListener('blur', this.onDragBlur)
+    }
     this.onDragUp = null
     this.onDragBlur = null
     this.dragStart = null
@@ -1245,29 +1399,14 @@ export class EngineLayer extends Component<EngineLayerProps> {
     return candidates.find((id) => id === want || id === `builtin:${want}` || id === `act:${want}`) ?? null
   }
 
-  private makeBubble(svg: SVGSVGElement): void {
-    const NS = 'http://www.w3.org/2000/svg'
-    const g = document.createElementNS(NS, 'g') as SVGGElement
-    const rect = document.createElementNS(NS, 'rect')
-    rect.setAttribute('rx', '8')
-    rect.setAttribute('fill', '#fffdf6')
-    rect.setAttribute('stroke', '#1a1a1a')
-    rect.setAttribute('stroke-width', '2.5')
-    const text = document.createElementNS(NS, 'text')
-    text.setAttribute('font-size', '15')
-    text.setAttribute('font-weight', '700')
-    text.setAttribute('font-family', "'Patrick Hand', 'Comic Sans MS', cursive")
-    g.appendChild(rect)
-    g.appendChild(text)
-    g.style.display = 'none'
-    svg.appendChild(g)
-    this.bubble = g
-  }
+  /** Q6 — engine speech rides the SHARED legacy bubble. Publishes {text, x, y}
+   * to the shell only on change (text or >4px drift), so React isn't churned
+   * per frame; the shell renders the same ReactBubble legacy uses. */
+  private lastSpeech: { text: string; x: number; y: number } | null = null
 
-  private drawBubble(): void {
+  private publishSpeech(skinRoot: { x: number; y: number }): void {
     const s = this.scene
-    const b = this.bubble
-    if (!s || !b) return
+    if (!s || !this.props.onSpeech) return
     let sp = s.rt.speech()
     // Adapter quips (trip 'whoa—', hang 'hup—') fill in when the engine bubble
     // is silent; a real behavior say always wins.
@@ -1275,24 +1414,22 @@ export class EngineLayer extends Component<EngineLayerProps> {
       if (performance.now() < this.bubbleNote.until) sp = { text: this.bubbleNote.text, remainingMs: 1 }
       else this.bubbleNote = null
     }
-    if (!sp) {
-      b.style.display = 'none'
+    if (!sp || this.actorHidden) {
+      if (this.lastSpeech) {
+        this.lastSpeech = null
+        this.props.onSpeech(null)
+      }
       return
     }
-    const head = s.rt.solved().bones.find((bn) => bn.id === 'head')
-    if (!head) return
-    const tx = head.ex + 18
-    const ty = head.ey - 40
-    const text = b.children[1] as SVGTextElement
-    text.textContent = sp.text
-    text.setAttribute('x', String(tx + 10))
-    text.setAttribute('y', String(ty + 19))
-    const rect = b.children[0] as SVGRectElement
-    rect.setAttribute('x', String(tx))
-    rect.setAttribute('y', String(ty))
-    rect.setAttribute('width', String(sp.text.length * 8.2 + 20))
-    rect.setAttribute('height', '28')
-    b.style.display = ''
+    // Anchored to the INTERPOLATED skin ground-centre with the legacy offsets
+    // (left = centre+14, top = feet−119) — the raw rig head stepped ~6px under
+    // the change-throttle while walking (review). 2px threshold keeps churn low.
+    const next = { text: sp.text, x: skinRoot.x + 14, y: skinRoot.y - 119 }
+    const prev = this.lastSpeech
+    if (!prev || prev.text !== next.text || Math.abs(prev.x - next.x) > 2 || Math.abs(prev.y - next.y) > 2) {
+      this.lastSpeech = next
+      this.props.onSpeech(next)
+    }
   }
 
   render(): ReactNode {
@@ -1308,13 +1445,13 @@ export class EngineLayer extends Component<EngineLayerProps> {
         <div
           ref={(r) => { this.pokeBox = r }}
           data-dash-poke
-          onMouseDown={(e) => { e.preventDefault(); this.beginDrag(e) }}
+          onPointerDown={(e) => { e.preventDefault(); this.beginDrag(e) }}
           onClick={() => {
             if (this.dragMoved) { this.dragMoved = false; return } // a drag, not a poke
             this.props.onPoke?.()
             this.poke()
           }}
-          style={{ position: 'absolute', left: 0, top: 0, width: 92, height: 130, pointerEvents: 'auto', cursor: 'grab' }}
+          style={{ position: 'absolute', left: 0, top: 0, width: 92, height: 130, pointerEvents: 'auto', cursor: 'grab', touchAction: 'none' }}
         />
       </div>
     )

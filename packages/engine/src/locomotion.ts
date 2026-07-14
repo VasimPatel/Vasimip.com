@@ -139,6 +139,11 @@ export interface LocomotionState {
    * multi-leg route too, so it must survive a between-legs snapshot. Optional
    * for pre-parity snapshots. */
   speedOverride?: number | null
+  /** Q1 presentation: |dx| within the current ground leg (walk-phase source).
+   * Optional for pre-quality snapshots. */
+  groundDistance?: number
+  /** Q4 adapter timing policy (per-run default ground speed). Optional. */
+  defaultSpeed?: number | null
   // jump
   jPhase: JumpPhase
   jVx: number
@@ -193,6 +198,10 @@ export interface Locomotion {
   begin(intent: Intent & { verb: MovementVerb }): void
   /** Bind/unbind the from/to panels a travel run resolves travel:* refs against. */
   setTravelContext(ctx: { from?: string; to?: string } | null): void
+  /** Per-run DEFAULT ground speed (px/s) — the adapter's timing policy (legacy
+   * ordinary-walk duration bounds). An authored step {speed} always wins.
+   * Cleared by reset(), exactly like the travel context. */
+  setDefaultSpeed(v: number | null): void
   /** Runs BEFORE blender.tick(): advance gait/steer, set the blender base source,
    * commit ground/fly motion + collision. Movement that needs markers waits. */
   preBlend(): void
@@ -202,6 +211,12 @@ export interface Locomotion {
   readonly status: LocoStatus
   readonly mode: LocoMode
   reset(): void
+  /** Presentation contract (quality Q1): what the VISIBLE figure should anchor
+   * to. `supportY` is the ground line while ground-moving (never the bobbing
+   * hip); `groundDistance` accumulates |dx| within the current ground leg
+   * (resets at each ground-leg start — the walk skin's contact-frame start) so
+   * a renderer can derive a distance-locked gait phase. */
+  presentation(): { supportY: number | null; groundDistance: number; groundMoving: boolean }
   getState(): LocomotionState
   setState(s: LocomotionState): void
 }
@@ -359,6 +374,11 @@ export function createLocomotion(deps: LocomotionDeps): Locomotion {
   let gSpeed = 0
   let gDir: 1 | -1 = 1
   let speedOverride: number | null = null
+  /** Per-run default ground speed (adapter timing policy; step speed wins). */
+  let defaultSpeed: number | null = null
+  /** |dx| accumulated within the CURRENT ground leg (quality Q1 — the renderer
+   * divides by the skin's authored stride for a distance-locked walk phase). */
+  let groundDistance = 0
   let gFloorY = 0
   let gHipHeight = deps.hipHeight
   let gElapsedMs = 0
@@ -695,8 +715,9 @@ export function createLocomotion(deps: LocomotionDeps): Locomotion {
     gHipHeight = deps.hipHeight
     gStartX = t.x
     gDir = to.x >= t.x ? 1 : -1
-    gSpeed = (speedOverride ?? walkSpeed) * gDir
+    gSpeed = (speedOverride ?? defaultSpeed ?? walkSpeed) * gDir
     gElapsedMs = 0
+    groundDistance = 0 // each ground leg starts on a contact frame (Q1 policy)
     t.facing = gDir
     gait = createGait(rig, character, {
       floorY: () => gFloorY,
@@ -998,6 +1019,7 @@ export function createLocomotion(deps: LocomotionDeps): Locomotion {
     t.x = nextX
     t.y = nextY
     t.rot = frame.pose.root.rot
+    groundDistance += Math.abs(dx)
     // arrival: reached or passed the goal x. The goal is a SURFACE point (feet);
     // the transform is the HIP, which stands gHipHeight above the walking line —
     // snapping the hip to the surface would sink the character into the floor.
@@ -1142,6 +1164,8 @@ export function createLocomotion(deps: LocomotionDeps): Locomotion {
   function reset(): void {
     travelCtx = null // stale context must never leak into a later behavior (review)
     speedOverride = null
+    defaultSpeed = null
+    groundDistance = 0
     mode = 'idle'
     status = 'idle'
     verb = null
@@ -1178,6 +1202,8 @@ export function createLocomotion(deps: LocomotionDeps): Locomotion {
       gHipHeight,
       gElapsedMs,
       ...(speedOverride !== null ? { speedOverride } : {}),
+      ...(groundDistance !== 0 ? { groundDistance } : {}),
+      ...(defaultSpeed !== null ? { defaultSpeed } : {}),
       jPhase,
       jVx,
       jVy,
@@ -1211,6 +1237,8 @@ export function createLocomotion(deps: LocomotionDeps): Locomotion {
     gHipHeight = s.gHipHeight
     gElapsedMs = s.gElapsedMs
     speedOverride = s.speedOverride ?? null
+    groundDistance = s.groundDistance ?? 0
+    defaultSpeed = s.defaultSpeed ?? null
     jPhase = s.jPhase
     jVx = s.jVx
     jVy = s.jVy
@@ -1248,6 +1276,9 @@ export function createLocomotion(deps: LocomotionDeps): Locomotion {
     setTravelContext(ctx) {
       travelCtx = ctx ? { ...ctx } : null
     },
+    setDefaultSpeed(v) {
+      defaultSpeed = v
+    },
     preBlend,
     postBlend,
     get status() {
@@ -1257,6 +1288,13 @@ export function createLocomotion(deps: LocomotionDeps): Locomotion {
       return mode
     },
     reset,
+    presentation() {
+      return {
+        supportY: mode === 'ground' ? gFloorY : null,
+        groundDistance,
+        groundMoving: mode === 'ground' && status === 'running',
+      }
+    },
     getState,
     setState,
   }

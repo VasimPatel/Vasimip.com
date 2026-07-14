@@ -101,6 +101,20 @@ function parseKeyframes(css) {
   return table
 }
 
+// A per-USE anim reference (review: keyframe timing differs per pose — Sneeze's
+// capewalk runs 0.5s where Walk's runs 0.8s; the shared table keeps FRAMES, the
+// use site keeps its own duration/ease/iterations/fill).
+function animRef(a) {
+  return {
+    name: a.name,
+    ...(a.delaySec !== undefined ? { delaySec: a.delaySec } : {}),
+    ...(a.duration !== undefined ? { durationSec: a.duration } : {}),
+    ...(a.ease ? { ease: a.ease } : {}),
+    ...(a.iterations !== undefined ? { iterations: a.iterations } : {}),
+    ...(a.fill ? { fill: a.fill } : {}),
+  }
+}
+
 // animation shorthand: "name 2.6s cubic-bezier(.3,.05,.35,1) infinite" etc.
 function parseAnimShorthand(str) {
   const cleaned = str.trim()
@@ -154,10 +168,7 @@ function parseJsx(tsx, warn) {
       const style = attrs.__style ?? {}
       if (style.animation) {
         const a = parseAnimShorthand(style.animation)
-        if (a) {
-          grp.anim = { name: a.name }
-          if (a.delaySec !== undefined) grp.anim.delaySec = a.delaySec
-        }
+        if (a) grp.anim = animRef(a)
       }
       if (style.animationDelay) {
         const d = parseFloat(style.animationDelay)
@@ -173,7 +184,17 @@ function parseJsx(tsx, warn) {
       continue
     }
     const el = elementFrom(tag, attrs, warn)
-    if (el) stack[stack.length - 1].children.push(el)
+    if (el) {
+      // an animation directly on a leaf (the legacy cape path) — carried as
+      // markers; prune() turns the cape into its dedicated group and a final
+      // scrub strips markers everywhere else.
+      if (attrs.__style?.animation) {
+        const a = parseAnimShorthand(attrs.__style.animation)
+        if (a) el.__anim = animRef(a)
+      }
+      if (attrs.__style?.transformOrigin) el.__origin = attrs.__style.transformOrigin
+      stack[stack.length - 1].children.push(el)
+    }
   }
   return rootChildren
 }
@@ -242,13 +263,34 @@ function elementFrom(tag, attrs, warn) {
   return null
 }
 
-// drop the cape (engine verlet cape owns it) — the pink fill is its signature —
-// plus skip placeholders and groups left empty by skipped parametric children.
-function prune(elements, warn) {
+// Extract the cape (quality Q3): the pink path is the legacy authored cape —
+// it becomes the skin's dedicated `cape` group (painted behind the body, knot
+// socket = the path's first point) instead of being dropped for a physics
+// ribbon. Placeholders and emptied parametric groups still prune away.
+function prune(elements, warn, capeOut, ancestors = []) {
   const out = []
   for (const e of elements) {
     if (e.kind === 'path' && e.fill === '#ff5ca8') {
-      warn('dropped cape path (engine verlet cape)')
+      const m = e.d.match(/M\s*(-?[\d.]+)\s*,\s*(-?[\d.]+)/)
+      const socket = m ? { x: parseFloat(m[1]), y: parseFloat(m[2]) } : { x: -3, y: -14 }
+      // the cape's own animation rides it (capeidle/capewalk with the knot origin)
+      const el = { ...e }
+      const anim = el.__anim
+      delete el.__anim
+      delete el.__origin
+      let wrapped = anim
+        ? [{ kind: 'group', anim, origin: el0Origin(e), children: [el] }]
+        : [el]
+      // Ancestor transforms must survive the lift (review BLOCKER: Slide's
+      // translate(2,24) and Vault/Wallrun whole-pose rotations position the
+      // cape too) — rebuild the wrapper chain outermost-first.
+      for (let i = ancestors.length - 1; i >= 0; i--) {
+        const a = ancestors[i]
+        if (!a.transform && !a.origin) continue
+        wrapped = [{ kind: 'group', ...(a.transform ? { transform: a.transform } : {}), ...(a.origin ? { origin: a.origin } : {}), children: wrapped }]
+      }
+      capeOut.push({ socket, elements: wrapped })
+      warn('cape → skin.cape group')
       continue
     }
     if (e.kind === 'group') {
@@ -256,7 +298,7 @@ function prune(elements, warn) {
         warn('dropped skipped parametric group')
         continue
       }
-      e.children = prune(e.children, warn)
+      e.children = prune(e.children, warn, capeOut, [...ancestors, { transform: e.transform, origin: e.origin }])
       if (e.children.length === 0) {
         warn(`dropped empty group${e.anim ? ` (${e.anim.name})` : ''}`)
         continue
@@ -267,9 +309,17 @@ function prune(elements, warn) {
   return out
 }
 
+function el0Origin(e) {
+  return e.__origin ?? '100% 0%'
+}
+
 // Per-pose hand fixups: the parametric-face poses (legacy Idle/Spray track the
 // cursor with their eyes) hand their face to the ENGINE face (pupil dilation,
 // blink, look-at, pose-face brows/mouth); their baked smirk/eyes drop here.
+// Authored stride distances (quality Q1): the walk drawing covers this many px
+// of ground per 0.8s cycle at the legacy 190 px/s pace (190 / 1.25 cycles/s).
+const STRIDES = { Walk: 152 }
+
 const FIXUPS = {
   Idle: {
     face: 'parametric',
@@ -330,8 +380,17 @@ function collectAnims(skin) {
     e.children.forEach(visit)
   }
   skin.elements.forEach(visit)
+  skin.cape?.elements.forEach(visit)
   if (skin.groupAnim) names.add(skin.groupAnim.name)
   return names
+}
+
+/** Strip parser-internal __ markers (schema rejects unknown keys). */
+function scrub(e) {
+  delete e.__anim
+  delete e.__origin
+  if (e.kind === 'group') e.children.forEach(scrub)
+  return e
 }
 
 // ── main ─────────────────────────────────────────────────────────────────────
@@ -374,7 +433,8 @@ for (const file of files) {
     }
     elements = top.anim ? top.children : elements0
   }
-  elements = prune(elements, warn)
+  const capeOut = []
+  elements = prune(elements, warn, capeOut)
   if (elements.length === 0) {
     console.log(`- ${base}: EMPTY after parse (parametric?) — hand-author this one. warns: ${warns.join('; ')}`)
     continue
@@ -389,6 +449,12 @@ for (const file of files) {
     elements,
   }
   applyFixups(base, skin, warn)
+  if (capeOut.length > 0) {
+    skin.cape = { socket: capeOut[0].socket, elements: capeOut[0].elements.map(scrub) }
+    if (capeOut.length > 1) warn('multiple cape paths — kept the first')
+  }
+  skin.elements.forEach(scrub)
+  if (STRIDES[base]) skin.strideLen = STRIDES[base]
   // head anchor AFTER fixups (Idle's head is re-injected there)
   const head = findHead(skin.elements)
   if (head) skin.head = head
@@ -409,7 +475,12 @@ for (const file of files) {
   console.log(`✓ ${base} → skins/${sources[0]}.json (${JSON.stringify(skin).length}b)${warns.length ? '  ⚠ ' + warns.join('; ') : ''}`)
 }
 
-// the shared keyframes table: only the names skins actually use
+// the shared keyframes table: only the names skins actually use. A FILTERED run
+// (pose args) must not clobber the full table — skip the write entirely.
+if (only.length > 0) {
+  console.log(`\n${skinsWritten} skins updated (filtered run — keyframes.json left untouched)`)
+  process.exit(0)
+}
 const keyframes = {}
 for (const name of [...usedAnims].sort()) {
   const frames = rawFrames[name]

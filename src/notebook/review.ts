@@ -24,6 +24,45 @@ export interface ReviewHook {
   force?: Record<string, string | number | boolean>
   /** Normalized timeline: both routes push { t, route, kind, data } entries. */
   log?: Array<{ t: number; route: 'engine' | 'legacy'; kind: string; data?: unknown }>
+  /** Motion recorder (Q0): when true, the engine layer records a per-rAF motion
+   * sample into window.__dashMotion (positions, phase, cape socket, camera). */
+  motion?: boolean
+}
+
+export interface MotionSample {
+  /** performance.now() at the sample. */
+  t: number
+  /** Simulation tick count and the accumulator remainder (0..STEP_MS). */
+  tick: number
+  acc: number
+  /** Physical root (transform) and the rendered skin ground-centre. */
+  rootX: number
+  rootY: number
+  skinX: number
+  skinY: number
+  /** Active source id (pose/clip) driving the visible figure. */
+  src: string
+  /** Airborne (jump ballistics own the root — bob/speed metrics exclude these). */
+  air: boolean
+  /** Neck socket (solved bone end) vs the cape root and tip (verlet points). */
+  sockX: number
+  sockY: number
+  capeRootX: number
+  capeRootY: number
+  capeTipX: number
+  capeTipY: number
+  /** Last camera target sent to the shell (NaN when none). */
+  camX: number
+  camY: number
+  /** Actor's screen-space rect centre (post-camera transform). */
+  scrX: number
+  scrY: number
+}
+
+declare global {
+  interface Window {
+    __dashMotion?: MotionSample[]
+  }
 }
 
 declare global {

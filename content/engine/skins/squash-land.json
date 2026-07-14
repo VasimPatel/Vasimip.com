@@ -97,6 +97,22 @@
       ]
     }
   ],
+  "cape": {
+    "socket": {
+      "x": 2,
+      "y": -8
+    },
+    "elements": [
+      {
+        "kind": "path",
+        "d": "M2,-8 L-28,0 L-21,6 L-33,20 L-6,14 Z",
+        "fill": "#ff5ca8",
+        "stroke": "#1a1a1a",
+        "strokeWidth": 3,
+        "opacity": 0.55
+      }
+    ]
+  },
   "head": {
     "cx": 8,
     "cy": -4,
