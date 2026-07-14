@@ -70,6 +70,8 @@ export interface State {
   holeY: number
   busy: boolean
   busyFlip: boolean
+  /** engine surf flip: the EngineLayer stays visible so Dash rides the turn. */
+  surfFlip: boolean
   flipRange: [number, number] | null
   auto: boolean
   sound: boolean
@@ -139,7 +141,7 @@ export default class Notebook extends React.Component<NotebookProps, State> {
     dragging: false, fidget: null, pokeAnim: 'hop', hopDur: .92,
     smokeOn: false, smokeX: 0, smokeY: 0, bombFlyOn: false, bombX: 0, bombY: 0,
     boomOn: false, holeOn: false, holeX: 0, holeY: 0,
-    busy: false, busyFlip: false, flipRange: null,
+    busy: false, busyFlip: false, surfFlip: false, flipRange: null,
     auto: false, sound: true, flags: {},
     poking: false, react: null, mx: 640, my: 400,
     camo: null, engineSay: null, shakeOn: false, crackOn: false, crackX: 0, crackY: 0,
@@ -333,7 +335,7 @@ export default class Notebook extends React.Component<NotebookProps, State> {
     // (skillsRevealed etc.) per keystroke would make gated art flicker and replay.
     const safe: Partial<State> = {
       page, panel,
-      busy: false, busyFlip: false, dragging: false, poking: false, camo: null,
+      busy: false, busyFlip: false, surfFlip: false, dragging: false, poking: false, camo: null,
       smokeOn: false, bombFlyOn: false, boomOn: false, holeOn: false, crackOn: false,
       shakeOn: false, pageJit: false, pageShove: 0, dtrans: 'none', react: null,
       windup: false, hopping: false, diving: false, popping: false, vaulting: false,
@@ -819,12 +821,17 @@ export default class Notebook extends React.Component<NotebookProps, State> {
     if (s.busy || s.dragging || p === s.page) return
     this.sfx('flip')
     const lo = Math.min(s.page, p), hi = Math.max(s.page, p) - 1
+    let surfFlip = false
     if (p === s.page + 1 && s.page > 0 && chance('flip.surf', .38)) {
       // ONE surf roll for both routes (review: the engine branch falling through
       // rolled a second legacy chance, inflating surf probability and running
       // hidden legacy choreography in admin previews).
       if (this.engineMode) {
-        this.engineRef?.surfNext() // the layer stages the ride-in after the flip
+        // The layer stages the whole legacy ride timeline from the flip start;
+        // surfFlip keeps it VISIBLE so Dash flies over the turning page.
+        this.engineRef?.surfNext()
+        this.sfx('whoosh')
+        surfFlip = true
       } else if (s.dop === 1) {
       const a = this.anch(p, 0)
       this.sfx('whoosh')
@@ -841,9 +848,9 @@ export default class Notebook extends React.Component<NotebookProps, State> {
       return
       }
     }
-    this.setState({ busy: true, busyFlip: true, flipRange: [lo, hi], page: p, panel: landPanel, pose: 'hidden', dop: 0 })
+    this.setState({ busy: true, busyFlip: true, surfFlip, flipRange: [lo, hi], page: p, panel: landPanel, pose: 'hidden', dop: 0 })
     this.to(820, () => {
-      this.setState({ busyFlip: false })
+      this.setState({ busyFlip: false, surfFlip: false })
       if (p === 0) this.setState({ busy: false })
       else if (this.engineMode) {
         // The engine layer stages its own entrance/landing (and keeps its OWN
@@ -1200,7 +1207,7 @@ export default class Notebook extends React.Component<NotebookProps, State> {
 
             {this.engineMode ? (
               this.state.page > 0 && (
-                <div style={{ position: 'absolute', inset: 0, zIndex: 60, pointerEvents: 'none', visibility: this.state.busyFlip ? 'hidden' : 'visible' }}>
+                <div style={{ position: 'absolute', inset: 0, zIndex: 60, pointerEvents: 'none', visibility: this.state.busyFlip && !this.state.surfFlip ? 'hidden' : 'visible' }}>
                   <EngineLayer
                     ref={(r) => { this.engineRef = r }}
                     doc={buildEngineDoc(this.doc)}

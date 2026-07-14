@@ -116,17 +116,29 @@ export class EngineLayer extends Component<EngineLayerProps> {
   private fidgetTimer = 0
   /** Smoothed cursor-lean (rad) — the legacy .22s ease-out transition. */
   private lean = 0
-  /** Scripted root motion (back-nav hop-to-hole) — render-layer, like drag. */
-  private scriptMove: { fromX: number; fromY: number; toX: number; toY: number; t0: number; dur: number; arcH: number } | null = null
+  /** Scripted root motion (back-nav hop-to-hole) — render-layer, like drag.
+   * `ease` shapes k (surf ride/drop use the legacy flipTo easings); default linear. */
+  private scriptMove: {
+    fromX: number
+    fromY: number
+    toX: number
+    toY: number
+    t0: number
+    dur: number
+    arcH: number
+    ease?: (k: number) => number
+  } | null = null
   /** Actor visibility (back-nav dive/poof vanish). */
   private actorHidden = false
   private actorHiddenApplied = false
   /** The NEXT enterPage's staging (back-nav landings replace the entrance stroll). */
-  private pendingEntrance: { kind: 'bombPop' | 'poofIn' | 'surfIn'; panel: number } | null = null
+  private pendingEntrance: { kind: 'bombPop' | 'poofIn' | 'surfIn'; panel: number; fromX?: number; fromY?: number } | null = null
 
-  /** The next forward flip rides in surfing (legacy 38% page-surf variant). */
+  /** The next forward flip rides in surfing (legacy 38% page-surf variant).
+   * Captures the CURRENT position — the ride glides from it to the new anchor. */
   surfNext(): void {
-    this.pendingEntrance = { kind: 'surfIn', panel: 0 }
+    const t = this.scene?.rt.transform
+    this.pendingEntrance = { kind: 'surfIn', panel: 0, fromX: t?.x, fromY: t?.y }
   }
   /** Back-nav timeline timers (cancellable as a set). */
   private backNavTimers: number[] = []
@@ -170,11 +182,12 @@ export class EngineLayer extends Component<EngineLayerProps> {
       // the snapshots taken below now include them coherently.
       if (this.scriptMove) {
         const m = this.scriptMove
-        const k = Math.min(1, (performance.now() - m.t0) / m.dur)
+        const kRaw = Math.min(1, (performance.now() - m.t0) / m.dur)
+        const k = m.ease ? m.ease(kRaw) : kRaw
         const t = s.rt.transform
         t.x = m.fromX + (m.toX - m.fromX) * k
         t.y = m.fromY + (m.toY - m.fromY) * k - m.arcH * 4 * k * (1 - k)
-        if (k >= 1) this.scriptMove = null
+        if (kRaw >= 1) this.scriptMove = null
       }
       if (this.dragging && this.dragMoved && this.look) {
         const t = s.rt.transform
@@ -578,27 +591,38 @@ export class EngineLayer extends Component<EngineLayerProps> {
       return
     }
     if (pe?.kind === 'surfIn') {
-      // Legacy page-surf: Dash rides the flip in, hangs above the anchor in the
-      // surf art, then drops with a tuck and lands (legacy 880/1240/1780 beats,
-      // re-based to the flip's end — the engine actor shows post-busyFlip).
-      this.stagingUntil = performance.now() + 1000
-      const t0 = rt.transform
-      t0.y -= 96
+      // Legacy page-surf (the owner's "flying page to page"): Dash RIDES the flip.
+      // The Notebook keeps this layer VISIBLE through a surf flip (surfFlip), so
+      // the whole legacy timeline plays on screen, beats from the flip start:
+      // glide in surf art from the OLD page's position to a hover 96px above the
+      // new anchor (0–780ms, over the turning page), tuck-drop at 880 (340ms),
+      // squash-land at 1240, arrival pose at 1780 — flipTo's exact choreography.
+      this.stagingUntil = performance.now() + 1800
+      const t = rt.transform
+      const fromX = pe.fromX ?? spot.x - 240
+      const fromY = pe.fromY ?? spot.y - 96
+      t.x = fromX
+      t.y = fromY
+      t.facing = 1
       rt.act('surf', { holdMs: 'persist' })
+      // legacy flipTo easings: ride cubic-bezier(.5,.08,.28,1), drop (.55,.05,.6,1)
+      // — both read as smoothstep at this scale.
+      const smooth = (k: number): number => k * k * (3 - 2 * k)
+      this.scriptMove = { fromX, fromY, toX: spot.x, toY: spot.y - 96, t0: performance.now(), dur: 780, arcH: 0, ease: smooth }
       const at = (ms: number, fn: () => void): void => {
         this.backNavTimers.push(window.setTimeout(fn, ms))
       }
-      at(60, () => {
+      at(880, () => {
         this.props.sfx('hop')
         rt.act('jump-tuck', { holdMs: 400 })
-        this.scriptMove = { fromX: t0.x, fromY: t0.y, toX: t0.x, toY: t0.y + 96, t0: performance.now(), dur: 340, arcH: 0 }
+        this.scriptMove = { fromX: spot.x, fromY: spot.y - 96, toX: spot.x, toY: spot.y, t0: performance.now(), dur: 340, arcH: 0, ease: smooth }
       })
-      at(420, () => {
+      at(1240, () => {
         rt.clearAct()
-        rt.runOneShot('__surf:land', [{ verb: 'strikePose', ref: 'squash-land', holdMs: 280 }])
+        rt.runOneShot('__surf:land', [{ verb: 'strikePose', ref: 'squash-land', holdMs: 300 }])
         this.props.sfx('fx:shake')
       })
-      at(960, () => this.chainArrival())
+      at(1780, () => this.chainArrival())
       return
     }
     if (pe?.kind === 'poofIn') {
