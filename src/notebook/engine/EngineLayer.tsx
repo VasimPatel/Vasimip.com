@@ -170,6 +170,10 @@ export class EngineLayer extends Component<EngineLayerProps> {
   /** The running travel's behavior id — recovery picks its shape by verb (a
    * failed hop/roll re-plays the legacy hop ARC; everything else poofs). */
   private travelKind: string | null = null
+  /** Approach-only copies of staged-crossing docs, keyed by the SOURCE doc id.
+   * Cached so re-runs pass the registry's reference-stability contract; the
+   * copy carries its own '#approach' id — the full doc is already registered. */
+  private approachDocs = new Map<string, BehaviorDoc>()
   /** Adapter speech (trip 'whoa—', hang 'hup—') — shown when the engine bubble
    * is otherwise silent; a real say wins. */
   private bubbleNote: { text: string; until: number } | null = null
@@ -404,6 +408,7 @@ export class EngineLayer extends Component<EngineLayerProps> {
     for (const t of this.backNavTimers) window.clearTimeout(t)
     this.backNavTimers = []
     this.scriptMove = null
+    this.approachDocs.clear() // an admin doc-swap must not serve stale approach copies
     this.actorHidden = false
     this.actorHiddenApplied = false
     this.stagingUntil = 0
@@ -728,6 +733,26 @@ export class EngineLayer extends Component<EngineLayerProps> {
     const stageKind = EngineLayer.STAGED_CROSSINGS[doc.id]
     this.pendingStage = stageKind ? { kind: stageKind, dest: panelIdx } : null
     this.travelKind = doc.id
+    // Staged verbs run an APPROACH-ONLY copy: the content doc keeps its full
+    // crossing so HEADLESS consumers still travel truthfully (codex P2); the
+    // cut falls at the first step referencing the DESTINATION (travel:to…),
+    // where the adapter's legacy crossing choreography takes over.
+    let runDoc = doc
+    if (stageKind) {
+      const cached = this.approachDocs.get(doc.id)
+      if (cached) {
+        runDoc = cached
+      } else {
+        const cut = doc.steps.findIndex((st) => {
+          const ref = (st as { target?: unknown }).target ?? (st as { to?: unknown }).to
+          return typeof ref === 'string' && ref.startsWith('travel:to')
+        })
+        if (cut >= 0) {
+          runDoc = { ...doc, id: `${doc.id}#approach`, steps: doc.steps.slice(0, cut) }
+          this.approachDocs.set(doc.id, runDoc)
+        }
+      }
+    }
     this.travelFrom = this.currentPanel
     this.pendingArrival = this.arrivalId(pageIdx, panelIdx)
     this.currentPanel = panelIdx
@@ -781,7 +806,7 @@ export class EngineLayer extends Component<EngineLayerProps> {
       if (dist > 1) defaultSpeed = dist / Math.min(2.2, Math.max(0.7, dist / 190))
     }
 
-    s.rt.runBehavior(doc, { travel: { from: fromId, to: toId }, defaultSpeed })
+    s.rt.runBehavior(runDoc, { travel: { from: fromId, to: toId }, defaultSpeed })
   }
 
   /** Legacy poofTo: smoke → vanish (150) → TELEPORT under cover (520) → smoke at
@@ -1145,7 +1170,6 @@ export class EngineLayer extends Component<EngineLayerProps> {
     const at = (ms: number, fn: () => void): void => {
       this.backNavTimers.push(window.setTimeout(fn, ms))
     }
-    this.props.sfx('scrib')
     t.facing = spot.x >= fromX ? 1 : -1
     s.rt.act('jump-tuck', { holdMs: 'persist' })
     this.scriptMove = { fromX, fromY, toX: spot.x, toY: spot.y + rootDy, t0: performance.now(), dur, arcH: 24, ease: smooth }
@@ -1421,6 +1445,17 @@ export class EngineLayer extends Component<EngineLayerProps> {
     }
     this.dragMoved = true
     this.clearTravel()
+    // Cancel staged choreography outright — the grab owns the figure now
+    // (codex P1: a pointer held through an approach's completion let the new
+    // staging timeline fight the drag, and a mid-poof cancel could lock the
+    // actor hidden / leave overlay fx stranded).
+    for (const tm of this.backNavTimers) window.clearTimeout(tm)
+    this.backNavTimers = []
+    this.scriptMove = null
+    this.stagingUntil = 0
+    this.actorHidden = false
+    this.props.onFx?.({ kind: 'smoke', on: false })
+    this.props.onFx?.({ kind: 'crack', on: false })
     if (s.rt.running()) s.rt.forceRelease()
     s.ctx.events.emit('expression:poke', { characterId: this.dash.id })
     // The legacy grab staging: dangle art (kicking legs) + the protest quip.
