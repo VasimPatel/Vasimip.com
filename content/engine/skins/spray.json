@@ -20,14 +20,6 @@
     },
     {
       "kind": "path",
-      "d": "M-5,-36 l9,2.5 M9,-34 l9,-2.5",
-      "fill": "none",
-      "stroke": "#1a1a1a",
-      "strokeWidth": 2.6,
-      "linecap": "round"
-    },
-    {
-      "kind": "path",
       "d": "M0,-16 L-2,16",
       "fill": "none",
       "stroke": "#1a1a1a",
