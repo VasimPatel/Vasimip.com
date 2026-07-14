@@ -252,22 +252,22 @@
             },
             {
               "kind": "text",
-              "x": 248,
-              "y": 62,
+              "x": 215,
+              "y": 28,
               "w": 230,
               "h": 248,
-              "text": "BIG CODER\nBIG BUILDER\nBIG EATER\nNOT SO GOOD DANCER\n",
+              "text": "Born in 1996, I've got 3 decades of experience breathing. \n\nWork: \nCurrently At Read AI\nPreviously Microsoft\n",
               "fam": "hand",
               "size": 16,
               "note": true
             },
             {
               "kind": "text",
-              "x": 280,
-              "y": 203,
+              "x": 278,
+              "y": 205,
               "w": 220,
               "h": 38,
-              "text": "Fact Sheet Is UNDER ATTACK!\nOur Hero Dash Defends it",
+              "text": "The Fact Sheet Is UNDER ATTACK!\nOur Hero Dash Defends it",
               "fam": "caveat",
               "size": 16,
               "color": "#8a8378",
@@ -279,7 +279,7 @@
           "x": 610,
           "y": 150,
           "w": 250,
-          "h": 280,
+          "h": 314,
           "anchor": {
             "dx": 125,
             "dy": 0
@@ -314,7 +314,7 @@
               "y": 60,
               "w": 210,
               "h": 179,
-              "text": "\u2713Grew up in NJ\n\u2713Went to School at the University of Rochester\n\u2713Seattle 2019 - Present Day\n\u2713Serial Hobbyist ",
+              "text": "\u2713Grew up in NJ\n\u2713Went to School at the University of Rochester\n\u2713Seattle 2019 - Present Day\n\u2713Serial Hobbyist \n- Historically Including: Video Games, Reading, Audiobook Listening, Long City Walks, Boxing, Muay Thai, Bouldering, Kayaking, Snowboarding, Cooking, and Coffee",
               "fam": "hand",
               "size": 16
             }
@@ -386,7 +386,7 @@
               "y": 14,
               "w": 350,
               "h": 20,
-              "text": "PROJECT ONE: THE BIG THING",
+              "text": "Dash vs The Everlasting Dark",
               "fam": "marker",
               "size": 19,
               "hl": "yellow"
@@ -438,7 +438,7 @@
               "y": 14,
               "w": 340,
               "h": 20,
-              "text": "PROJECT TWO: THE OTHER THING",
+              "text": "Dash Damnations",
               "fam": "marker",
               "size": 19,
               "hl": "pink"
