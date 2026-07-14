@@ -181,3 +181,22 @@ substantially, but motion quality is not yet accepted. Primary open findings:
 
 The development architecture remains viable. Final acceptance is deferred until
 the motion-quality plan passes and the owner approves the complete live journey.
+
+## Parity 3 — owner live-review round (branch vasim/engine-v2-parity3)
+
+Owner findings after the Q0–Q7 merge, each diagnosed and fixed:
+
+| Owner report | Diagnosis | Fix | Evidence |
+|---|---|---|---|
+| "cursor below Dash → eyebrows double up" | The stand/spray skins carried the legacy Idle BAKED V-brow path (mislabeled "bandana ties" since extraction), layered under the parametric brows; visible when pupils dropped | Extractor FIXUPS drop the baked path (and stop re-injecting it); skins re-extracted | `shoot-brow.mjs` crops: two brow pairs below-cursor before, one after |
+| "excessive rolling on some roll jumps… is there a bug?" | TWO bugs: (1) jump clip launch marker at 320 ms vs legacy 180 ms windup — every jump leg paid +140 ms; (2) onLaunch acting cues (roll's 900 ms tuck) outlived short ~460 ms hops and kept tucking into walk legs | (1) clip retimed (launch 180 / land 640 / end 860); (2) flight-scoped acting: onLaunch cues release at the next `jump:land`, serialized (`flightHold`) so snapshot/restore releases on the identical tick | Live capture: tuck active 548 ms of a 548 ms flight (hop: 742/742), **0 ms grounded tuck**; new engine test (60 s hold releases at the landing tick) |
+| "legacy is a bit snappier, faster, slightly more fun" | The +140 ms per-leg windup was the dominant lag; Q4 pace was already at legacy classes | Same windup retime | Dual-route timelines: hop launch 183 ms vs legacy 186 ms, complete 1608 vs 1604 ms; roll complete 1683 vs legacy 1961 ms (engine now leads) |
+| "legacy kept a flying page-to-page effect on plain flips" | The surf ride staging existed but played entirely while the layer was hidden behind the `busyFlip` visibility gate — Dash popped in post-landing | `surfFlip` state keeps the EngineLayer visible through a surf flip; staging rewritten to the exact legacy flipTo timeline from flip start (glide from the OLD page position 0–780 ms, tuck-drop 880, squash-land + shake 1240, arrival 1780) | Capture: old page mid-turn with Dash gliding at ~200 ms, surf stance over the new page ~500 ms, tuck ball ~1000 ms, landed ~1300 ms |
+
+Also this round: the byte-exact traversal golden moved onto a pinned fixture of
+the committed notebook pages (owner `/admin` content edits must never break
+engine goldens; live content stays covered by the sanity/scoping invariants).
+
+Marked by the owner as **engine upgrades for later** (not this branch):
+IK-planted skin feet, a real climb mode (verb sign-off needed), a teleport
+intent for poof, physics-assisted cape deformation.
