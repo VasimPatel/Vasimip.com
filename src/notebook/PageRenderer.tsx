@@ -1,5 +1,6 @@
 import { Fragment, type CSSProperties, type ReactNode } from 'react'
 import { SKETCH_RADII, type ArtBox, type BoxDoc, type DrawBox, type FamKind, type PageDoc, type PanelDoc, type TextBox } from './doc/docTypes'
+import { PAGE_H, PAGE_W, SPREAD_RIGHT_X } from './doc/spread'
 import { REGISTRY } from './registry'
 
 interface PageRendererProps {
@@ -152,12 +153,19 @@ function renderPanel(panel: PanelDoc, panelIndex: number, flags: Record<string, 
 }
 
 export default function PageRenderer({ page, style, flags }: PageRendererProps) {
+  // A SHEET of the two-sided book: it sits on the RIGHT half of the spread and
+  // hinges at its left edge (the center binding). Its BACK face carries the
+  // authored back panels — after a flip it lies unmirrored as the LEFT page of
+  // the next spread (sheet rotates −180°, the inner rotateY(180) cancels).
   return (
-    <div style={{ position: 'absolute', inset: 0, transformOrigin: 'left center', transformStyle: 'preserve-3d', transition: 'transform .78s cubic-bezier(.5,.08,.28,1)', ...style }}>
+    <div style={{ position: 'absolute', left: SPREAD_RIGHT_X, top: 0, width: PAGE_W, height: PAGE_H, transformOrigin: 'left center', transformStyle: 'preserve-3d', transition: 'transform .78s cubic-bezier(.5,.08,.28,1)', ...style }}>
       <div style={{ position: "absolute", inset: "0", backfaceVisibility: "hidden", boxSizing: "border-box", backgroundColor: "#fdfbf3", backgroundImage: "linear-gradient(90deg, transparent 58px, rgba(224,96,96,.5) 58px, rgba(224,96,96,.5) 60px, transparent 60px), repeating-linear-gradient(transparent 0px, transparent 26px, rgba(122,168,204,.38) 26px, rgba(122,168,204,.38) 27.5px)", border: "2.5px solid #26241f", borderRadius: "4px 12px 12px 4px", boxShadow: "8px 10px 22px rgba(0,0,0,.28)" }}>
         {page.panels.map((panel, panelIndex) => renderPanel(panel, panelIndex, flags))}
       </div>
-      <div style={{ position: "absolute", inset: "0", backfaceVisibility: "hidden", transform: "rotateY(180deg)", background: "#f3edd9", border: "2.5px solid #26241f", borderRadius: "12px 4px 4px 12px" }}></div>
+      {/* the back: ruled paper with the margin line mirrored (ink-through side) */}
+      <div style={{ position: "absolute", inset: "0", backfaceVisibility: "hidden", transform: "rotateY(180deg)", boxSizing: "border-box", backgroundColor: "#fdfbf3", backgroundImage: "linear-gradient(270deg, transparent 58px, rgba(224,96,96,.4) 58px, rgba(224,96,96,.4) 60px, transparent 60px), repeating-linear-gradient(transparent 0px, transparent 26px, rgba(122,168,204,.38) 26px, rgba(122,168,204,.38) 27.5px)", border: "2.5px solid #26241f", borderRadius: "12px 4px 4px 12px" }}>
+        {(page.back?.panels ?? []).map((panel, panelIndex) => renderPanel(panel, panelIndex, flags))}
+      </div>
     </div>
   )
 }

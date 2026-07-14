@@ -1,5 +1,6 @@
 import type { CSSProperties } from 'react'
 import type { CoverDoc } from './doc/docTypes'
+import { PAGE_H, PAGE_W, SPREAD_RIGHT_X } from './doc/spread'
 
 interface CoverRendererProps {
   cover: CoverDoc
@@ -9,7 +10,7 @@ interface CoverRendererProps {
 
 export default function CoverRenderer({ cover, style, onOpen }: CoverRendererProps) {
   return (
-    <div style={{ position: 'absolute', inset: 0, transformOrigin: 'left center', transformStyle: 'preserve-3d', transition: 'transform .78s cubic-bezier(.5,.08,.28,1)', ...style }}>
+    <div style={{ position: 'absolute', left: SPREAD_RIGHT_X, top: 0, width: PAGE_W, height: PAGE_H, transformOrigin: 'left center', transformStyle: 'preserve-3d', transition: 'transform .78s cubic-bezier(.5,.08,.28,1)', ...style }}>
       <div onClick={onOpen} style={{ position: "absolute", inset: "0", backfaceVisibility: "hidden", cursor: "pointer", boxSizing: "border-box", backgroundColor: "#23211d", backgroundImage: "radial-gradient(rgba(250,248,240,.14) 1.2px, transparent 1.4px), radial-gradient(rgba(250,248,240,.09) 1px, transparent 1.2px)", backgroundSize: "7px 9px, 11px 7px", backgroundPosition: "0 0, 4px 3px", border: "2.5px solid #14130f", borderRadius: "4px 12px 12px 4px", boxShadow: "8px 10px 22px rgba(0,0,0,.35)", display: "flex", alignItems: "center", justifyContent: "center" }}>
         <div style={{ width: "520px", background: "#fdfbf3", border: "3px solid #1a1a1a", borderRadius: "225px 16px 255px 16px/16px 255px 16px 225px", padding: "30px 36px", textAlign: "center", boxShadow: "0 4px 0 rgba(0,0,0,.35)" }}>
           <div style={{ fontFamily: "'Permanent Marker',cursive", fontSize: "34px", letterSpacing: "3px" }}>COMPOSITION</div>

@@ -31,6 +31,7 @@ import { evalGate, type BehaviorDoc, type GateExpr } from '../../../packages/sch
 import { createCharacterRenderer, type CharacterRenderer } from '../../../packages/renderer-svg/src/index'
 import { engineSkins, type EngineDoc } from './engineDoc'
 import { pick, chance, scalar, reviewHook, reviewLog, type MotionSample } from '../review'
+import { STAGE_W, STAGE_H } from '../doc/spread'
 
 export interface EngineLayerProps {
   /** The engine doc derived from the SAME v1 doc the site renders (hot-swappable). */
@@ -1309,8 +1310,8 @@ export class EngineLayer extends Component<EngineLayerProps> {
     if (kind === 'bomb') {
       // Legacy bombBack: throw 300 → bomb arc 580 → boom+hole 950 → hop 1300 →
       // dive 1850 → page turn 2430 (pop-in + land play on the landing page).
-      const dirT = gx > 460 ? -1 : 1
-      const txp = Math.max(90, Math.min(830, gx + dirT * 175))
+      const dirT = gx > STAGE_W / 2 ? -1 : 1
+      const txp = Math.max(90, Math.min(STAGE_W - 90, gx + dirT * 175))
       t.facing = dirT
       s.rt.runOneShot('__backnav:throw', [{ verb: 'strikePose', ref: 'throw', holdMs: 320 }])
       this.props.sfx('scrib')
@@ -1783,7 +1784,7 @@ export class EngineLayer extends Component<EngineLayerProps> {
           this.backNavTimers.push(window.setTimeout(() => this.props.sfx('fx:jitPage'), 240))
           this.backNavTimers.push(window.setTimeout(() => { this.props.sfx('fx:jitPage'); this.props.sfx('fx:shake') }, 580))
         } else {
-          const sdir: 1 | -1 = s.rt.transform.x > 460 ? -1 : 1
+          const sdir: 1 | -1 = s.rt.transform.x > STAGE_W / 2 ? -1 : 1
           s.rt.transform.facing = sdir
           this.props.sfx('scrape')
           s.rt.runOneShot('__flourish:shove', [{ verb: 'strikePose', ref: 'shove', holdMs: 1450 }])
@@ -1940,7 +1941,7 @@ export class EngineLayer extends Component<EngineLayerProps> {
       <div style={{ position: 'absolute', inset: 0, zIndex: 55, pointerEvents: 'none' }}>
         <svg
           ref={this.svgRef}
-          viewBox="0 0 920 660"
+          viewBox={`0 0 ${STAGE_W} ${STAGE_H}`}
           width="100%"
           height="100%"
           style={{ overflow: 'visible' }}

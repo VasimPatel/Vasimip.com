@@ -8,6 +8,7 @@
 import React, { type CSSProperties } from 'react'
 import type { Pose, HudTab, PageGeom } from './types'
 import { POKE, CHATTER, DROPS, POKEARC, FIDGETARC, type ArcKey } from './constants'
+import { spreadPages, SPREAD_RIGHT_X, STAGE_W, STAGE_H } from './doc/spread'
 import { AudioEngine, type SfxKind } from './audio'
 import { pick, chance, scalar, setReviewRoute, reviewHook, reviewLog } from './review'
 
@@ -159,7 +160,7 @@ export default class Notebook extends React.Component<NotebookProps, State> {
       this._geomDoc = doc
       this._geomCache = [
         { name: 'COVER', panels: [] },
-        ...doc.pages.map(p => ({ name: p.name, panels: p.panels.map(({ x, y, w, h, anchor }) => ({ x, y, w, h, ax: x + anchor.dx, ay: y + anchor.dy })) })),
+        ...spreadPages(doc).map(p => ({ name: p.name, panels: p.panels.map(({ x, y, w, h, anchor }) => ({ x, y, w, h, ax: x + anchor.dx, ay: y + anchor.dy })) })),
       ]
     }
     return this._geomCache
@@ -906,8 +907,8 @@ export default class Notebook extends React.Component<NotebookProps, State> {
     const s = this.state
     const fromPage = s.page
     const gx = s.dx + 52, gy = s.dy + 113
-    const dirT = gx > 460 ? -1 : 1
-    const txp = Math.max(90, Math.min(830, gx + dirT * 175))
+    const dirT = gx > STAGE_W / 2 ? -1 : 1
+    const txp = Math.max(90, Math.min(STAGE_W - 90, gx + dirT * 175))
     this.setState({ busy: true, pose: 'throw', face: dirT, fidget: null, holeX: txp, holeY: gy })
     this.sfx('scrib')
     this.to(300, () => this.setState({ pose: 'idle', bombFlyOn: true, bombX: gx + dirT * 14, bombY: s.dy + 38 }))
@@ -1068,8 +1069,11 @@ export default class Notebook extends React.Component<NotebookProps, State> {
   renderVals() {
     const s = this.state
     const vw = s.vw, vh = s.vh
-    const fit = Math.max(0.15, Math.min(vw / 1060, (vh - 60) / 780, 1.1))
-    let cx = 460, cy = 330, sc = fit
+    const fit = Math.max(0.15, Math.min(vw / (STAGE_W + 140), (vh - 60) / 780, 1.1))
+    // closed book: frame the COVER (the right half); open: frame the spread
+    const coverFit = Math.max(0.15, Math.min(vw / 1060, (vh - 60) / 780, 1.1))
+    let cx = STAGE_W / 2 + 7, cy = 330, sc = fit
+    if (s.page === 0) { cx = SPREAD_RIGHT_X + 460; sc = coverFit }
     const pn = this.geom()[s.page].panels[s.panel]
     if (s.page > 0 && !s.busyFlip && pn) {
       sc = Math.min(vw * 0.62 / (pn.w + 60), (vh - 150) * 0.82 / (pn.h + 100), 1.55)
@@ -1194,10 +1198,10 @@ export default class Notebook extends React.Component<NotebookProps, State> {
         data-screen-label="Notebook site"
         style={{ position: 'fixed', inset: 0, overflow: 'hidden', background: 'radial-gradient(120% 100% at 50% 35%, #b39f82 0%, #8f7b5e 100%)', fontFamily: "'Patrick Hand',cursive", color: '#1a1a1a' }}
       >
-        <div style={{ position: 'absolute', left: 0, top: 0, width: 920, height: 660, transformOrigin: '0 0', transition: v.camTrans, willChange: 'transform', transform: v.cameraTf }}>
+        <div style={{ position: 'absolute', left: 0, top: 0, width: STAGE_W, height: STAGE_H, transformOrigin: '0 0', transition: v.camTrans, willChange: 'transform', transform: v.cameraTf }}>
           <div style={{ width: '100%', height: '100%', ...v.shakeStyle }}>
-            {/* spiral binding */}
-            <div style={{ position: 'absolute', left: -14, top: 4, bottom: 4, width: 34, background: 'repeating-linear-gradient(#1c1b19 0px, #1c1b19 14px, #26241f 14px, #26241f 18px)', borderRadius: 10, boxShadow: '4px 6px 14px rgba(0,0,0,.3)' }} />
+            {/* spiral binding — the CENTER spine the sheets hinge on */}
+            <div style={{ position: 'absolute', left: SPREAD_RIGHT_X - 17, top: 4, bottom: 4, width: 34, background: 'repeating-linear-gradient(#1c1b19 0px, #1c1b19 14px, #26241f 14px, #26241f 18px)', borderRadius: 10, boxShadow: '4px 6px 14px rgba(0,0,0,.3)', zIndex: 45 }} />
 
             <div style={{ position: 'absolute', inset: 0, perspective: '2400px' }}>
               {this.doc.pages.map((pd, i) => (
