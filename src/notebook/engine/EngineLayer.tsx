@@ -310,6 +310,7 @@ export class EngineLayer extends Component<EngineLayerProps> {
         offset: { dx: offX, dy: offY },
         capeLag: this.capeLag,
       })
+      if (this.ropeFx) this.renderRope(skinRoot)
       if (reviewHook()?.motion) this.recordMotion(s, solved, skinRoot, src.id)
 
       if (this.actorHidden !== this.actorHiddenApplied && this.svgRef.current) {
@@ -431,6 +432,7 @@ export class EngineLayer extends Component<EngineLayerProps> {
     this.capeLag = 0
     this.bubbleNote = null
     if (this.svgRef.current) this.svgRef.current.style.opacity = '1'
+    this.clearRope() // the svg is being rebuilt — no fade, just remove
     this.clearTravel()
     for (const off of this.scene?.offs ?? []) off()
     this.scene?.rt.dispose()
@@ -912,6 +914,9 @@ export class EngineLayer extends Component<EngineLayerProps> {
     'builtin:vault': 'vault',
     'builtin:vault-peek': 'vault',
     'builtin:rope': 'rope',
+    // the owner's tightrope action crosses on the SAME grappled line (its cut
+    // falls after the scrib, so Dash grapples from where he stands)
+    'act:tightrope': 'rope',
     'builtin:slide': 'slide',
     'builtin:smash': 'smash',
   }
@@ -1083,14 +1088,24 @@ export class EngineLayer extends Component<EngineLayerProps> {
     })
   }
 
-  /** Legacy ropeTo's crossing: a LINEAR tightrope glide in the rope art at
-   * 115px/s (min 0.9s) straight to the anchor — the balance walk is the point,
-   * so no arc and no easing. Camera holds the midpoint at 1.22, unhurried. */
+  /** The rope crossing, grappled (owner: "shoot a grappling line over to the
+   * panel he's going to and walk on that rope" — the bare glide read as walking
+   * on air). Beats: throw pose + the hook flies the line across (360ms), the
+   * line TWANGS taut (260ms, damped wobble), then the legacy tightrope walk at
+   * 115px/s along the DRAWN line — Dash's path dips (arcH −12) and the line's
+   * V-vertex rides his live feet, so the rope visibly sags under him — and on
+   * landing the near end releases and the line falls away. act:tightrope
+   * stages through here too (STAGED_CROSSINGS), keeping its quip. */
+  private static ROPE_SHOOT_MS = 360
+  private static ROPE_TAUT_MS = 260
+  private static ROPE_LINES = ["don't look down.", 'one foot. other foot.', 'balance is a skill. see: SKILLS.']
+
   private ropeStaging(destIdx: number): void {
     const s = this.scene
     if (!s) return
+    const B = this.docV2.pages[s.pageIdx]?.panels[destIdx]
     const spot = this.panelSpot(s.pageIdx, destIdx)
-    if (!spot) {
+    if (!B || !spot) {
       this.chainArrival()
       return
     }
@@ -1099,27 +1114,182 @@ export class EngineLayer extends Component<EngineLayerProps> {
     const rootDy = t.y - (Math.max(cap.y0, cap.y1) + cap.r)
     const fromX = t.x
     const fromY = t.y
-    const dur = Math.max(900, (Math.hypot(spot.x - fromX, spot.y + rootDy - fromY) / 115) * 1000)
-    this.stagingUntil = performance.now() + dur + 700
+    const footY = fromY - rootDy
+    const dir: 1 | -1 = spot.x >= fromX ? 1 : -1
+    // Top-edge anchors get a TWO-LEG crossing: the hook bites the panel's near
+    // top CORNER (a taut line to mid-panel would slash across the title art),
+    // Dash walks the line to the corner, then balances along the rim to the
+    // anchor. Interior anchors keep the direct line — there is no rim route.
+    const cornerX = dir === 1 ? B.x + 10 : B.x + B.w - 10
+    const twoLeg = B.anchor.dy <= 6 && Math.abs(spot.x - cornerX) >= 30
+    const legAX = twoLeg ? cornerX : spot.x
+    const legAY = twoLeg ? B.y : spot.y
+    const durA = Math.max(twoLeg ? 700 : 900, (Math.hypot(legAX - fromX, legAY + rootDy - fromY) / 115) * 1000)
+    const durB = twoLeg ? Math.max(320, (Math.abs(spot.x - legAX) / 115) * 1000) : 0
+    const G = EngineLayer.ROPE_SHOOT_MS + EngineLayer.ROPE_TAUT_MS
+    this.stagingUntil = performance.now() + G + durA + durB + 700
     const at = (ms: number, fn: () => void): void => {
       this.backNavTimers.push(window.setTimeout(fn, ms))
     }
-    t.facing = spot.x >= fromX ? 1 : -1
+    t.facing = dir
     this.lastCam = { x: (fromX + spot.x) / 2, y: spot.y - 93 }
     this.props.onDashCam?.({ x: (fromX + spot.x) / 2, y: spot.y - 93, mult: 1.22, fast: false })
-    s.rt.act('rope', { holdMs: 'persist' })
-    this.scriptMove = { fromX, fromY, toX: spot.x, toY: spot.y + rootDy, t0: performance.now(), dur, arcH: 0 }
-    at(dur + 60, () => {
+    // the grapple: throw stance while the hook flies out and bites
+    s.rt.runOneShot('__rope:throw', [{ verb: 'strikePose', ref: 'throw', holdMs: G - 40 }])
+    this.props.sfx('whoosh')
+    this.armRope({ sx: fromX + dir * 16, sy: footY - 58, tx: legAX + dir * 12, ty: legAY - 2, footX: fromX, footY })
+    at(EngineLayer.ROPE_SHOOT_MS, () => this.props.sfx('knock'))
+    at(G, () => {
+      this.props.sfx('scrape')
+      s.rt.act('rope', { holdMs: 'persist' })
+      this.ropePhase('walk')
+      this.scriptMove = { fromX, fromY, toX: legAX, toY: legAY + rootDy, t0: performance.now(), dur: durA, arcH: -12 }
+    })
+    at(G + durA * 0.45, () => {
+      if (chance('rope.line', 0.35)) {
+        this.bubbleNote = { text: pick('rope.line.pick', EngineLayer.ROPE_LINES), until: performance.now() + 1200 }
+      }
+    })
+    if (twoLeg) {
+      // stepping off at the corner: the line has done its job and falls away
+      // while he balance-walks the panel rim to the anchor, still in rope art
+      at(G + durA, () => {
+        this.releaseRope()
+        this.scriptMove = { fromX: legAX, fromY: legAY + rootDy, toX: spot.x, toY: spot.y + rootDy, t0: performance.now(), dur: durB, arcH: 0 }
+      })
+    }
+    at(G + durA + durB + 60, () => {
       s.rt.clearAct()
       s.rt.runOneShot('__rope:land', [{ verb: 'strikePose', ref: 'squash-land', holdMs: 280 }])
       this.props.sfx('hop')
       this.props.sfx('fx:shake')
+      this.releaseRope()
     })
-    at(dur + 660, () => {
+    at(G + durA + durB + 660, () => {
       this.lastCam = null
       this.props.onDashCam?.(null)
       this.chainArrival()
     })
+  }
+
+  // ── the grapple line (render-layer fx: a rope path + hook under the actor) ──
+  private ropeFx: {
+    phase: 'shoot' | 'taut' | 'walk' | 'drop'
+    t0: number
+    /** near end while airborne (the throwing hand) */
+    sx: number
+    sy: number
+    /** near end once he steps on (the start foothold) */
+    footX: number
+    footY: number
+    /** the hook's bite point */
+    tx: number
+    ty: number
+  } | null = null
+  private ropeG: SVGGElement | null = null
+  private ropeLine: SVGPathElement | null = null
+  private ropeHook: SVGGElement | null = null
+
+  private armRope(cfg: { sx: number; sy: number; tx: number; ty: number; footX: number; footY: number }): void {
+    this.clearRope()
+    const svg = this.svgRef.current
+    if (!svg) return
+    const NS = 'http://www.w3.org/2000/svg'
+    const g = document.createElementNS(NS, 'g') as SVGGElement
+    const line = document.createElementNS(NS, 'path') as SVGPathElement
+    line.setAttribute('fill', 'none')
+    line.setAttribute('stroke', '#1a1a1a')
+    line.setAttribute('stroke-width', '2.5')
+    line.setAttribute('stroke-linecap', 'round')
+    g.appendChild(line)
+    const hook = document.createElementNS(NS, 'g') as SVGGElement
+    const claws = document.createElementNS(NS, 'path') as SVGPathElement
+    claws.setAttribute('d', 'M0,0 l6,-7 M0,0 l8,1 M0,0 l5,7 M0,0 l-9,-1')
+    claws.setAttribute('fill', 'none')
+    claws.setAttribute('stroke', '#1a1a1a')
+    claws.setAttribute('stroke-width', '2.6')
+    claws.setAttribute('stroke-linecap', 'round')
+    hook.appendChild(claws)
+    g.appendChild(hook)
+    // under Dash: the actor walks ON the line, never behind it
+    svg.insertBefore(g, this.arcWrap)
+    this.ropeG = g
+    this.ropeLine = line
+    this.ropeHook = hook
+    this.ropeFx = { phase: 'shoot', t0: performance.now(), ...cfg }
+  }
+
+  private ropePhase(phase: 'walk' | 'drop'): void {
+    if (!this.ropeFx) return
+    this.ropeFx.phase = phase
+    this.ropeFx.t0 = performance.now()
+  }
+
+  /** Fade-and-fall if a line is up (drag/teardown mid-crossing); no-op otherwise. */
+  private releaseRope(): void {
+    if (this.ropeFx && this.ropeFx.phase !== 'drop') this.ropePhase('drop')
+  }
+
+  private clearRope(): void {
+    this.ropeG?.remove()
+    this.ropeG = null
+    this.ropeLine = null
+    this.ropeHook = null
+    this.ropeFx = null
+  }
+
+  /** Per-rAF rope drawing. `feet` = the interpolated skin ground-centre, so the
+   * walk phase's V-vertex tracks exactly where Dash's feet render this frame. */
+  private renderRope(feet: { x: number; y: number }): void {
+    const fx = this.ropeFx
+    if (!fx || !this.ropeLine || !this.ropeHook) return
+    const now = performance.now()
+    let el = now - fx.t0
+    const dir = fx.tx >= fx.sx ? 1 : -1
+    // shoot rolls into the taut twang on its own clock
+    if (fx.phase === 'shoot' && el >= EngineLayer.ROPE_SHOOT_MS) {
+      fx.phase = 'taut'
+      fx.t0 += EngineLayer.ROPE_SHOOT_MS
+      el = now - fx.t0
+    }
+    let d = ''
+    let hookX = fx.tx
+    let hookY = fx.ty
+    let opacity = 0.92
+    if (fx.phase === 'shoot') {
+      const k = 1 - (1 - Math.min(1, el / EngineLayer.ROPE_SHOOT_MS)) ** 3
+      hookX = fx.sx + (fx.tx - fx.sx) * k
+      hookY = fx.sy + (fx.ty - fx.sy) * k - 30 * k * (1 - k) // slight up-arc
+      // the line trails the hook, bowing down behind it
+      d = `M${fx.sx},${fx.sy} Q${(fx.sx + hookX) / 2},${(fx.sy + hookY) / 2 + 16 * (1 - k)} ${hookX},${hookY}`
+    } else if (fx.phase === 'taut') {
+      const k = Math.min(1, el / EngineLayer.ROPE_TAUT_MS)
+      // the near end comes down from the hand to the foothold as he readies
+      const nx = fx.sx + (fx.footX - fx.sx) * k
+      const ny = fx.sy + (fx.footY - fx.sy) * k
+      const wob = 15 * Math.exp(-el / 110) * Math.cos(el / 26) // the TWANG
+      d = `M${nx},${ny} Q${(nx + fx.tx) / 2},${(ny + fx.ty) / 2 + wob} ${fx.tx},${fx.ty}`
+    } else if (fx.phase === 'walk') {
+      // taut V through his feet: the line loads where he stands
+      const vx = feet.x
+      const vy = feet.y + 2
+      d =
+        `M${fx.footX},${fx.footY} Q${(fx.footX + vx) / 2},${(fx.footY + vy) / 2 + 5} ${vx},${vy}` +
+        ` Q${(vx + fx.tx) / 2},${(vy + fx.ty) / 2 + 5} ${fx.tx},${fx.ty}`
+    } else {
+      // drop: the near end lets go — the line sags away and fades
+      const k = Math.min(1, el / 450)
+      if (k >= 1) {
+        this.clearRope()
+        return
+      }
+      opacity = 0.92 * (1 - k)
+      const fall = 34 * k * k
+      d = `M${fx.footX},${fx.footY + fall} Q${(fx.footX + fx.tx) / 2},${(fx.footY + fx.ty) / 2 + fall + 20 * k} ${fx.tx},${fx.ty}`
+    }
+    this.ropeLine.setAttribute('d', d)
+    this.ropeG?.setAttribute('opacity', String(opacity))
+    this.ropeHook.setAttribute('transform', `translate(${hookX},${hookY}) scale(${dir},1)`)
   }
 
   /** Legacy slideTo's back half: from the own-panel edge, slide DOWN the outer
@@ -1520,6 +1690,7 @@ export class EngineLayer extends Component<EngineLayerProps> {
     this.spin = 0
     this.lastCam = null
     this.clearArc()
+    this.releaseRope() // an interrupted crossing lets the line fall, not freeze
     this.props.onDashCam?.(null)
   }
 
