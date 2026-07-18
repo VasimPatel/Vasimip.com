@@ -189,6 +189,7 @@ export class EngineLayer extends Component<EngineLayerProps> {
   }
 
   componentDidMount(): void {
+    this.busDetach = battleBus.attachDirector()
     this.enterPage(this.props.page)
     this.last = performance.now()
     const frame = (now: number): void => {
@@ -398,8 +399,13 @@ export class EngineLayer extends Component<EngineLayerProps> {
     cancelAnimationFrame(this.raf)
     window.clearTimeout(this.fidgetTimer)
     window.clearTimeout(this.battleTimer)
+    this.busDetach?.()
+    this.busDetach = null
     this.teardown()
   }
+
+  /** battleBus director registration (undirected scenes ignore stale state). */
+  private busDetach: (() => void) | null = null
 
   private teardown(): void {
     if (this.onDragUp) window.removeEventListener('pointerup', this.onDragUp)
@@ -1281,8 +1287,11 @@ export class EngineLayer extends Component<EngineLayerProps> {
    * owns the character beats and drives the Notebook's shared overlays through
    * onFx; `done()` fires at the legacy page-turn moment (bomb 2430ms / poof
    * 650ms) and the landing plays via pendingEntrance in the next enterPage.
-   * `landingPanel` is the last panel of the TARGET page (legacy lands there). */
-  backNav(kind: 'bomb' | 'poof', landingPanel: number, done: () => void): void {
+   * `landingPanel` is the last panel of the TARGET page (legacy lands there).
+   * `onCancel` fires if the staging is torn down before the page-turn moment
+   * (doc hot-swap/unmount) so the caller can release its pending gate without
+   * navigating (codex: a swallowed done() wedged _backNavPending forever). */
+  backNav(kind: 'bomb' | 'poof', landingPanel: number, done: () => void, onCancel?: () => void): void {
     const s = this.scene
     if (!s) {
       done()
@@ -1312,6 +1321,7 @@ export class EngineLayer extends Component<EngineLayerProps> {
       this.props.onFx?.({ kind: 'hole', on: false })
       this.props.onFx?.({ kind: 'smoke', on: false })
       this.backNavCancel = null
+      onCancel?.()
     }
 
     const t = s.rt.transform
@@ -1773,7 +1783,10 @@ export class EngineLayer extends Component<EngineLayerProps> {
           this.props.sfx('whoosh')
           this.backNavTimers.push(
             window.setTimeout(() => {
-              if (!battleBus.live()) return
+              // Same gate as the shove: a drag/travel/kick that started inside
+              // the reach window aborts the exchange — the foe must not play an
+              // obsolete knockback under the departure boot (codex finding).
+              if (!this.battleFighting()) return
               battleBus.cue(hard ? 'staggered' : 'parried')
               this.props.sfx('knock')
             }, DASH_LUNGE_CONTACT_MS),

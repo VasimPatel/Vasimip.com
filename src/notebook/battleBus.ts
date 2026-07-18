@@ -36,11 +36,25 @@ export const FOE_SIDE: -1 | 1 = -1
 type Listener = (cue: BattleCue) => void
 const listeners = new Set<Listener>()
 let foeUp = true
+let directors = 0
 
 export const battleBus = {
   /** A FightScene is mounted and listening (the battle panel is on stage). */
   live(): boolean {
     return listeners.size > 0
+  },
+  /** An EngineLayer is running the fight. Scenes mounted WITHOUT a director
+   * (the admin canvas, /legacy) ignore a stale 'kicked' state — nothing there
+   * could ever cue the poof-in, so honoring it would wedge the duelist gone
+   * forever (codex finding on the module singleton). */
+  directed(): boolean {
+    return directors > 0
+  },
+  attachDirector(): () => void {
+    directors++
+    return () => {
+      directors--
+    }
   },
   /** Is the duelist on his feet (not booted off the page)? */
   foePresent(): boolean {

@@ -44,8 +44,10 @@ const ARM_ANIM: Partial<Record<FoeState, string>> = {
 export default function FightScene() {
   // Presence survives page flips (bus-owned): kicked off on the last visit →
   // he's still gone now, and pops back only when the engine cues 'poofin'.
+  // No director (admin canvas, /legacy) → nothing could ever poof him back,
+  // so those mounts always show him up and fighting.
   const [st, setSt] = useState<{ cue: FoeState; seq: number }>({
-    cue: battleBus.foePresent() ? 'idle' : 'gone',
+    cue: battleBus.foePresent() || !battleBus.directed() ? 'idle' : 'gone',
     seq: 0,
   })
   useEffect(() => battleBus.on((c: BattleCue) => setSt((s) => ({ cue: c, seq: s.seq + 1 }))), [])
