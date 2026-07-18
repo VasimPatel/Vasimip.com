@@ -1,0 +1,176 @@
+{
+  "schemaVersion": 2,
+  "id": "skin:kick",
+  "sources": [
+    "kick"
+  ],
+  "face": "baked",
+  "elements": [
+    {
+      "kind": "circle",
+      "cx": -4,
+      "cy": -30,
+      "r": 14,
+      "fill": "#fffdf6",
+      "stroke": "#1a1a1a",
+      "strokeWidth": 4
+    },
+    {
+      "kind": "path",
+      "d": "M-12,-38 l11,5 M11,-38 l-11,5",
+      "fill": "none",
+      "stroke": "#1a1a1a",
+      "strokeWidth": 2.8,
+      "linecap": "round"
+    },
+    {
+      "kind": "circle",
+      "cx": -6,
+      "cy": -28,
+      "r": 2,
+      "fill": "#1a1a1a"
+    },
+    {
+      "kind": "circle",
+      "cx": 5,
+      "cy": -28,
+      "r": 2,
+      "fill": "#1a1a1a"
+    },
+    {
+      "kind": "ellipse",
+      "cx": 0,
+      "cy": -21,
+      "rx": 2.4,
+      "ry": 3,
+      "fill": "#1a1a1a"
+    },
+    {
+      "kind": "path",
+      "d": "M-6,-16 L-4,14",
+      "fill": "none",
+      "stroke": "#1a1a1a",
+      "strokeWidth": 5.5,
+      "linecap": "round"
+    },
+    {
+      "kind": "path",
+      "d": "M-5,-10 L-20,-18",
+      "fill": "none",
+      "stroke": "#1a1a1a",
+      "strokeWidth": 4.5,
+      "linecap": "round"
+    },
+    {
+      "kind": "path",
+      "d": "M-20,-18 L-34,-40",
+      "fill": "none",
+      "stroke": "#1a1a1a",
+      "strokeWidth": 4,
+      "linecap": "round"
+    },
+    {
+      "kind": "path",
+      "d": "M-18,-26 L-28,-20",
+      "fill": "none",
+      "stroke": "#1a1a1a",
+      "strokeWidth": 3,
+      "linecap": "round"
+    },
+    {
+      "kind": "path",
+      "d": "M-5,-8 L12,-14",
+      "fill": "none",
+      "stroke": "#1a1a1a",
+      "strokeWidth": 4.5,
+      "linecap": "round"
+    },
+    {
+      "kind": "path",
+      "d": "M-4,14 L-14,28 L-12,45 l-9,3",
+      "fill": "none",
+      "stroke": "#1a1a1a",
+      "strokeWidth": 5,
+      "linecap": "round"
+    },
+    {
+      "kind": "group",
+      "anim": {
+        "name": "kicklines"
+      },
+      "children": [
+        {
+          "kind": "path",
+          "d": "M-30,6 h12 M-34,12 h16 M-28,18 h10",
+          "fill": "none",
+          "stroke": "#1a1a1a",
+          "strokeWidth": 2,
+          "linecap": "round"
+        }
+      ]
+    },
+    {
+      "kind": "group",
+      "transform": "translate(-4,14)",
+      "children": [
+        {
+          "kind": "group",
+          "anim": {
+            "name": "dashkick"
+          },
+          "origin": "0% 100%",
+          "children": [
+            {
+              "kind": "path",
+              "d": "M0,0 L16,-1 L33,-5",
+              "fill": "none",
+              "stroke": "#1a1a1a",
+              "strokeWidth": 5,
+              "linecap": "round"
+            },
+            {
+              "kind": "path",
+              "d": "M33,-5 l3,-9",
+              "fill": "none",
+              "stroke": "#1a1a1a",
+              "strokeWidth": 4.5,
+              "linecap": "round"
+            }
+          ]
+        }
+      ]
+    }
+  ],
+  "cape": {
+    "socket": {
+      "x": -8,
+      "y": -14
+    },
+    "elements": [
+      {
+        "kind": "group",
+        "anim": {
+          "name": "capeidle",
+          "durationSec": 0.5,
+          "ease": "ease-in-out"
+        },
+        "origin": "100% 100%",
+        "children": [
+          {
+            "kind": "path",
+            "d": "M-8,-14 L-40,-26 L-31,-16 L-43,0 L-10,6 Z",
+            "fill": "#ff5ca8",
+            "stroke": "#1a1a1a",
+            "strokeWidth": 3,
+            "opacity": 0.55
+          }
+        ]
+      }
+    ]
+  },
+  "head": {
+    "cx": -4,
+    "cy": -30,
+    "r": 14
+  }
+}

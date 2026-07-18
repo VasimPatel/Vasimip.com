@@ -1,0 +1,28 @@
+{
+  "id": "kick",
+  "angles": {
+    "pelvis": -1.2,
+    "neck": -0.2,
+    "head": 0,
+    "upperArmR": 2.5,
+    "foreArmR": -2.1,
+    "upperArmL": 1.0,
+    "foreArmL": -0.3,
+    "thighR": 1.35,
+    "shinR": 0.12,
+    "footR": -1.4,
+    "thighL": -2.4,
+    "shinL": -0.9,
+    "footL": 1.15
+  },
+  "root": {
+    "x": -6,
+    "y": 16,
+    "rot": 0
+  },
+  "face": {
+    "brow": "fierce",
+    "mouth": "o",
+    "intensity": 1
+  }
+}

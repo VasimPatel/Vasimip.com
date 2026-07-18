@@ -43,6 +43,7 @@ import punch from '../../../content/engine/poses/punch.json'
 import peek from '../../../content/engine/poses/peek.json'
 import hang from '../../../content/engine/poses/hang.json'
 import knock from '../../../content/engine/poses/knock.json'
+import kick from '../../../content/engine/poses/kick.json'
 
 import skinKeyframes from '../../../content/engine/skins/keyframes.json'
 import sStand from '../../../content/engine/skins/stand.json'
@@ -69,6 +70,7 @@ import sPunch from '../../../content/engine/skins/punch.json'
 import sPeek from '../../../content/engine/skins/peek.json'
 import sHang from '../../../content/engine/skins/hang.json'
 import sKnock from '../../../content/engine/skins/knock.json'
+import sKick from '../../../content/engine/skins/kick.json'
 
 import bWalk from '../../../content/engine/behaviors/builtin/walk.json'
 import bHop from '../../../content/engine/behaviors/builtin/hop.json'
@@ -97,7 +99,7 @@ const base: MigrationBase = {
   poses: reg([
     standPose, walkMid, jumpTuck, cheer, think, squashLand, fight, spray, dangle,
     throwPose, wave, trip, sneeze, vault, wallrun, rope, swing, slide, surf, shove,
-    punch, peek, hang, knock,
+    punch, peek, hang, knock, kick,
   ]),
   clips: reg([idleClip, walkClip, jumpClip]),
   behaviors: reg([bWalk, bHop, bRoll, bPoof, bVault, bVaultPeek, bRope, bSwing, bWallrun, bSlide, bSmash, bCombo]),
@@ -111,7 +113,7 @@ export const engineSkins: { keyframes: Record<string, SkinKeyframe>; docs: reado
   docs: [
     sStand, sWalk, sTuck, sLand, sFight, sSpray, sThink, sVault, sRope, sSwing,
     sWallrun, sSlide, sSurf, sDangle, sThrow, sWave, sCheer, sTrip, sSneeze,
-    sShove, sPunch, sPeek, sHang, sKnock,
+    sShove, sPunch, sPeek, sHang, sKnock, sKick,
   ] as unknown as PoseSkinDoc[],
 }
 

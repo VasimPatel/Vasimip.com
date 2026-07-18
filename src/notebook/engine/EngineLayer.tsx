@@ -32,6 +32,7 @@ import { createCharacterRenderer, type CharacterRenderer } from '../../../packag
 import { engineSkins, type EngineDoc } from './engineDoc'
 import { pick, chance, scalar, reviewHook, reviewLog, type MotionSample } from '../review'
 import { STAGE_W, STAGE_H } from '../doc/spread'
+import { battleBus, DASH_LUNGE_CONTACT_MS, FOE_ATTACK_CONTACT_MS, FOE_SIDE, KICK_CLEAR_MS, KICK_CONTACT_MS } from '../battleBus'
 
 export interface EngineLayerProps {
   /** The engine doc derived from the SAME v1 doc the site renders (hot-swappable). */
@@ -115,8 +116,9 @@ export class EngineLayer extends Component<EngineLayerProps> {
   private arcWrap: SVGGElement | null = null
   private arcTimer = 0
   private fidgetTimer = 0
-  /** Battle-beat timer (the ABOUT sword fight): fires on the FightScene's shared
-   * 3.2s cycle at the clang phases while Dash holds the fight stance. */
+  /** Battle exchange timer (the ABOUT sword fight): while Dash holds the fight
+   * stance, scheduleBattle directs one exchange per tick and cues the
+   * FightScene duelist over battleBus. */
   private battleTimer = 0
   /** Smoothed cursor-lean (rad) — the legacy .22s ease-out transition. */
   private lean = 0
@@ -700,12 +702,23 @@ export class EngineLayer extends Component<EngineLayerProps> {
     this.chainArrival()
   }
 
-  /** The Notebook's nav: Dash travels to panel j on the current page. */
+  /** The Notebook's nav: Dash travels to panel j on the current page. Leaving
+   * the battle (either direction) kicks the duelist off the page first. */
   travelTo(panelIdx: number): void {
     const s = this.scene
     if (!s) return
-    const doc = this.pickTravel(s.pageIdx, panelIdx)
-    this.startTravel(doc, panelIdx)
+    const kickMs = this.maybeKickFoe()
+    if (kickMs > 0) {
+      this.backNavTimers.push(
+        window.setTimeout(() => {
+          const s2 = this.scene
+          if (!s2 || this.dragging) return
+          this.startTravel(this.pickTravel(s2.pageIdx, panelIdx), panelIdx)
+        }, kickMs),
+      )
+      return
+    }
+    this.startTravel(this.pickTravel(s.pageIdx, panelIdx), panelIdx)
   }
 
   /** Shared travel launch (nav + the admin/harness testBehavior): poof interception,
@@ -1305,36 +1318,45 @@ export class EngineLayer extends Component<EngineLayerProps> {
     const cap = s.rt.capsule()
     const gx = t.x
     const gy = Math.max(cap.y0, cap.y1) + cap.r
-    this.stagingUntil = performance.now() + (kind === 'bomb' ? 2430 : 650)
+    // Leaving the battle backwards kicks the duelist off the page first; the
+    // whole legacy timeline then plays shifted by the boot (Dash's transform
+    // doesn't move during it, so gx/gy stay valid). at0 = kick-shifted clock.
+    const kickMs = this.maybeKickFoe()
+    const at0 = (ms: number, fn: () => void): void => at(ms + kickMs, fn)
+    this.stagingUntil = performance.now() + kickMs + (kind === 'bomb' ? 2430 : 650)
 
     if (kind === 'bomb') {
       // Legacy bombBack: throw 300 → bomb arc 580 → boom+hole 950 → hop 1300 →
       // dive 1850 → page turn 2430 (pop-in + land play on the landing page).
       const dirT = gx > STAGE_W / 2 ? -1 : 1
       const txp = Math.max(90, Math.min(STAGE_W - 90, gx + dirT * 175))
-      t.facing = dirT
-      s.rt.runOneShot('__backnav:throw', [{ verb: 'strikePose', ref: 'throw', holdMs: 320 }])
-      this.props.sfx('scrib')
-      at(300, () => this.props.onFx?.({ kind: 'bomb', on: true, x: gx + dirT * 14, y: gy - 75 }))
-      at(360, () => this.props.onFx?.({ kind: 'bomb', on: true, x: txp, y: gy - 12 }))
-      at(950, () => {
+      const start = (): void => {
+        t.facing = dirT
+        s.rt.runOneShot('__backnav:throw', [{ verb: 'strikePose', ref: 'throw', holdMs: 320 }])
+        this.props.sfx('scrib')
+      }
+      if (kickMs > 0) at(kickMs, start)
+      else start()
+      at0(300, () => this.props.onFx?.({ kind: 'bomb', on: true, x: gx + dirT * 14, y: gy - 75 }))
+      at0(360, () => this.props.onFx?.({ kind: 'bomb', on: true, x: txp, y: gy - 12 }))
+      at0(950, () => {
         this.props.onFx?.({ kind: 'bomb', on: false })
         this.props.onFx?.({ kind: 'boom', on: true, x: txp, y: gy })
         this.props.onFx?.({ kind: 'hole', on: true, x: txp, y: gy })
         this.props.sfx('boom')
       })
-      at(1300, () => {
+      at0(1300, () => {
         this.props.sfx('hop')
         s.rt.runOneShot('__backnav:tuck', [{ verb: 'strikePose', ref: 'jump-tuck', holdMs: 620 }])
         this.scriptMove = { fromX: t.x, fromY: t.y, toX: txp, toY: t.y, t0: performance.now(), dur: 500, arcH: 46 }
       })
-      at(1850, () => {
+      at0(1850, () => {
         this.playArc('dive', false)
       })
-      at(2350, () => {
+      at0(2350, () => {
         this.actorHidden = true
       })
-      at(2430, () => {
+      at0(2430, () => {
         this.props.onFx?.({ kind: 'boom', on: false })
         this.props.onFx?.({ kind: 'hole', on: false })
         this.pendingEntrance = { kind: 'bombPop', panel: landingPanel }
@@ -1344,12 +1366,16 @@ export class EngineLayer extends Component<EngineLayerProps> {
     } else {
       // Legacy poofBack: smoke 0 → vanish 140 → page turn 650 (smoke + reappear
       // play on the landing page).
-      this.props.sfx('flip')
-      this.props.onFx?.({ kind: 'smoke', on: true, x: gx, y: gy - 53 })
-      at(140, () => {
+      const start = (): void => {
+        this.props.sfx('flip')
+        this.props.onFx?.({ kind: 'smoke', on: true, x: gx, y: gy - 53 })
+      }
+      if (kickMs > 0) at(kickMs, start)
+      else start()
+      at0(140, () => {
         this.actorHidden = true
       })
-      at(650, () => {
+      at0(650, () => {
         this.props.onFx?.({ kind: 'smoke', on: false })
         this.pendingEntrance = { kind: 'poofIn', panel: landingPanel }
         this.props.sfx('flip')
@@ -1678,58 +1704,118 @@ export class EngineLayer extends Component<EngineLayerProps> {
     }, scalar('fidget.delayMs', () => 2800 + Math.random() * 3200))
   }
 
-  /** The ABOUT-page sword fight (parity 3c): while Dash HOLDS the fight stance
-   * (the battle panel's persist arrival) and is otherwise idle, he trades blows
-   * with the FightScene attackers. The scene runs one 3.2s CSS master cycle
-   * from document time with clangs at 24% and 70%; both clocks are wall-clock,
-   * so scheduling each beat at the next clang phase keeps Dash's lunge landing
-   * on the burst, drift-free, without any DOM coupling. Alternates lunge (his
-   * hit) and a shoved recoil (theirs); occasional battle quip. */
-  private static BATTLE_CYCLE_MS = 3200
+  /** The ABOUT-page sword fight — the ENGINE is the choreographer. While Dash
+   * HOLDS the fight stance (the battle panel's persist arrival) and is idle,
+   * every 0.95–1.8s ONE exchange plays, and the FightScene duelist is CUED over
+   * battleBus so he answers it (the old design ran a fixed 3.2s CSS cycle the
+   * engine only decorated — owner: "not actually fighting each other"):
+   *   his attack  → windup/lunge cue now, Dash's shoved recoil + CLANG at the
+   *                 shared blade-contact moment (FOE_ATTACK_CONTACT_MS);
+   *   Dash's attack → lunge arc now, the duelist's knockback (or the big
+   *                 stagger) cued at the lunge's reach (DASH_LUNGE_CONTACT_MS).
+   * If the duelist was KICKED off (departure beat) and Dash is back in the
+   * stance, he POOFS back in first — the rematch. */
   private static BATTLE_LINES = ['HYAA!', 'en garde.', 'back!! back!!', 'not the fact sheet!!', 'you shall not doodle.', 'parried. obviously.']
+  private static REMATCH_LINES = ['you again.', 'round two!!', 'oh. you’re back.']
+  private static KICK_LINES = ['and STAY out!!', 'hold that thought—', 'be right back!!', 'gotta run.']
+
+  /** The battle-beat gates: stance held, idle, scene mounted and unstaged. */
+  private battleFighting(): boolean {
+    const s = this.scene
+    return (
+      !!s &&
+      battleBus.live() &&
+      !s.rt.running() &&
+      !this.dragging &&
+      !this.airborne &&
+      s.rt.activeSource().id === 'fight' &&
+      performance.now() >= this.stagingUntil
+    )
+  }
 
   private scheduleBattle(): void {
-    const cycle = EngineLayer.BATTLE_CYCLE_MS
-    const now = performance.now()
-    const phase = (now % cycle) / cycle
-    // next clang phase (0.24 = duelist's CLANG, 0.70 = the queue's CLANK), with
-    // ~120ms lead so the lunge's 26% contact frame lands on the burst.
-    const targets = [0.24, 0.7]
-    let waitMs = Number.POSITIVE_INFINITY
-    for (const t of targets) {
-      const dt = ((t - phase + 1) % 1) * cycle
-      waitMs = Math.min(waitMs, dt < 90 ? dt + cycle : dt)
-    }
+    // Fast re-poll while the duelist is off the page: Dash re-entering the
+    // stance should get the poof-in within a beat, not a full exchange wait.
+    const wait =
+      battleBus.live() && !battleBus.foePresent()
+        ? scalar('battle.reentryMs', () => 400)
+        : scalar('battle.delayMs', () => 950 + Math.random() * 850)
     this.battleTimer = window.setTimeout(() => {
       const s = this.scene
-      const fighting =
-        !!s &&
-        !s.rt.running() &&
-        !this.dragging &&
-        !this.airborne &&
-        s.rt.activeSource().id === 'fight' &&
-        performance.now() >= this.stagingUntil
-      if (fighting && s) {
-        if (chance('battle.shoved', 0.22)) {
-          // their hit lands — Dash recoils, then RE-STRIKES the stance (a bare
-          // act would release to plain stand when its hold expired, dropping
-          // the sword: the persist-held fight acting is what it replaced)
-          s.rt.runOneShot('__battle:shoved', [
-            { verb: 'strikePose', ref: 'shove', holdMs: 300 },
-            { verb: 'strikePose', ref: 'fight', hold: 'persist' },
-          ])
-          this.props.sfx('knock')
+      if (s && this.battleFighting()) {
+        if (!battleBus.foePresent()) {
+          battleBus.cue('poofin')
+          this.props.sfx('poof')
+          if (chance('battle.rematch', 0.5)) {
+            this.bubbleNote = { text: pick('battle.rematch.line', EngineLayer.REMATCH_LINES), until: performance.now() + 1100 }
+          }
+        } else if (chance('battle.foeattack', 0.38)) {
+          // HIS move: the scene winds up and lunges; Dash takes it on the
+          // parry at contact — recoil, then RE-STRIKE the stance (a bare act
+          // would release to plain stand when its hold expired, dropping the
+          // sword: the persist-held fight acting is what the shove replaced).
+          battleBus.cue('attack')
+          this.backNavTimers.push(
+            window.setTimeout(() => {
+              if (!this.battleFighting()) return // a drag/travel broke the exchange
+              s.rt.runOneShot('__battle:shoved', [
+                { verb: 'strikePose', ref: 'shove', holdMs: 300 },
+                { verb: 'strikePose', ref: 'fight', hold: 'persist' },
+              ])
+              this.props.sfx('knock')
+            }, FOE_ATTACK_CONTACT_MS),
+          )
         } else {
-          const facing = s.rt.transform.facing
-          this.playArc(facing === -1 ? 'lungeL' : 'lungeR', false)
-          this.props.sfx('knock')
+          // DASH's move: lunge arc now; the duelist takes it on the blade at
+          // the reach — knocked back a step, or flung into the big stagger.
+          const hard = chance('battle.stagger', 0.3)
+          this.playArc(s.rt.transform.facing === -1 ? 'lungeL' : 'lungeR', false)
+          this.props.sfx('whoosh')
+          this.backNavTimers.push(
+            window.setTimeout(() => {
+              if (!battleBus.live()) return
+              battleBus.cue(hard ? 'staggered' : 'parried')
+              this.props.sfx('knock')
+            }, DASH_LUNGE_CONTACT_MS),
+          )
           if (chance('battle.line', 0.3)) {
             this.bubbleNote = { text: pick('battle.line.pick', EngineLayer.BATTLE_LINES), until: performance.now() + 1000 }
           }
         }
       }
       this.scheduleBattle()
-    }, Math.max(60, waitMs - 120))
+    }, wait)
+  }
+
+  /** The departure boot (owner: Dash never just WALKS out of a sword fight —
+   * "kick the guy off screen before leaving the panel"): if he holds the
+   * stance with the duelist up, kick him off the page first. Returns the ms
+   * the departure must wait (0 = no battle to close out). */
+  private maybeKickFoe(): number {
+    const s = this.scene
+    if (!s || !battleBus.live() || !battleBus.foePresent()) return 0
+    if (s.rt.activeSource().id !== 'fight' || s.rt.running()) return 0
+    this.stagingUntil = performance.now() + KICK_CLEAR_MS
+    s.rt.transform.facing = FOE_SIDE // the duelist fights from Dash's left
+    s.rt.runOneShot('__battle:kick', [{ verb: 'strikePose', ref: 'kick', holdMs: 540 }])
+    this.playArc(FOE_SIDE === -1 ? 'lungeL' : 'lungeR', false)
+    this.props.sfx('whoosh')
+    // Hold the shot on the boot — a panel travel has already focused the
+    // camera on the DESTINATION (Notebook.travel sets panel state up front).
+    const t = s.rt.transform
+    this.lastCam = { x: t.x + FOE_SIDE * 30, y: t.y - 30 }
+    this.props.onDashCam?.({ ...this.lastCam, mult: 1.12, fast: true })
+    this.backNavTimers.push(
+      window.setTimeout(() => {
+        battleBus.cue('kicked')
+        this.props.sfx('knock')
+        this.props.sfx('fx:shake')
+        if (chance('battle.kickline', 0.4)) {
+          this.bubbleNote = { text: pick('battle.kick.line', EngineLayer.KICK_LINES), until: performance.now() + 1000 }
+        }
+      }, KICK_CONTACT_MS),
+    )
+    return KICK_CLEAR_MS
   }
 
   // ── internals ────────────────────────────────────────────────────────────────

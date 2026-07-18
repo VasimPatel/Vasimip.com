@@ -37,8 +37,6 @@ body {
 @keyframes swordsw{0%,55%{transform:rotate(14deg)}62%{transform:rotate(-70deg)}70%{transform:rotate(8deg)}80%,100%{transform:rotate(14deg)}}
 @keyframes lungea{0%,8%{transform:translate(0,0) rotate(0deg)}18%{transform:translate(32px,0) rotate(8deg)}24%{transform:translate(30px,0) rotate(0deg)}32%,46%{transform:translate(-8px,0) rotate(-78deg)}60%,100%{transform:translate(0,0) rotate(0deg)}}
 @keyframes lungeb{0%,54%{transform:translate(0,0) rotate(0deg)}66%{transform:translate(36px,0) rotate(8deg)}71%{transform:translate(34px,0) rotate(0deg)}79%,88%{transform:translate(-10px,0) rotate(-78deg)}98%,100%{transform:translate(0,0) rotate(0deg)}}
-@keyframes clanga{0%,20%{opacity:0;transform:scale(.3)}24%{opacity:1;transform:scale(1.2)}31%,100%{opacity:0;transform:scale(1.7)}}
-@keyframes clangb{0%,66%{opacity:0;transform:scale(.3)}70%{opacity:1;transform:scale(1.2)}77%,100%{opacity:0;transform:scale(1.7)}}
 @keyframes sparkfuse{0%,100%{opacity:1;transform:scale(1)}50%{opacity:.4;transform:scale(.7)}}
 @keyframes burstonce{0%{opacity:0;transform:scale(.2)}20%{opacity:1;transform:scale(1.2)}70%{opacity:1;transform:scale(1)}100%{opacity:0;transform:scale(1.5)}}
 @keyframes boomonce{0%{opacity:0;transform:scale(.4) rotate(-7deg)}15%,80%{opacity:1;transform:scale(1) rotate(-7deg)}100%{opacity:0;transform:scale(1) rotate(-7deg)}}
@@ -117,14 +115,33 @@ body {
   *[style*="camshake"], *[style*="pagejit"] { animation: none !important; }
 }
 
-/* ── battle scene (parity 3c: the fact-sheet sword fight) — one 3.2s master
-   cycle; clanga/clangb pop at 24%/70%, the engine-side Dash lunge
-   (scheduleBattle) is phase-computed onto the same wall-clock beats. */
-@keyframes duelistlunge{0%,8%{transform:translate(0,0) rotate(0)}14%{transform:translate(-4px,0) rotate(7deg)}20%,25%{transform:translate(26px,0) rotate(-4deg)}33%{transform:translate(3px,0) rotate(-56deg)}44%{transform:translate(2px,0) rotate(-52deg)}58%{transform:translate(0,0) rotate(0)}72%{transform:translate(0,-5px) rotate(3deg)}80%{transform:translate(0,0) rotate(0)}100%{transform:translate(0,0) rotate(0)}}
-@keyframes queuecharge{0%{transform:translate(0,0)}6%{transform:translate(0,-3px)}12%{transform:translate(0,0)}20%{transform:translate(0,-3px)}28%{transform:translate(0,0)}38%{transform:translate(0,-3px)}46%{transform:translate(0,0)}58%{transform:translate(0,0) rotate(0)}64%,70%{transform:translate(38px,0) rotate(4deg)}75%{transform:translate(-6px,-30px) rotate(-70deg)}83%{transform:translate(-28px,-4px) rotate(-152deg)}88%,93%{transform:translate(-30px,2px) rotate(-178deg)}98%{transform:translate(-8px,0) rotate(-16deg)}100%{transform:translate(0,0) rotate(0)}}
-@keyframes loosesword{0%,69%{opacity:0;transform:translate(0,0) rotate(0)}70%{opacity:1;transform:translate(0,0) rotate(0)}78%{opacity:1;transform:translate(-14px,-26px) rotate(-160deg)}86%,92%{opacity:1;transform:translate(-20px,8px) rotate(-244deg)}97%,100%{opacity:0;transform:translate(-20px,8px) rotate(-244deg)}}
-@keyframes kostar{0%{transform:translate(-14px,2px) scale(.8);opacity:.9}25%{transform:translate(0,-9px) scale(1);opacity:1}50%{transform:translate(14px,2px) scale(.85);opacity:.9}75%{transform:translate(0,7px) scale(.7);opacity:.55}100%{transform:translate(-14px,2px) scale(.8);opacity:.9}}
-@keyframes chargelines{0%,58%{opacity:0;transform:translate(0,0)}62%,68%{opacity:1;transform:translate(22px,0)}74%,100%{opacity:0;transform:translate(26px,0)}}
+/* ── battle scene (the fact-sheet sword fight) — EVENT-DRIVEN: the engine's
+   exchange director (EngineLayer.scheduleBattle) cues the FightScene duelist
+   over battleBus; contact moments are shared constants (battleBus.ts), so his
+   keyframe contact frames below must keep matching them:
+   foeattack contact ≈ 42% of .9s (FOE_ATTACK_CONTACT_MS 380),
+   battlelunge reach at 26% of .46s (DASH_LUNGE_CONTACT_MS 120). */
+/* the duelist: en-garde footwork — sharp little advances, never a sway */
+@keyframes foeidle{0%,100%{transform:translate(0,0)}10%{transform:translate(0,-4px)}20%{transform:translate(2px,0)}34%{transform:translate(5px,0)}42%{transform:translate(5px,-3px)}50%{transform:translate(3px,0)}64%{transform:translate(-3px,0)}74%{transform:translate(-3px,-4px)}84%{transform:translate(0,0)}}
+@keyframes foearm{0%,100%{transform:rotate(0)}25%{transform:rotate(7deg)}50%{transform:rotate(-5deg)}72%{transform:rotate(9deg)}}
+/* his attack: crouch, LUNGE into Dash (contact 42%), bounce off the parry */
+@keyframes foeattack{0%{transform:translate(0,0) rotate(0)}24%{transform:translate(-6px,0) rotate(-4deg)}34%{transform:translate(2px,-2px) rotate(2deg)}40%,44%{transform:translate(30px,0) rotate(5deg)}52%{transform:translate(2px,-1px) rotate(-3deg)}62%{transform:translate(-8px,0) rotate(0)}80%{transform:translate(-2px,-2px) rotate(0)}100%{transform:translate(0,0) rotate(0)}}
+@keyframes foeatkarm{0%{transform:rotate(0)}22%{transform:rotate(-16deg)}34%{transform:rotate(0)}40%{transform:rotate(46deg)}46%{transform:rotate(42deg)}58%{transform:rotate(10deg)}74%{transform:rotate(-6deg)}100%{transform:rotate(0)}}
+/* Dash's blow lands on his blade: knocked back a step, springs back up */
+@keyframes foeparried{0%{transform:translate(0,0) rotate(0)}18%{transform:translate(-15px,-4px) rotate(-13deg)}38%{transform:translate(-17px,0) rotate(-9deg)}62%{transform:translate(-8px,-2px) rotate(-3deg)}82%{transform:translate(-1px,0) rotate(0)}100%{transform:translate(0,0) rotate(0)}}
+@keyframes foeparryarm{0%{transform:rotate(0)}20%{transform:rotate(-38deg)}55%{transform:rotate(-20deg)}100%{transform:rotate(0)}}
+/* the big hit: flung back, teeters on one heel, hops back into stance */
+@keyframes foestagger{0%{transform:translate(0,0) rotate(0)}14%{transform:translate(-24px,-12px) rotate(-22deg)}30%{transform:translate(-30px,0) rotate(-12deg)}44%{transform:translate(-28px,0) rotate(-19deg)}58%{transform:translate(-26px,0) rotate(-7deg)}70%{transform:translate(-24px,0) rotate(-13deg)}82%{transform:translate(-10px,-4px) rotate(-2deg)}100%{transform:translate(0,0) rotate(0)}}
+/* Dash's boot: punted up and off the top of the page, tumbling */
+@keyframes foekicked{0%{transform:translate(0,0) rotate(0)}18%{transform:translate(-36px,-110px) rotate(-160deg)}45%{transform:translate(-70px,-280px) rotate(-380deg)}100%{transform:translate(-110px,-560px) rotate(-780deg)}}
+/* smoke pop re-entrance: scales up from his feet with an overshoot */
+@keyframes foepoofin{0%{transform:scale(0,0)}55%{transform:scale(1.25,1.12)}75%{transform:scale(.92,.97)}100%{transform:scale(1,1)}}
+/* exchange effects (one-shots; 'both' fill hides delayed bursts pre-contact) */
+@keyframes duelclash{0%{opacity:0;transform:scale(.25)}14%{opacity:1;transform:scale(1.3)}30%{transform:scale(1.05)}70%{opacity:1}100%{opacity:0;transform:scale(1.55)}}
+@keyframes duelpow{0%{opacity:0;transform:translateY(0) scale(.25)}14%{opacity:1;transform:translateY(-6px) scale(1.35)}70%{opacity:1;transform:translateY(-14px) scale(1.1)}100%{opacity:0;transform:translateY(-22px) scale(1.5)}}
+@keyframes duelswish{0%{opacity:0}12%{opacity:.9}100%{opacity:0}}
+@keyframes duellines{0%{opacity:0;transform:translate(-6px,0)}30%{opacity:1;transform:translate(0,0)}100%{opacity:0;transform:translate(6px,0)}}
+@keyframes duelsmoke{0%{opacity:.95;transform:scale(.35)}60%{opacity:.6;transform:scale(1.1)}100%{opacity:0;transform:scale(1.55)}}
+/* Dash's engine-side lunge arcs (playArc 'lungeL'/'lungeR') */
 @keyframes battlelungel{0%{transform:none}26%{transform:translateX(-18px) rotate(-7deg)}48%{transform:translateX(-12px) rotate(-2deg)}100%{transform:none}}
 @keyframes battlelunger{0%{transform:none}26%{transform:translateX(18px) rotate(7deg)}48%{transform:translateX(12px) rotate(2deg)}100%{transform:none}}
-@keyframes heldsword{0%,69%{opacity:1}70%,96%{opacity:0}97%,100%{opacity:1}}
