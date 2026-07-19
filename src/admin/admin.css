@@ -614,3 +614,11 @@
 .pagecard:hover .pc-tools, .pagecard.active .pc-tools { display: flex; }
 .pc-edit { width: 100%; box-sizing: border-box; font: inherit; font-weight: 700; border: 1.5px dashed #8a8378; border-radius: 4px; background: #fffdf6; padding: 2px 4px; }
 .pc-edit-snark { font-weight: 400; font-size: 12px; margin-top: 3px; }
+
+/* v2 submission metadata chips (placement / travel / trick / note) */
+.inbox-meta { display: flex; flex-wrap: wrap; gap: 6px; margin: 8px 0 2px; }
+.inbox-tag {
+  border: 1.5px solid #26241f; border-radius: 6px; padding: 2px 8px;
+  font-size: 12.5px; background: #fffdf6;
+}
+.inbox-tag.note { background: #fff8e2; font-style: italic; }

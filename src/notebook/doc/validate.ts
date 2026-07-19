@@ -12,7 +12,9 @@ import type {
 } from './docTypes'
 import { checkBox, isPlainObject, isFiniteNumber, oneOf, type Issues } from './checks'
 
-const MAX_PAGES = 12
+// 24 (was 12): the guestbook grows sheets as friend panels arrive (friendPages.ts
+// checks this cap before growing, so a graft can never produce an invalid doc).
+export const MAX_PAGES = 24
 const MAX_STEPS = 32
 const MAX_ACTION_MS = 8000
 const MAX_PID_CHARS = 24
@@ -82,6 +84,7 @@ function checkPage(x: unknown, path: string, issues: Issues, actionNames: Set<st
   if (typeof x.name !== 'string' || x.name.length === 0) issues.push(`${path}.name: required non-empty string`)
   if (typeof x.snark !== 'string') issues.push(`${path}.snark: required string`)
   checkTravelConfig(x.travel, `${path}.travel`, issues, actionNames)
+  if (x.guest !== undefined && x.guest !== true) issues.push(`${path}.guest: only \`true\` is meaningful (omit otherwise)`)
   if (!Array.isArray(x.panels) || x.panels.length === 0) {
     issues.push(`${path}.panels: required non-empty array (>=1 panel)`)
   } else {
@@ -216,6 +219,14 @@ function checkAction(x: unknown, name: string, issues: Issues): void {
 }
 
 // ── entry points ────────────────────────────────────────────────────────────
+
+/** Validate ONE action doc in isolation (the friend-submission trick uses the
+ *  same step grammar and caps as the owner's Dojo actions). */
+export function tryValidateAction(x: unknown, name = 'trick'): { ok: true } | { ok: false; errors: string[] } {
+  const issues: Issues = []
+  checkAction(x, name, issues)
+  return issues.length > 0 ? { ok: false, errors: issues } : { ok: true }
+}
 
 export function tryValidateDoc(x: unknown): { ok: true; doc: NotebookDoc } | { ok: false; errors: string[] } {
   const issues: Issues = []

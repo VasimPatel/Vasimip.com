@@ -14,7 +14,8 @@
 import { Fragment, useCallback, useEffect, useState } from 'react'
 import { renderBox } from '../notebook/PageRenderer'
 import { SKETCH_RADII, type PanelDoc } from '../notebook/doc/docTypes'
-import type { SubmissionPanel } from '../notebook/doc/submission'
+import { normalizeSubmission, type FriendSubmission, type SubmissionPanel } from '../notebook/doc/submission'
+import { BUILTIN_INFO } from '../notebook/doc/builtinInfo'
 import {
   approveSubmission, createInvite, listInvites, listSubmissions, rejectSubmission, revokeInvite,
   type InviteRow, type SubmissionRow,
@@ -23,6 +24,9 @@ import {
 interface Props {
   /** Insert a submitted panel into the current page draft (owner arranges/saves). */
   onAddToPage: (panel: PanelDoc) => void
+  /** Graft the FULL submission into the guestbook (65% growth, placement,
+   *  travel pool, trick action) — returns false if the graft failed. */
+  onAddToGuestbook: (sub: FriendSubmission, author: string | null) => boolean
   /** Current page name for the button label; null when the cover is selected. */
   pageName: string | null
 }
@@ -52,7 +56,7 @@ function MiniPanel({ panel }: { panel: SubmissionPanel }) {
   )
 }
 
-export default function Inbox({ onAddToPage, pageName }: Props) {
+export default function Inbox({ onAddToPage, onAddToGuestbook, pageName }: Props) {
   const [open, setOpen] = useState(false)
   const [available, setAvailable] = useState<boolean | null>(null) // null = probing
   const [subs, setSubs] = useState<SubmissionRow[]>([])
@@ -104,19 +108,42 @@ export default function Inbox({ onAddToPage, pageName }: Props) {
     if (ok) await refresh()
   }
 
-  const addToPage = async (s: SubmissionRow) => {
+  /** Approve first if still pending, holding `busy` through the refresh and
+   *  re-reading the FRESH status (codex: releasing busy mid-flight let a
+   *  reject/second-click race the graft). false = stop. */
+  const ensureApproved = async (s: SubmissionRow): Promise<boolean> => {
     setDetailErr(null)
-    // Approve first if still pending — only insert + close if that succeeds.
-    if (s.status === 'pending') {
-      setBusy(true)
-      const ok = await approveSubmission(s.id)
-      setBusy(false)
-      if (!ok) { setDetailErr('could not approve this panel — try again.'); return }
-      await refresh()
-    }
-    const { w, h, boxes } = s.panel
-    onAddToPage({ x: 40, y: 40, w, h, anchor: { dx: w / 2, dy: 0 }, sketch: 'b', boxes, pid: undefined })
-    setOpen(false)
+    if (s.status === 'rejected') return false
+    if (s.status === 'approved') return true
+    const ok = await approveSubmission(s.id)
+    if (!ok) { setDetailErr('could not approve this panel — try again.'); return false }
+    const fresh = await listSubmissions()
+    await refresh()
+    return fresh?.find((r) => r.id === s.id)?.status === 'approved'
+  }
+
+  const addToPage = async (s: SubmissionRow, sub: FriendSubmission) => {
+    if (busy) return
+    setBusy(true)
+    try {
+      if (!(await ensureApproved(s))) return
+      const { w, h, boxes } = sub.panel
+      onAddToPage({ x: 40, y: 40, w, h, anchor: { dx: w / 2, dy: 0 }, sketch: 'b', boxes, pid: undefined })
+      setOpen(false)
+    } finally { setBusy(false) }
+  }
+
+  const addToGuestbook = async (s: SubmissionRow, sub: FriendSubmission) => {
+    if (busy) return
+    setBusy(true)
+    try {
+      if (!(await ensureApproved(s))) return
+      if (!onAddToGuestbook(sub, s.authorName)) {
+        setDetailErr('the guestbook graft failed — the book may be at its page cap; try "add to this page" instead.')
+        return
+      }
+      setOpen(false)
+    } finally { setBusy(false) }
   }
 
   const submit = async () => {
@@ -182,24 +209,37 @@ export default function Inbox({ onAddToPage, pageName }: Props) {
 
                 {/* detail */}
                 <div className="inbox-detail">
-                  {selected ? (
-                    <>
-                      <div className="inbox-detail-head">
-                        <b>{selected.authorName || 'someone'}</b>
-                        <span className={`chip ${selected.status}`}>{selected.status}</span>
-                        <span className="inbox-dim">{relTime(selected.createdAt)}</span>
-                      </div>
-                      <div className="inbox-preview-wrap"><MiniPanel panel={selected.panel} /></div>
-                      <div className="inbox-actions">
-                        <button className="ibtn ok" disabled={busy || selected.status === 'approved'} onClick={() => doReview(selected.id, 'approve')}>✓ approve</button>
-                        <button className="ibtn no" disabled={busy || selected.status === 'rejected'} onClick={() => doReview(selected.id, 'reject')}>✕ reject</button>
-                        {selected.status !== 'rejected' && (
-                          <button className="ibtn add" disabled={busy || pageName == null} title={pageName == null ? 'select a page first' : 'add to ' + pageName} onClick={() => addToPage(selected)}>→ add to this page</button>
-                        )}
-                      </div>
-                      {detailErr && <div className="inbox-err">{detailErr}</div>}
-                    </>
-                  ) : (
+                  {selected ? (() => {
+                    const sub = normalizeSubmission(selected.panel)
+                    if (!sub) return <div className="inbox-err">this submission's payload doesn't parse — reject it.</div>
+                    return (
+                      <>
+                        <div className="inbox-detail-head">
+                          <b>{selected.authorName || 'someone'}</b>
+                          <span className={`chip ${selected.status}`}>{selected.status}</span>
+                          <span className="inbox-dim">{relTime(selected.createdAt)}</span>
+                        </div>
+                        <div className="inbox-preview-wrap"><MiniPanel panel={sub.panel} /></div>
+                        <div className="inbox-meta">
+                          {sub.placement && <span className="inbox-tag">📍 wants ({sub.placement.x}, {sub.placement.y})</span>}
+                          {sub.travel && <span className="inbox-tag">🏃 {sub.travel.map((m) => BUILTIN_INFO[m].label).join(', ')}</span>}
+                          {sub.trick && <span className="inbox-tag">⚡ trick: {sub.trick.name} ({sub.trick.steps.length} steps)</span>}
+                          {sub.note && <span className="inbox-tag note">💬 "{sub.note}"</span>}
+                        </div>
+                        <div className="inbox-actions">
+                          <button className="ibtn ok" disabled={busy || selected.status === 'approved'} onClick={() => doReview(selected.id, 'approve')}>✓ approve</button>
+                          <button className="ibtn no" disabled={busy || selected.status === 'rejected'} onClick={() => doReview(selected.id, 'reject')}>✕ reject</button>
+                          {selected.status !== 'rejected' && (
+                            <>
+                              <button className="ibtn add" data-testid="add-to-guestbook" disabled={busy} title="graft it into the growing FRIENDS pages (placement, travel, trick and all)" onClick={() => addToGuestbook(selected, sub)}>→ add to the guestbook</button>
+                              <button className="ibtn" disabled={busy || pageName == null} title={pageName == null ? 'select a page first' : 'content only, onto ' + pageName} onClick={() => addToPage(selected, sub)}>→ this page (content only)</button>
+                            </>
+                          )}
+                        </div>
+                        {detailErr && <div className="inbox-err">{detailErr}</div>}
+                      </>
+                    )
+                  })() : (
                     <div className="inbox-empty">pick a submission to preview it</div>
                   )}
 

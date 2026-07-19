@@ -1,0 +1,146 @@
+/* /make-a-panel — the friend guestbook builder. Same paper-and-marker language
+   as the site; leans on admin.css for the dojo overlay + field styles. */
+.fr-shell {
+  min-height: 100vh;
+  background: #b09877;
+  font-family: 'Patrick Hand', cursive;
+  color: #26241f;
+  display: flex;
+  flex-direction: column;
+}
+.fr-card {
+  margin: auto;
+  background: #fdfbf3;
+  border: 2.5px solid #26241f;
+  border-radius: 12px;
+  box-shadow: 8px 10px 22px rgba(0, 0, 0, 0.28);
+  padding: 28px 34px;
+  max-width: 460px;
+  font-size: 18px;
+}
+.fr-h1 { font-family: 'Permanent Marker', cursive; font-size: 30px; margin-bottom: 10px; }
+.fr-dim { color: #8a8578; font-size: 14px; }
+.fr-card a { color: #26241f; }
+
+.fr-top {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 10px 18px;
+  background: #26241f;
+  color: #fdfbf3;
+  position: sticky;
+  top: 0;
+  z-index: 40;
+}
+.fr-brand { font-family: 'Permanent Marker', cursive; font-size: 19px; }
+.fr-brand span { font-family: 'Patrick Hand', cursive; font-size: 14px; color: #b8b2a2; }
+.fr-invitee { font-size: 14px; color: #ffd23f; }
+.grow { flex: 1; }
+
+.fr-main { max-width: 1060px; width: 100%; margin: 0 auto; padding: 18px 16px 80px; }
+.fr-sec {
+  background: #fdfbf3;
+  border: 2.5px solid #26241f;
+  border-radius: 10px;
+  box-shadow: 5px 6px 16px rgba(0, 0, 0, 0.22);
+  margin: 0 0 18px;
+  padding: 14px 16px 16px;
+}
+.fr-sec-h { font-family: 'Permanent Marker', cursive; font-size: 17px; margin-bottom: 10px; }
+
+.fr-toolrow, .fr-boxbar, .fr-sendrow, .fr-dojo-row { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; margin: 8px 0; }
+.fr-seg, .fr-tbtn, .fr-verb {
+  border: 2px solid #26241f;
+  border-radius: 8px;
+  padding: 4px 12px;
+  cursor: pointer;
+  background: #fff;
+  font-size: 15px;
+  user-select: none;
+}
+.fr-seg.on, .fr-verb.on { background: #ffd23f; }
+.fr-tbtn.dojo { background: #ff5ca8; color: #fff; }
+.fr-tbtn.danger { background: #fff; color: #b3462f; border-color: #b3462f; }
+.fr-verbs { display: flex; flex-wrap: wrap; gap: 8px; }
+.fr-trick-chip { border: 2px dashed #26241f; border-radius: 8px; padding: 4px 12px; background: #fff6fb; font-size: 15px; }
+.fr-note { margin: 6px 2px 0; }
+
+.fr-canvas {
+  min-height: 300px;
+  max-height: 520px;
+  padding: 12px;
+  display: flex;
+  background:
+    linear-gradient(90deg, transparent 29px, rgba(224, 96, 96, 0.35) 29px, rgba(224, 96, 96, 0.35) 30.5px, transparent 30.5px),
+    repeating-linear-gradient(transparent 0, transparent 25px, rgba(122, 168, 204, 0.28) 25px, rgba(122, 168, 204, 0.28) 26.5px),
+    #fdfbf3;
+  border: 1.5px dashed #b8b2a2;
+  border-radius: 8px;
+  overflow: hidden;
+}
+.fr-panel { position: relative; background: #fffdf6; border: 2.5px solid #1a1a1a; box-sizing: border-box; }
+.fr-disp { position: absolute; inset: 0; pointer-events: none; }
+.fr-box { position: absolute; }
+.fr-live { position: absolute; inset: 0; pointer-events: none; }
+.fr-handle {
+  position: absolute; right: -7px; bottom: -7px; width: 14px; height: 14px;
+  background: #4a90d9; border: 2px solid #fff; border-radius: 3px; cursor: nwse-resize;
+}
+.fr-panel-handle {
+  position: absolute; right: -9px; bottom: -9px; width: 18px; height: 18px;
+  background: #26241f; border: 2px solid #fdfbf3; border-radius: 4px; cursor: nwse-resize;
+}
+
+.fr-place { margin-top: 4px; }
+.fr-place-meta { display: flex; gap: 10px; font-size: 14px; color: #6f6a5d; margin-bottom: 6px; }
+.fr-place-meta .warn { color: #b3462f; font-weight: bold; }
+.fr-page-sizer { position: relative; margin: 0 auto; }
+.fr-page {
+  position: absolute; top: 0; left: 0;
+  background:
+    linear-gradient(90deg, transparent 58px, rgba(224, 96, 96, 0.5) 58px, rgba(224, 96, 96, 0.5) 60px, transparent 60px),
+    repeating-linear-gradient(transparent 0, transparent 26px, rgba(122, 168, 204, 0.38) 26px, rgba(122, 168, 204, 0.38) 27.5px),
+    #fdfbf3;
+  border: 2.5px solid #26241f;
+  border-radius: 4px 12px 12px 4px;
+  box-sizing: border-box;
+}
+.fr-ghost { position: absolute; background: #fffdf6; border: 2.5px solid #8a8578; opacity: 0.65; overflow: hidden; }
+.fr-ghost-disp { position: absolute; inset: 0; pointer-events: none; }
+.fr-mine {
+  position: absolute; background: #fffdf6; border: 3px solid #4a90d9; cursor: grab;
+  box-shadow: 4px 5px 0 rgba(74, 144, 217, 0.25); overflow: visible;
+}
+.fr-mine.bad { border-color: #b3462f; box-shadow: 4px 5px 0 rgba(179, 70, 47, 0.25); }
+.fr-mine-tag {
+  position: absolute; top: -26px; left: 0; font-size: 15px; padding: 0 8px;
+  background: #4a90d9; color: #fff; border-radius: 6px 6px 6px 0; white-space: nowrap;
+}
+.fr-mine.bad .fr-mine-tag { background: #b3462f; }
+
+.fr-boxbar .fr-text { flex: 1; min-width: 200px; font-family: inherit; font-size: 15px; border: 2px solid #26241f; border-radius: 6px; padding: 4px 8px; }
+.fr-boxbar select, .fr-boxbar input[type='number'] { border: 2px solid #26241f; border-radius: 6px; padding: 3px 6px; font-family: inherit; }
+.fr-boxbar input[type='number'] { width: 64px; }
+
+.fr-preview {
+  position: relative; height: 460px; overflow: hidden; border: 2px solid #26241f;
+  border-radius: 8px; margin-top: 8px; background: #b09877;
+}
+.fr-preview-frame { position: absolute; top: 0; left: 0; transform-origin: top left; }
+
+.fr-sendrow .fr-name { width: 220px; }
+.fr-sendrow .fr-msg { flex: 1; min-width: 220px; }
+.fr-sendrow input {
+  border: 2px solid #26241f; border-radius: 8px; padding: 6px 10px;
+  font-family: inherit; font-size: 16px; background: #fff;
+}
+.fr-send {
+  font-family: 'Permanent Marker', cursive; font-size: 17px; padding: 7px 20px;
+  background: #ffd23f; border: 2.5px solid #26241f; border-radius: 10px; cursor: pointer;
+}
+.fr-send:disabled { opacity: 0.45; cursor: not-allowed; }
+.fr-errs {
+  background: #fff2ef; border: 2px solid #b3462f; border-radius: 8px;
+  padding: 8px 12px; font-size: 14px; color: #b3462f; margin-top: 8px;
+}

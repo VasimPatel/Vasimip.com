@@ -8,6 +8,8 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import './admin.css'
 import { tryValidateDoc, type NotebookDoc } from '../notebook/doc/validate'
 import type { BoxDoc, BuiltinMode, CoverDoc, PageDoc, PanelDoc } from '../notebook/doc/docTypes'
+import { graftSubmission } from '../notebook/doc/friendPages'
+import type { FriendSubmission } from '../notebook/doc/submission'
 import { allFlagsOn, toGeom } from './shared'
 import PageCanvas from './PageCanvas'
 import Inspector from './Inspector'
@@ -333,6 +335,23 @@ export default function Admin({ devBypass = false }: { devBypass?: boolean }) {
     }
   }
   const addPanelDefault = () => addPanel({ ...NEW_PANEL, boxes: [seedTextBox(240)] })
+
+  /** Inbox "→ add to the guestbook": graft the WHOLE submission (growing
+   *  FRIENDS pages, placement, travel pool, trick action) into the draft and
+   *  jump the editor to the landed panel. The owner arranges/saves as usual. */
+  const addToGuestbook = (sub: FriendSubmission, author: string | null): boolean => {
+    const d = docRef.current
+    if (!d) return false
+    const r = graftSubmission(d, sub, author)
+    if (!r) return false
+    lastPushRef.current = 0 // a graft always gets its own undo entry (codex)
+    update(() => r.doc)
+    setSel({ kind: 'page', page: r.pageIdx })
+    setSide(r.side)
+    setPanelSel(r.panelIdx)
+    setBoxSel(null)
+    return true
+  }
   const deletePanel = () => {
     if (curPage == null || !page || panelSel == null) return
     if (side === 'back') {
@@ -531,7 +550,7 @@ export default function Admin({ devBypass = false }: { devBypass?: boolean }) {
             <div className="dd-title">DASH DOJO →</div>
             <div className="dd-sub">teach Dash brand-new stunts (the advanced stuff)</div>
           </div>
-          <Inbox onAddToPage={addPanel} pageName={page?.name ?? null} />
+          <Inbox onAddToPage={addPanel} onAddToGuestbook={addToGuestbook} pageName={page?.name ?? null} />
         </aside>
 
         <main className="stagewrap">

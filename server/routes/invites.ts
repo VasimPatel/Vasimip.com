@@ -21,7 +21,7 @@ import { and, count, desc, eq, gt, gte, isNull, lt, or, sql } from 'drizzle-orm'
 import { createHash } from 'node:crypto'
 import { db } from '../db'
 import { invites, submissions } from '../db/schema'
-import { validateSubmissionPanel } from '../../src/notebook/doc/submission'
+import { validateFriendSubmission } from '../../src/notebook/doc/submission'
 import { clientIp, publicRateLimit, requireOwner, type OwnerEnv } from '../middleware'
 
 const app = new Hono<OwnerEnv>()
@@ -150,7 +150,9 @@ app.get('/invite/:token', publicRateLimit, async (c) => {
 })
 
 // ── Public: submit a panel ──────────────────────────────────────────────────
-app.post('/invite/:token/submissions', bodyLimit({ maxSize: 64 * 1024 }), async (c) => {
+// 128KB: the validator legitimately allows ~73KB (12 draw boxes × 6000 path
+// chars) — the route cap must sit above the semantic cap, not under it.
+app.post('/invite/:token/submissions', bodyLimit({ maxSize: 128 * 1024 }), async (c) => {
   const token = c.req.param('token')
   const body = await c.req.json().catch(() => null) as { authorName?: unknown; panel?: unknown } | null
   if (!body) return c.json({ errors: ['body must be JSON { authorName, panel }'] }, 400)
@@ -161,10 +163,13 @@ app.post('/invite/:token/submissions', bodyLimit({ maxSize: 64 * 1024 }), async 
   const ipHash = hashIp(clientIp(c))
 
   // Content + author validation (no db) — a bad body never enters the tx.
+  // `panel` carries the whole submission envelope: the legacy bare content
+  // panel OR the v2 guestbook request (placement/travel/trick/note) — both
+  // normalize to v2 and the NORMALIZED object is what gets stored.
   const errors: string[] = []
   const authorName = typeof body.authorName === 'string' ? body.authorName.trim() : ''
   if (authorName.length < 1 || authorName.length > 40) errors.push('authorName: must be 1..40 characters')
-  const validated = validateSubmissionPanel(body.panel)
+  const validated = validateFriendSubmission(body.panel)
   if (!validated.ok) errors.push(...validated.errors)
   if (errors.length > 0) return c.json({ errors }, 400)
 
@@ -200,7 +205,7 @@ app.post('/invite/:token/submissions', bodyLimit({ maxSize: 64 * 1024 }), async 
     await tx.insert(submissions).values({
       inviteId: inv.id,
       authorName: authorName.slice(0, 40),
-      panel: (validated as { ok: true; panel: unknown }).panel,
+      panel: (validated as { ok: true; sub: unknown }).sub,
       ipHash,
     })
     return { status: 201 }

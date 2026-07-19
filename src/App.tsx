@@ -9,6 +9,9 @@ import { useSession } from './admin/auth-client'
 // exists in the bundle now (fine).
 const Admin = lazy(() => import('./admin/Admin'))
 const Login = lazy(() => import('./admin/Login'))
+// The friend guestbook builder (/make-a-panel/<token>) — its own lazy chunk;
+// the token gets validated server-side, so the route match stays permissive.
+const MakeAPanel = lazy(() => import('./friend/MakeAPanel'))
 
 function SpinCard() {
   return (
@@ -64,5 +67,13 @@ function SiteNotebook() {
 
 export default function App() {
   if (window.location.pathname === '/admin') return <AdminGate />
+  const invite = window.location.pathname.match(/^\/make-a-panel\/([A-Za-z0-9_-]{10,64})\/?$/)
+  if (invite) {
+    return (
+      <Suspense fallback={<SpinCard />}>
+        <MakeAPanel token={invite[1]} />
+      </Suspense>
+    )
+  }
   return <SiteNotebook />
 }
