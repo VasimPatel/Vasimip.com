@@ -12,6 +12,7 @@ COPY package.json bun.lock ./
 COPY packages/schema/package.json ./packages/schema/
 COPY packages/engine/package.json ./packages/engine/
 COPY packages/headless/package.json ./packages/headless/
+COPY packages/renderer-svg/package.json ./packages/renderer-svg/
 RUN bun install --frozen-lockfile
 
 COPY . .
