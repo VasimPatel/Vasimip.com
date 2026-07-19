@@ -21,7 +21,8 @@ import { BUILTIN_INFO } from '../notebook/doc/builtinInfo'
 import type { NotebookDoc } from '../notebook/doc/validate'
 import { validateFriendSubmission, TRICK_NAME_RE, type FriendSubmission, type SubmissionPanel } from '../notebook/doc/submission'
 import { findSpot, graftSubmission, newGuestPage, nextFriendSlot, slotPanels } from '../notebook/doc/friendPages'
-import { ContentCanvas, PlacePicker } from './FriendCanvas'
+import { ContentCanvas, PlacePicker, type CanvasMode } from './FriendCanvas'
+import { inkBudget } from '../notebook/doc/strokes'
 
 type Phase = 'checking' | 'invalid' | 'building' | 'sending' | 'sent'
 
@@ -55,7 +56,14 @@ export default function MakeAPanel({ token }: { token: string }) {
 
   const [panel, setPanel] = useState<SubmissionPanel>(START_PANEL)
   const [selBox, setSelBox] = useState<number | null>(0)
-  const [mode, setMode] = useState<'move' | 'draw'>('move')
+  const [mode, setMode] = useState<CanvasMode>('move')
+  const [inkMsg, setInkMsg] = useState(false)
+  const inkTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const flagInkFull = useCallback(() => {
+    setInkMsg(true)
+    if (inkTimer.current) clearTimeout(inkTimer.current)
+    inkTimer.current = setTimeout(() => setInkMsg(false), 2600)
+  }, [])
   const [place, setPlace] = useState<{ x: number; y: number } | null>(null)
   const [verbs, setVerbs] = useState<BuiltinMode[]>([])
   const [tricks, setTricks] = useState<Record<string, ActionDoc>>({})
@@ -259,11 +267,12 @@ export default function MakeAPanel({ token }: { token: string }) {
           <div className="fr-toolrow">
             <div className={`fr-seg${mode === 'move' ? ' on' : ''}`} onClick={() => setMode('move')}>✋ move</div>
             <div className={`fr-seg${mode === 'draw' ? ' on' : ''}`} onClick={() => setMode('draw')}>✏️ draw</div>
+            <div className={`fr-seg${mode === 'erase' ? ' on' : ''}`} onClick={() => setMode('erase')} title="tap a stroke to remove it">🧽 erase</div>
             <div className="fr-tbtn" onClick={() => addBox('text')}>+ words</div>
             <div className="fr-tbtn" onClick={() => addBox('draw')}>+ drawing</div>
             {box && <div className="fr-tbtn danger" onClick={deleteBox}>✕ delete box</div>}
           </div>
-          <ContentCanvas panel={panel} mode={mode} selBox={selBox} onSelectBox={setSelBox} update={updatePanel} />
+          <ContentCanvas panel={panel} mode={mode} selBox={selBox} onSelectBox={setSelBox} update={updatePanel} onInkFull={flagInkFull} />
           {box && box.kind === 'text' && (
             <div className="fr-boxbar">
               <textarea className="fr-text" rows={2} value={box.text} onChange={(e) => updateBox((b) => ({ ...b, text: e.target.value.slice(0, 500) }))} />
@@ -277,15 +286,22 @@ export default function MakeAPanel({ token }: { token: string }) {
               <input type="color" value={box.color ?? '#1a1a1a'} onChange={(e) => updateBox((b) => ({ ...b, color: e.target.value }))} />
             </div>
           )}
-          {box && box.kind === 'draw' && (
+          {box && box.kind === 'draw' && (() => {
+            const ink = inkBudget(box.strokes)
+            return (
             <div className="fr-boxbar">
               <span className="fr-dim">pen:</span>
               <input type="color" value={box.strokeColor ?? '#1a1a1a'} onChange={(e) => updateBox((b) => (b.kind === 'draw' ? { ...b, strokeColor: e.target.value } : b))} />
               <input type="range" min={1.5} max={8} step={0.5} value={box.strokeW ?? 3.5} onChange={(e) => updateBox((b) => (b.kind === 'draw' ? { ...b, strokeW: Number(e.target.value) } : b))} />
               <div className="fr-tbtn" onClick={() => updateBox((b) => (b.kind === 'draw' ? { ...b, strokes: b.strokes.slice(0, -1) } : b))}>↩ undo stroke</div>
               <div className="fr-tbtn" onClick={() => updateBox((b) => (b.kind === 'draw' ? { ...b, strokes: [] } : b))}>clear</div>
+              <span className={`fr-ink${ink.frac >= 1 ? ' full' : ''}`} title={`${ink.strokes}/${ink.maxStrokes} strokes · ${ink.chars}/${ink.maxChars} ink`}>
+                ink <span className="fr-ink-bar"><span style={{ width: `${Math.min(100, Math.round(ink.frac * 100))}%` }} /></span> {Math.min(100, Math.round(ink.frac * 100))}%
+              </span>
+              {inkMsg && <span className="fr-ink-msg">this box is out of ink — erase a stroke, or add another drawing box</span>}
             </div>
-          )}
+            )
+          })()}
         </section>
 
         <section className="fr-sec">
