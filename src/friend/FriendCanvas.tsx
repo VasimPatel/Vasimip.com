@@ -9,18 +9,24 @@ import { SKETCH_RADII, type BoxDoc, type DrawBox, type PanelDoc } from '../noteb
 import { PAGE_W, PAGE_H } from '../notebook/doc/spread'
 import { MIN_DIM, MAX_DIM, type SubmissionPanel } from '../notebook/doc/submission'
 import { FRIEND_FULL_AT, occupancy, rectsOverlap } from '../notebook/doc/friendPages'
+import { finishStroke, fitsBudget, strokeAt, type Pt } from '../notebook/doc/strokes'
+
+export type CanvasMode = 'move' | 'draw' | 'erase'
 
 const MIN_BW = 40
 const MIN_BH = 24
 const round = (n: number) => Math.round(n)
 
 // ── the content editor ───────────────────────────────────────────────────────
-export function ContentCanvas({ panel, mode, selBox, onSelectBox, update }: {
+export function ContentCanvas({ panel, mode, selBox, onSelectBox, update, onInkFull }: {
   panel: SubmissionPanel
-  mode: 'move' | 'draw'
+  mode: CanvasMode
   selBox: number | null
   onSelectBox: (bi: number | null) => void
   update: (fn: (p: SubmissionPanel) => SubmissionPanel) => void
+  /** A finished stroke didn't fit the box's ink budget — nothing was deleted;
+   *  the caller shows the meter/message. */
+  onInkFull: () => void
 }) {
   const wrapRef = useRef<HTMLDivElement>(null)
   const liveRefs = useRef<Record<number, SVGPathElement | null>>({})
@@ -74,8 +80,11 @@ export function ContentCanvas({ panel, mode, selBox, onSelectBox, update }: {
     window.addEventListener('pointerup', up)
   }, [onSelectBox, update])
 
-  // pen: record a stroke, commit on release (validator caps respected)
-  const beginDraw = useCallback((e: ReactPointerEvent, bi: number) => {
+  // pen: capture POINTS, live-preview the raw polyline, and on release commit
+  // the simplified + smoothed path (strokes.ts). A stroke that would bust the
+  // box's ink budget is REJECTED whole — earlier strokes are never deleted
+  // (the old code silently dropped the oldest, submitter-reported).
+  const beginDraw = useCallback((e: ReactPointerEvent, bi: number, strokesNow: readonly string[]) => {
     e.preventDefault()
     e.stopPropagation()
     onSelectBox(bi)
@@ -83,44 +92,59 @@ export function ContentCanvas({ panel, mode, selBox, onSelectBox, update }: {
     const rect = surf.getBoundingClientRect()
     const s = scaleRef.current
     const live = liveRefs.current[bi]
-    const pt = (ev: { clientX: number; clientY: number }) => ({
-      x: ((ev.clientX - rect.left) / s).toFixed(1),
-      y: ((ev.clientY - rect.top) / s).toFixed(1),
-      nx: (ev.clientX - rect.left) / s,
-      ny: (ev.clientY - rect.top) / s,
-    })
-    const p0 = pt(e)
-    let d = `M${p0.x},${p0.y}`
-    let lastX = p0.nx, lastY = p0.ny
-    if (live) live.setAttribute('d', d)
+    const at = (ev: { clientX: number; clientY: number }): Pt => ({ x: (ev.clientX - rect.left) / s, y: (ev.clientY - rect.top) / s })
+    const pts: Pt[] = [at(e)]
+    let liveD = `M${pts[0].x.toFixed(1)},${pts[0].y.toFixed(1)}`
+    if (live) live.setAttribute('d', liveD)
     const move = (ev: PointerEvent) => {
-      const p = pt(ev)
-      if (Math.hypot(p.nx - lastX, p.ny - lastY) < 2) return
-      if (d.length > 1400) return
-      lastX = p.nx; lastY = p.ny
-      d += ` L${p.x},${p.y}`
-      if (live) live.setAttribute('d', d)
+      const p = at(ev)
+      const last = pts[pts.length - 1]
+      if (Math.hypot(p.x - last.x, p.y - last.y) < 1.5) return
+      if (pts.length >= 1200) return // runaway guard; simplification keeps real strokes far under this
+      pts.push(p)
+      liveD += ` L${p.x.toFixed(1)},${p.y.toFixed(1)}`
+      if (live) live.setAttribute('d', liveD)
     }
     const up = () => {
       window.removeEventListener('pointermove', move)
       window.removeEventListener('pointerup', up)
       window.removeEventListener('pointercancel', up)
       if (live) live.setAttribute('d', '')
-      if (d.includes('L')) {
-        update((p) => ({
-          ...p,
-          boxes: p.boxes.map((b, j) => {
-            if (j !== bi || b.kind !== 'draw') return b
-            let strokes = [...b.strokes, d]
-            while (strokes.length > 64 || strokes.reduce((n, sd) => n + sd.length, 0) > 6000) strokes = strokes.slice(1)
-            return { ...b, strokes }
-          }),
-        }))
+      const d = finishStroke(pts) // taps become dots (round caps render them)
+      if (!d) return
+      if (!fitsBudget(strokesNow, d)) {
+        onInkFull()
+        return
       }
+      update((p) => ({
+        ...p,
+        boxes: p.boxes.map((b, j) => (j === bi && b.kind === 'draw' ? { ...b, strokes: [...b.strokes, d] } : b)),
+      }))
     }
     window.addEventListener('pointermove', move)
     window.addEventListener('pointerup', up)
     window.addEventListener('pointercancel', up)
+  }, [onSelectBox, update, onInkFull])
+
+  // eraser: remove the stroke under the tap (topmost first) — precise undo
+  // for any stroke, not just the latest.
+  const eraseAt = useCallback((e: ReactPointerEvent, bi: number) => {
+    e.preventDefault()
+    e.stopPropagation()
+    onSelectBox(bi)
+    const surf = e.currentTarget as HTMLElement
+    const rect = surf.getBoundingClientRect()
+    const s = scaleRef.current
+    const x = (e.clientX - rect.left) / s
+    const y = (e.clientY - rect.top) / s
+    update((p) => ({
+      ...p,
+      boxes: p.boxes.map((b, j) => {
+        if (j !== bi || b.kind !== 'draw') return b
+        const hit = strokeAt(b.strokes, x, y, 12)
+        return hit < 0 ? b : { ...b, strokes: b.strokes.filter((_, k) => k !== hit) }
+      }),
+    }))
   }, [onSelectBox, update])
 
   // panel resize (the corner handle) — clamped to the submission size limits
@@ -170,18 +194,20 @@ export function ContentCanvas({ panel, mode, selBox, onSelectBox, update }: {
           {panel.boxes.map((box, bi) => {
             const bSel = bi === selBox
             const penHere = mode === 'draw' && box.kind === 'draw'
+            const eraseHere = mode === 'erase' && box.kind === 'draw'
             return (
               <div
                 key={bi}
                 className="fr-box"
                 style={{
                   left: box.x, top: box.y, width: box.w, height: box.h,
-                  cursor: penHere ? 'crosshair' : 'move',
+                  cursor: penHere ? 'crosshair' : eraseHere ? 'cell' : 'move',
                   outline: bSel ? '2px dashed #4a90d9' : undefined,
-                  background: penHere ? 'rgba(74,144,217,.05)' : undefined,
+                  background: penHere || eraseHere ? 'rgba(74,144,217,.05)' : undefined,
                 }}
                 onPointerDown={(e) => {
-                  if (penHere) beginDraw(e, bi)
+                  if (penHere) beginDraw(e, bi, (box as DrawBox).strokes)
+                  else if (eraseHere) eraseAt(e, bi)
                   else beginBoxDrag(e, bi, 'move')
                 }}
               >

@@ -8,6 +8,7 @@ import { Fragment, useCallback, useEffect, useRef, useState, type CSSProperties,
 import { renderBox } from '../notebook/PageRenderer'
 import CoverRenderer from '../notebook/CoverRenderer'
 import { SKETCH_RADII, type CoverDoc, type DrawBox, type PageDoc, type PanelDoc } from '../notebook/doc/docTypes'
+import { finishStroke, fitsBudget, type Pt } from '../notebook/doc/strokes'
 import { STAGE_W, STAGE_H, round, snap } from './shared'
 
 interface Props {
@@ -134,8 +135,13 @@ export default function PageCanvas({
     window.addEventListener('pointerup', up)
   }, [onSelectBox, updatePanel])
 
-  // ── pen: record a stroke into a draw box, commit once on release ───────────
-  const beginDraw = useCallback((e: ReactPointerEvent, pi: number, bi: number) => {
+  // ── pen: capture points, live-preview raw, commit SIMPLIFIED + SMOOTHED on
+  // release (strokes.ts — same pipeline as the friend builder). A stroke that
+  // would bust the box's ink budget is rejected whole with a brief tag; the
+  // old code silently dropped the OLDEST strokes (submitter-reported loss). ──
+  const [inkFullAt, setInkFullAt] = useState<{ pi: number; bi: number } | null>(null)
+  const inkTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const beginDraw = useCallback((e: ReactPointerEvent, pi: number, bi: number, strokesNow: readonly string[]) => {
     e.preventDefault()
     e.stopPropagation()
     onSelectBox(pi, bi)
@@ -143,46 +149,40 @@ export default function PageCanvas({
     const rect = surf.getBoundingClientRect()
     const s = scaleRef.current
     const live = liveRefs.current[`${pi}-${bi}`]
-    const pt = (ev: { clientX: number; clientY: number }) => {
-      const x = ((ev.clientX - rect.left) / s).toFixed(1)
-      const y = ((ev.clientY - rect.top) / s).toFixed(1)
-      return { x, y, nx: (ev.clientX - rect.left) / s, ny: (ev.clientY - rect.top) / s }
-    }
-    let p0 = pt(e)
-    let d = `M${p0.x},${p0.y}`
-    let lastX = p0.nx, lastY = p0.ny
-    if (live) live.setAttribute('d', d)
+    const at = (ev: { clientX: number; clientY: number }): Pt => ({ x: (ev.clientX - rect.left) / s, y: (ev.clientY - rect.top) / s })
+    const pts: Pt[] = [at(e)]
+    let liveD = `M${pts[0].x.toFixed(1)},${pts[0].y.toFixed(1)}`
+    if (live) live.setAttribute('d', liveD)
     const move = (ev: PointerEvent) => {
-      const p = pt(ev)
-      if (Math.hypot(p.nx - lastX, p.ny - lastY) < 2) return // ~2px min segment
-      if (d.length > 1400) return // per-stroke budget — keeps a box's total under the validator's path cap
-      lastX = p.nx; lastY = p.ny
-      d += ` L${p.x},${p.y}`
-      if (live) live.setAttribute('d', d)
+      const p = at(ev)
+      const last = pts[pts.length - 1]
+      if (Math.hypot(p.x - last.x, p.y - last.y) < 1.5) return
+      if (pts.length >= 1200) return // runaway guard
+      pts.push(p)
+      liveD += ` L${p.x.toFixed(1)},${p.y.toFixed(1)}`
+      if (live) live.setAttribute('d', liveD)
     }
     const up = () => {
       window.removeEventListener('pointermove', move)
       window.removeEventListener('pointerup', up)
       window.removeEventListener('pointercancel', up)
       if (live) live.setAttribute('d', '')
-      if (d.includes('L')) {
-        updatePanel(pi, (p) => ({
-          ...p,
-          boxes: p.boxes.map((b, j) => {
-            if (j !== bi || b.kind !== 'draw') return b
-            // Respect the validator caps: ≤64 strokes and ≤6000 total path chars
-            // per box — silently dropping the oldest stroke beats locking Save.
-            let strokes = [...b.strokes, d]
-            while (strokes.length > 64 || strokes.reduce((n, s) => n + s.length, 0) > 6000) strokes = strokes.slice(1)
-            return { ...b, strokes }
-          }),
-        }))
+      const d = finishStroke(pts)
+      if (!d) return
+      if (!fitsBudget(strokesNow, d)) {
+        setInkFullAt({ pi, bi })
+        if (inkTimer.current) clearTimeout(inkTimer.current)
+        inkTimer.current = setTimeout(() => setInkFullAt(null), 2200)
+        return
       }
+      updatePanel(pi, (p) => ({
+        ...p,
+        boxes: p.boxes.map((b, j) => (j === bi && b.kind === 'draw' ? { ...b, strokes: [...b.strokes, d] } : b)),
+      }))
     }
     window.addEventListener('pointermove', move)
     window.addEventListener('pointerup', up)
     window.addEventListener('pointercancel', up)
-    void p0
   }, [onSelectBox, updatePanel])
 
   // ── mini-Dash anchor marker ────────────────────────────────────────────────
@@ -300,10 +300,13 @@ export default function PageCanvas({
                           background: penHere ? 'rgba(74,144,217,.04)' : undefined,
                         }}
                         onPointerDown={(e) => {
-                          if (penHere) beginDraw(e, pi, bi)
+                          if (penHere) beginDraw(e, pi, bi, (box as DrawBox).strokes)
                           else if (mode === 'move') beginBoxDrag(e, pi, bi, 'move')
                         }}
                       >
+                        {inkFullAt && inkFullAt.pi === pi && inkFullAt.bi === bi && (
+                          <div className="ink-full-tag">out of ink — erase or use a new drawing box</div>
+                        )}
                         {isDraw && (
                           <svg className="wbox-live" width="100%" height="100%">
                             <path

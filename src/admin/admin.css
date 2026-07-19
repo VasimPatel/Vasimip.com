@@ -638,3 +638,10 @@
   border: 1.5px dashed #b0a88e; border-left: none; border-radius: 0 7px 7px 0; outline: none;
 }
 .invite-slug input:focus { border-color: #23211c; border-style: solid; }
+
+/* transient "stroke rejected" tag on a full drawing box */
+.ink-full-tag {
+  position: absolute; top: -26px; left: 0; z-index: 5; white-space: nowrap;
+  background: #b3462f; color: #fff; font-size: 13px; padding: 2px 8px;
+  border-radius: 6px 6px 6px 0;
+}

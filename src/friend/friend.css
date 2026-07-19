@@ -154,3 +154,13 @@ body {
   background: #fff2ef; border: 2px solid #b3462f; border-radius: 8px;
   padding: 8px 12px; font-size: 14px; color: #b3462f; margin-top: 8px;
 }
+
+/* the ink meter (per drawing box) + the out-of-ink message */
+.fr-ink { display: inline-flex; align-items: center; gap: 6px; font-size: 14px; color: #6f6a5d; }
+.fr-ink-bar {
+  display: inline-block; width: 90px; height: 10px; background: #eee8d8;
+  border: 1.5px solid #26241f; border-radius: 5px; overflow: hidden;
+}
+.fr-ink-bar span { display: block; height: 100%; background: #4a90d9; }
+.fr-ink.full .fr-ink-bar span { background: #b3462f; }
+.fr-ink-msg { color: #b3462f; font-size: 14px; font-weight: bold; }
