@@ -145,3 +145,23 @@ body {
 /* Dash's engine-side lunge arcs (playArc 'lungeL'/'lungeR') */
 @keyframes battlelungel{0%{transform:none}26%{transform:translateX(-18px) rotate(-7deg)}48%{transform:translateX(-12px) rotate(-2deg)}100%{transform:none}}
 @keyframes battlelunger{0%{transform:none}26%{transform:translateX(18px) rotate(7deg)}48%{transform:translateX(12px) rotate(2deg)}100%{transform:none}}
+
+/* ── mobile HUD (owner): on small screens the menu collapses to just the ◀ ▶
+   pair, hovering at the bottom-right corner with fat touch targets. ───────── */
+@media (max-width: 700px) {
+  nav.hud {
+    left: auto !important;
+    right: 12px !important;
+    bottom: 14px !important;
+    transform: rotate(-0.6deg) !important;
+    padding: 6px 10px !important;
+    gap: 4px !important;
+  }
+  nav.hud .hud-more { display: none !important; }
+  nav.hud .hud-btn {
+    font-size: 22px;
+    padding: 6px 12px;
+    min-width: 44px;
+    min-height: 40px;
+  }
+}
