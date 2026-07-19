@@ -11,7 +11,7 @@ import { and, eq, desc } from 'drizzle-orm'
 import { db } from '../db'
 import { notebookRevisions, notebookCurrent } from '../db/schema'
 import { tryValidateDoc } from '../../src/notebook/doc/validate'
-import { requireOwner, type OwnerEnv } from '../middleware'
+import { publicRateLimit, requireOwner, type OwnerEnv } from '../middleware'
 
 // ── schemaVersion dispatch (P8, tightened by review) ─────────────────────────────
 // V1-FIRST: any doc carrying the v1 discriminator (`version: 1` — required by the
@@ -60,7 +60,7 @@ function ifNoneMatchHit(header: string | undefined, revisionId: number): boolean
   })
 }
 
-notebook.get('/notebook', async (c) => {
+notebook.get('/notebook', publicRateLimit, async (c) => {
   const current = await getCurrent()
   if (!current) return c.json({ errors: ['no notebook doc seeded'] }, 500)
 

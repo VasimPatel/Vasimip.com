@@ -22,12 +22,14 @@ import { createHash } from 'node:crypto'
 import { db } from '../db'
 import { invites, submissions } from '../db/schema'
 import { validateSubmissionPanel } from '../../src/notebook/doc/submission'
-import { requireOwner, type OwnerEnv } from '../middleware'
+import { clientIp, publicRateLimit, requireOwner, type OwnerEnv } from '../middleware'
 
 const app = new Hono<OwnerEnv>()
 
 const BASE_URL = process.env.BASE_URL || 'http://localhost:8787'
-const SALT = process.env.BETTER_AUTH_SECRET || 'dev-salt'
+// Dedicated salt so rotating BETTER_AUTH_SECRET doesn't silently reset the
+// per-IP rate-limit buckets; falls back to the auth secret for existing deploys.
+const SALT = process.env.SUBMISSION_IP_SALT || process.env.BETTER_AUTH_SECRET || 'dev-salt'
 // Rate-limit knobs (env-overridable so the harness can shrink the window/caps).
 const RATE_WINDOW_MS = Number(process.env.SUBMISSION_RATE_WINDOW_MS) || 60 * 60 * 1000
 const MAX_PER_TOKEN = Number(process.env.SUBMISSION_RATE_PER_TOKEN) || 5
@@ -46,12 +48,6 @@ function newToken(): string {
 /** sha256(ip + server secret) — a stable per-IP key that never reveals the IP. */
 function hashIp(ip: string): string {
   return createHash('sha256').update(ip + SALT).digest('hex')
-}
-
-function clientIp(headers: Headers): string {
-  const xff = headers.get('x-forwarded-for')
-  if (xff) return xff.split(',')[0].trim()
-  return headers.get('x-real-ip')?.trim() || 'unknown'
 }
 
 type InviteRow = typeof invites.$inferSelect
@@ -146,7 +142,7 @@ app.post('/submissions/:id/approve', requireOwner, (c) => review(c, 'approved'))
 app.post('/submissions/:id/reject', requireOwner, (c) => review(c, 'rejected'))
 
 // ── Public: token info ──────────────────────────────────────────────────────
-app.get('/invite/:token', async (c) => {
+app.get('/invite/:token', publicRateLimit, async (c) => {
   const token = c.req.param('token')
   const [inv] = await db.select().from(invites).where(eq(invites.token, token)).limit(1)
   if (!inv || inviteStatus(inv) !== 'active') return c.json(NOT_FOUND, 404)
@@ -162,7 +158,7 @@ app.post('/invite/:token/submissions', bodyLimit({ maxSize: 64 * 1024 }), async 
   const [inv] = await db.select().from(invites).where(eq(invites.token, token)).limit(1)
   if (!inv || inviteStatus(inv) !== 'active') return c.json(NOT_FOUND, 404)
 
-  const ipHash = hashIp(clientIp(c.req.raw.headers))
+  const ipHash = hashIp(clientIp(c))
 
   // Content + author validation (no db) — a bad body never enters the tx.
   const errors: string[] = []
