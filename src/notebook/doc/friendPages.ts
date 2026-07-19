@@ -202,6 +202,18 @@ export function graftSubmission(doc: NotebookDoc, sub: FriendSubmission, authorN
     anchor: { dx: Math.round(sub.panel.w / 2), dy: 0 },
     sketch: 'b',
     ...(authorName ? { pid: `by ${authorName}`.slice(0, 24) } : {}),
+    // Dash AT the panel — the friend's closed-set arrival (pose/say/face only;
+    // once/setFlag/sfx never come from submissions).
+    ...(sub.arrival && Object.keys(sub.arrival).length > 0
+      ? {
+          arrival: {
+            ...(sub.arrival.pose ? { pose: sub.arrival.pose } : {}),
+            ...(sub.arrival.say ? { say: sub.arrival.say } : {}),
+            ...(sub.arrival.face ? { face: sub.arrival.face } : {}),
+            ...(sub.arrival.pose ? { revertMs: 2400 } : {}),
+          },
+        }
+      : {}),
     boxes: sub.panel.boxes,
     ...(sub.travel || trickName
       ? {

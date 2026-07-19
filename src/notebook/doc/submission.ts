@@ -17,7 +17,7 @@
 // components, no flags, no code), and nothing lands in the live doc until the
 // owner grafts it (doc/friendPages.ts) and saves.
 // ─────────────────────────────────────────────────────────────────────────────
-import { BUILTIN_MODES, type BoxDoc, type BuiltinMode, type Step } from './docTypes'
+import { ARRIVAL_POSES, BUILTIN_MODES, type ArrivalPose, type BoxDoc, type BuiltinMode, type Step } from './docTypes'
 import { checkBox, isPlainObject, isFiniteNumber, oneOf, type Issues } from './checks'
 import { tryValidateAction } from './validate'
 import { PAGE_W, PAGE_H } from './spread'
@@ -36,6 +36,9 @@ export interface FriendSubmission {
   placement?: { x: number; y: number }
   travel?: BuiltinMode[]
   trick?: { name: string; steps: Step[] }
+  /** What Dash DOES at the panel: a closed-set arrival pose, a short line,
+   *  and which way he faces. (No once/setFlag/sfx — those stay owner-only.) */
+  arrival?: { pose?: ArrivalPose; say?: string; face?: 1 | -1 }
   note?: string
 }
 
@@ -48,7 +51,8 @@ const MAX_TRICK_SAY = 80
 export const TRICK_NAME_RE = /^[a-z0-9][a-z0-9-]{2,23}$/
 /** Only these top-level keys are allowed on the content panel. */
 const PANEL_KEYS = new Set(['w', 'h', 'boxes'])
-const V2_KEYS = new Set(['version', 'panel', 'placement', 'travel', 'trick', 'note'])
+const V2_KEYS = new Set(['version', 'panel', 'placement', 'travel', 'trick', 'arrival', 'note'])
+const ARRIVAL_KEYS = new Set(['pose', 'say', 'face'])
 
 // ── friend-trick numeric bounds ──────────────────────────────────────────────
 // The owner's Dojo validator abandons its 8s duration cap once any speed-based
@@ -210,6 +214,25 @@ export function validateFriendSubmission(x: unknown): { ok: true; sub: FriendSub
     }
   }
 
+  if (x.arrival !== undefined) {
+    if (!isPlainObject(x.arrival)) {
+      issues.push('arrival: must be { pose?, say?, face? }')
+    } else {
+      for (const k of Object.keys(x.arrival)) {
+        if (!ARRIVAL_KEYS.has(k)) issues.push(`arrival.${k}: not allowed (once/setFlag/sfx are owner-only)`)
+      }
+      if (x.arrival.pose !== undefined && !oneOf(x.arrival.pose, ARRIVAL_POSES)) {
+        issues.push(`arrival.pose: must be one of ${ARRIVAL_POSES.join('|')}`)
+      }
+      if (x.arrival.say !== undefined && (typeof x.arrival.say !== 'string' || x.arrival.say.length > MAX_TRICK_SAY)) {
+        issues.push(`arrival.say: must be a string of at most ${MAX_TRICK_SAY} chars`)
+      }
+      if (x.arrival.face !== undefined && x.arrival.face !== 1 && x.arrival.face !== -1) {
+        issues.push('arrival.face: must be 1 or -1')
+      }
+    }
+  }
+
   if (x.note !== undefined && (typeof x.note !== 'string' || x.note.length > MAX_NOTE)) {
     issues.push(`note: must be a string of at most ${MAX_NOTE} chars`)
   }
@@ -219,6 +242,13 @@ export function validateFriendSubmission(x: unknown): { ok: true; sub: FriendSub
   if (isPlainObject(x.placement)) sub.placement = { x: x.placement.x as number, y: x.placement.y as number }
   if (Array.isArray(x.travel) && x.travel.length > 0) sub.travel = x.travel as BuiltinMode[]
   if (isPlainObject(x.trick)) sub.trick = { name: x.trick.name as string, steps: x.trick.steps as Step[] }
+  if (isPlainObject(x.arrival)) {
+    const a: FriendSubmission['arrival'] = {}
+    if (oneOf(x.arrival.pose, ARRIVAL_POSES)) a.pose = x.arrival.pose
+    if (typeof x.arrival.say === 'string' && x.arrival.say.trim()) a.say = x.arrival.say.trim()
+    if (x.arrival.face === 1 || x.arrival.face === -1) a.face = x.arrival.face
+    if (Object.keys(a).length > 0) sub.arrival = a
+  }
   if (typeof x.note === 'string' && x.note.trim()) sub.note = x.note.trim()
   return { ok: true, sub }
 }

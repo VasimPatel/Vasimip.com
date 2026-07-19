@@ -16,7 +16,7 @@ import './friend.css'
 import Notebook from '../notebook/Notebook'
 import ActionEditor from '../admin/ActionEditor'
 import { loadDoc } from '../admin/docStore'
-import { BUILTIN_MODES, type ActionDoc, type BoxDoc, type BuiltinMode } from '../notebook/doc/docTypes'
+import { ARRIVAL_POSES, BUILTIN_MODES, type ActionDoc, type ArrivalPose, type BoxDoc, type BuiltinMode } from '../notebook/doc/docTypes'
 import { BUILTIN_INFO } from '../notebook/doc/builtinInfo'
 import type { NotebookDoc } from '../notebook/doc/validate'
 import { validateFriendSubmission, TRICK_NAME_RE, type FriendSubmission, type SubmissionPanel } from '../notebook/doc/submission'
@@ -24,6 +24,14 @@ import { findSpot, graftSubmission, newGuestPage, nextFriendSlot, slotPanels } f
 import { ContentCanvas, PlacePicker } from './FriendCanvas'
 
 type Phase = 'checking' | 'invalid' | 'building' | 'sending' | 'sent'
+
+/** Friendly blurbs for the closed-set arrival poses. */
+const ARRIVAL_INFO: Record<ArrivalPose, string> = {
+  fight: '⚔️ en-garde sword stance',
+  think: '🤔 deep thought',
+  spray: '🎨 spray-paint flourish',
+  cheer: '🎉 victory cheer',
+}
 
 const START_PANEL: SubmissionPanel = {
   w: 300,
@@ -56,17 +64,32 @@ export default function MakeAPanel({ token }: { token: string }) {
   const [previewOpen, setPreviewOpen] = useState(false)
   const [authorName, setAuthorName] = useState('')
   const [note, setNote] = useState('')
+  const [arrPose, setArrPose] = useState<ArrivalPose | ''>('')
+  const [arrSay, setArrSay] = useState('')
   const [sendErrs, setSendErrs] = useState<string[] | null>(null)
+  /** No invites API reachable (vite file-mode dev): open the builder anyway,
+   *  banner up, submit disabled — the same grace the admin's dev probe gets. */
+  const [devMode, setDevMode] = useState(false)
 
   // token check + live doc fetch (both public endpoints)
   useEffect(() => {
     const ac = new AbortController()
     Promise.all([
-      fetch(`/api/invite/${encodeURIComponent(token)}`, { signal: ac.signal }).then((r) => (r.ok ? r.json() : null)).catch(() => null),
+      fetch(`/api/invite/${encodeURIComponent(token)}`, { signal: ac.signal })
+        .then(async (r) => {
+          // A REAL rejection is a JSON 404 from the API; anything else (proxy
+          // 5xx, HTML, network) means "no invites server here" → dev grace.
+          if (r.ok && r.headers.get('content-type')?.includes('application/json')) return await r.json()
+          if (r.status === 404 && r.headers.get('content-type')?.includes('application/json')) return { valid: false }
+          return { dev: true }
+        })
+        .catch(() => ({ dev: true })),
       loadDoc(ac.signal).catch(() => null),
     ]).then(([inv, loaded]) => {
-      if (!inv || !(inv as { valid?: boolean }).valid) { setPhase('invalid'); return }
-      setInviteLabel((inv as { label?: string }).label)
+      const i = inv as { valid?: boolean; dev?: boolean; label?: string }
+      if (i.dev) setDevMode(true)
+      else if (!i.valid) { setPhase('invalid'); return }
+      setInviteLabel(i.label)
       if (loaded) setLiveDoc(loaded.doc)
       setPhase('building')
     })
@@ -104,8 +127,11 @@ export default function MakeAPanel({ token }: { token: string }) {
     ...(trickName && tricks[trickName] && tricks[trickName].steps.length > 0
       ? { trick: { name: slugify(trickName), steps: tricks[trickName].steps } }
       : {}),
+    ...(arrPose || arrSay.trim()
+      ? { arrival: { ...(arrPose ? { pose: arrPose } : {}), ...(arrSay.trim() ? { say: arrSay.trim().slice(0, 80) } : {}) } }
+      : {}),
     ...(note.trim() ? { note: note.trim() } : {}),
-  }), [panel, place, verbs, trickName, tricks, note])
+  }), [panel, place, verbs, trickName, tricks, arrPose, arrSay, note])
 
   const validation = useMemo(() => validateFriendSubmission(sub), [sub])
 
@@ -216,7 +242,7 @@ export default function MakeAPanel({ token }: { token: string }) {
   }
 
   const authorOk = authorName.trim().length >= 1 && authorName.trim().length <= 40
-  const canSend = validation.ok && authorOk && !sending
+  const canSend = validation.ok && authorOk && !sending && !devMode
 
   return (
     <div className="fr-shell fr-build">
@@ -224,6 +250,7 @@ export default function MakeAPanel({ token }: { token: string }) {
         <div className="fr-brand">DRAW YOURSELF IN <span>· Dash's guestbook</span></div>
         <span className="grow" />
         {inviteLabel && <span className="fr-invitee">invite: {inviteLabel}</span>}
+        {devMode && <span className="fr-invitee">dev preview — no invite server, submitting is off</span>}
       </header>
 
       <main className="fr-main">
@@ -268,7 +295,28 @@ export default function MakeAPanel({ token }: { token: string }) {
         </section>
 
         <section className="fr-sec">
-          <div className="fr-sec-h">3 · HOW DASH GETS THERE <span className="fr-dim">(pick none for "surprise me")</span></div>
+          <div className="fr-sec-h">3 · DASH AT YOUR PANEL <span className="fr-dim">(what he does when he arrives)</span></div>
+          <div className="fr-verbs">
+            <div className={`fr-verb${arrPose === '' ? ' on' : ''}`} onClick={() => setArrPose('')}>just stands there</div>
+            {ARRIVAL_POSES.map((p) => (
+              <div key={p} className={`fr-verb${arrPose === p ? ' on' : ''}`} onClick={() => setArrPose(p)}>
+                {ARRIVAL_INFO[p]}
+              </div>
+            ))}
+          </div>
+          <div className="fr-toolrow">
+            <input
+              className="fr-msg"
+              placeholder='what he says on arrival (optional, e.g. "nice panel, right?")'
+              maxLength={80}
+              value={arrSay}
+              onChange={(e) => setArrSay(e.target.value)}
+            />
+          </div>
+        </section>
+
+        <section className="fr-sec">
+          <div className="fr-sec-h">4 · HOW DASH GETS THERE <span className="fr-dim">(pick none for "surprise me")</span></div>
           <div className="fr-verbs">
             {BUILTIN_MODES.map((m) => (
               <div
@@ -295,7 +343,7 @@ export default function MakeAPanel({ token }: { token: string }) {
         </section>
 
         <section className="fr-sec">
-          <div className="fr-sec-h">4 · SEE IT LIVE <span className="fr-dim">(the real book, with your panel glued in)</span></div>
+          <div className="fr-sec-h">5 · SEE IT LIVE <span className="fr-dim">(the real book, with your panel glued in)</span></div>
           <div className="fr-toolrow">
             <div className="fr-tbtn" onClick={() => { setPreviewOpen((o) => !o); if (!debouncedDoc && graft) setDebouncedDoc(graft.doc) }}>
               {previewOpen ? 'hide preview' : 'open preview'}
@@ -313,11 +361,12 @@ export default function MakeAPanel({ token }: { token: string }) {
         </section>
 
         <section className="fr-sec">
-          <div className="fr-sec-h">5 · SIGN &amp; SEND</div>
+          <div className="fr-sec-h">6 · SIGN &amp; SEND</div>
           <div className="fr-sendrow">
             <input className="fr-name" placeholder="your name (required)" maxLength={40} value={authorName} onChange={(e) => setAuthorName(e.target.value)} />
             <input className="fr-msg" placeholder="a note to the owner (optional)" maxLength={200} value={note} onChange={(e) => setNote(e.target.value)} />
             <button className="fr-send" disabled={!canSend} onClick={send}>{sending ? 'sending…' : 'submit for review'}</button>
+            {!authorOk && validation.ok && !devMode && <span className="fr-dim">⬅ sign your name and it unlocks</span>}
           </div>
           {!validation.ok && (
             <div className="fr-errs">{validation.errors.slice(0, 6).map((e, i) => <div key={i}>• {e}</div>)}</div>
