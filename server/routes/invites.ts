@@ -60,17 +60,37 @@ function inviteStatus(inv: Pick<InviteRow, 'revokedAt' | 'expiresAt' | 'maxUses'
   return 'active'
 }
 
+/** Human-shareable invite path (owner request): /sketchbook-invite/<token>,
+ *  where the token is random OR an owner-chosen slug. The old /make-a-panel
+ *  path stays routable client-side so already-copied links keep working. */
+const inviteUrl = (token: string): string => `${BASE_URL}/sketchbook-invite/${token}`
+/** Custom slugs: lowercase, human, 3-40 chars. Random tokens are base64url. */
+const SLUG_RE = /^[a-z0-9][a-z0-9-]{2,39}$/
+
 // ── Owner: create / list / revoke ──────────────────────────────────────────
 app.post('/invites', requireOwner, async (c) => {
-  const body = await c.req.json().catch(() => ({})) as { label?: unknown; expiresInDays?: unknown; maxUses?: unknown }
+  const body = await c.req.json().catch(() => ({})) as { label?: unknown; expiresInDays?: unknown; maxUses?: unknown; slug?: unknown }
   const label = typeof body.label === 'string' && body.label.trim() ? body.label.trim().slice(0, 80) : null
   const expiresInDays = Number.isFinite(body.expiresInDays as number) ? Math.max(0, Number(body.expiresInDays)) : 14
   const maxUses = Number.isFinite(body.maxUses as number) ? Math.max(1, Math.floor(Number(body.maxUses))) : 5
   const expiresAt = expiresInDays > 0 ? new Date(Date.now() + expiresInDays * 86_400_000) : null
 
-  const token = newToken()
-  const [row] = await db.insert(invites).values({ token, label, expiresAt, maxUses }).returning({ id: invites.id })
-  return c.json({ id: row.id, url: `${BASE_URL}/make-a-panel/${token}` }, 201)
+  let token = newToken()
+  if (body.slug !== undefined) {
+    const slug = typeof body.slug === 'string' ? body.slug.trim().toLowerCase() : ''
+    if (!SLUG_RE.test(slug)) return c.json({ errors: ['custom link: 3-40 chars of a-z, 0-9, and dashes'] }, 400)
+    token = slug
+  }
+  try {
+    const [row] = await db.insert(invites).values({ token, label, expiresAt, maxUses }).returning({ id: invites.id })
+    return c.json({ id: row.id, url: inviteUrl(token) }, 201)
+  } catch (e) {
+    // unique(token) violation → the slug is taken (random tokens never collide)
+    if (String(e).includes('duplicate') || String(e).includes('unique')) {
+      return c.json({ errors: ['that link name is already taken'] }, 409)
+    }
+    throw e
+  }
 })
 
 app.get('/invites', requireOwner, async (c) => {
@@ -95,7 +115,7 @@ app.get('/invites', requireOwner, async (c) => {
   return c.json(rows.map((r) => ({
     ...r,
     status: inviteStatus(r),
-    url: `${BASE_URL}/make-a-panel/${r.token}`,
+    url: inviteUrl(r.token),
   })))
 })
 

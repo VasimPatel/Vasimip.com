@@ -57,7 +57,7 @@ export function listSubmissions(status?: 'pending' | 'approved' | 'rejected'): P
   return getJson<SubmissionRow[]>('/api/submissions' + (status ? '?status=' + status : ''))
 }
 
-export async function createInvite(input: { label?: string; expiresInDays?: number; maxUses?: number }): Promise<{ id: number; url: string } | null> {
+export async function createInvite(input: { label?: string; expiresInDays?: number; maxUses?: number; slug?: string }): Promise<{ id: number; url: string } | { error: string } | null> {
   try {
     const res = await fetch('/api/invites', {
       method: 'POST',
@@ -65,7 +65,11 @@ export async function createInvite(input: { label?: string; expiresInDays?: numb
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(input),
     })
-    if (!res.ok) return null
+    if (!res.ok) {
+      // 400 (bad slug) / 409 (slug taken) carry a message worth showing
+      const body = await res.json().catch(() => null) as { errors?: string[] } | null
+      return body?.errors?.[0] ? { error: body.errors[0] } : null
+    }
     return (await res.json()) as { id: number; url: string }
   } catch {
     return null

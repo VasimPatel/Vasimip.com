@@ -67,7 +67,9 @@ function SiteNotebook() {
 
 export default function App() {
   if (window.location.pathname === '/admin') return <AdminGate />
-  const invite = window.location.pathname.match(/^\/make-a-panel\/([A-Za-z0-9_-]{10,64})\/?$/)
+  // /sketchbook-invite/<token-or-slug> is the shareable path; /make-a-panel
+  // stays routable so links copied before the rename keep working.
+  const invite = window.location.pathname.match(/^\/(?:sketchbook-invite|make-a-panel)\/([A-Za-z0-9_-]{3,64})\/?$/)
   if (invite) {
     return (
       <Suspense fallback={<SpinCard />}>

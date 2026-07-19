@@ -67,8 +67,10 @@ export default function Inbox({ onAddToPage, onAddToGuestbook, pageName }: Props
   const [copied, setCopied] = useState<number | null>(null)
   // create-invite form
   const [label, setLabel] = useState('')
+  const [slug, setSlug] = useState('')
   const [expiryDays, setExpiryDays] = useState(14)
   const [maxUses, setMaxUses] = useState(5)
+  const [inviteErr, setInviteErr] = useState<string | null>(null)
 
   const refresh = useCallback(async () => {
     const [s, inv] = await Promise.all([listSubmissions(), listInvites()])
@@ -148,9 +150,17 @@ export default function Inbox({ onAddToPage, onAddToGuestbook, pageName }: Props
 
   const submit = async () => {
     setBusy(true)
-    const res = await createInvite({ label: label.trim() || undefined, expiresInDays: expiryDays, maxUses })
+    setInviteErr(null)
+    const res = await createInvite({
+      label: label.trim() || undefined,
+      slug: slug.trim() ? slug.trim().toLowerCase() : undefined,
+      expiresInDays: expiryDays,
+      maxUses,
+    })
     setBusy(false)
-    if (res) { setLabel(''); await refresh() }
+    if (res && 'error' in res) { setInviteErr(res.error); return }
+    if (res) { setLabel(''); setSlug(''); await refresh() }
+    else setInviteErr('could not create the link — try again')
   }
 
   const revoke = async (id: number) => {
@@ -224,6 +234,11 @@ export default function Inbox({ onAddToPage, onAddToGuestbook, pageName }: Props
                           {sub.placement && <span className="inbox-tag">📍 wants ({sub.placement.x}, {sub.placement.y})</span>}
                           {sub.travel && <span className="inbox-tag">🏃 {sub.travel.map((m) => BUILTIN_INFO[m].label).join(', ')}</span>}
                           {sub.trick && <span className="inbox-tag">⚡ trick: {sub.trick.name} ({sub.trick.steps.length} steps)</span>}
+                          {sub.arrival && (
+                            <span className="inbox-tag">
+                              🎭 {[sub.arrival.pose, sub.arrival.say ? `"${sub.arrival.say}"` : null].filter(Boolean).join(' · ')}
+                            </span>
+                          )}
                           {sub.note && <span className="inbox-tag note">💬 "{sub.note}"</span>}
                         </div>
                         <div className="inbox-actions">
@@ -248,10 +263,18 @@ export default function Inbox({ onAddToPage, onAddToGuestbook, pageName }: Props
                     <div className="inbox-lhead">invite links</div>
                     <div className="invite-create">
                       <input className="note-input" value={label} onChange={(e) => setLabel(e.target.value)} placeholder="label (e.g. pals)" />
+                      <input
+                        className="note-input"
+                        value={slug}
+                        onChange={(e) => setSlug(e.target.value)}
+                        placeholder="custom link (optional, e.g. sam)"
+                        title="/sketchbook-invite/<this> — leave blank for a random link"
+                      />
                       <label className="invite-num">expires <input type="number" min={0} value={expiryDays} onChange={(e) => setExpiryDays(Number(e.target.value))} />d</label>
                       <label className="invite-num">uses <input type="number" min={1} value={maxUses} onChange={(e) => setMaxUses(Number(e.target.value))} /></label>
                       <button className="ibtn" disabled={busy} onClick={submit}>+ create link</button>
                     </div>
+                    {inviteErr && <div className="inbox-err">{inviteErr}</div>}
                     {invites.map((row) => (
                       <div key={row.id} className="invite-row" data-testid={`invite-row-${row.id}`}>
                         <div className="invite-meta">
