@@ -3,8 +3,9 @@
 //
 // Model: pages flagged `guest: true` hold friend panels. Sides fill in reading
 // order (sheet 1 front, sheet 1 back, sheet 2 front, …); a side is CLOSED once
-// panels cover FRIEND_FULL_AT (55%) or more of its area, and the book grows a
-// new sheet when it runs out of open sides. A sheet's back only displays when
+// it holds FRIEND_MAX_PANELS panels (owner rule: a hard count, regardless of
+// how much space they cover), and the book grows a new sheet when it runs out
+// of open sides. A sheet's back only displays when
 // the NEXT sheet exists (it's that spread's left page), so targeting a back
 // materializes the following sheet too.
 //
@@ -19,13 +20,13 @@ import { PAGE_W, PAGE_H } from './spread'
 import { TRICK_NAME_RE } from './submission'
 import { MAX_PAGES } from './validate'
 
-export const FRIEND_FULL_AT = 0.55
-export const PAGE_AREA = PAGE_W * PAGE_H
+/** A guestbook side holds at most this many panels (the seed GUESTBOOK sign
+ *  counts as one on a fresh sheet's front) — a hard count, independent of how
+ *  much area the panels cover. */
+export const FRIEND_MAX_PANELS = 4
 
-/** Fraction of a side's area covered by panels (overlaps double-count — fine:
- *  the guestbook forbids overlapping placements anyway). */
-export function occupancy(panels: readonly PanelDoc[]): number {
-  return panels.reduce((a, p) => a + p.w * p.h, 0) / PAGE_AREA
+export function sideOpen(panels: readonly PanelDoc[]): boolean {
+  return panels.length < FRIEND_MAX_PANELS
 }
 
 export interface FriendSlot {
@@ -43,10 +44,10 @@ export function nextFriendSlot(doc: NotebookDoc): FriendSlot {
   for (let i = 0; i < doc.pages.length; i++) {
     const pg = doc.pages[i]
     if (!pg.guest) continue
-    if (occupancy(pg.panels) < FRIEND_FULL_AT) {
+    if (sideOpen(pg.panels)) {
       return { pageIdx: i, side: 'front', needsFollowingPage: false }
     }
-    if (occupancy(pg.back?.panels ?? []) < FRIEND_FULL_AT) {
+    if (sideOpen(pg.back?.panels ?? [])) {
       return { pageIdx: i, side: 'back', needsFollowingPage: i === doc.pages.length - 1 }
     }
   }
@@ -134,7 +135,7 @@ export interface GraftResult {
   nudged: boolean
 }
 
-/** Materialize a submission into a doc: grows guest sheets per the 55% rule,
+/** Materialize a submission into a doc: grows guest sheets per the four-panel rule,
  *  places the panel (requested spot if it fits, nearest free spot otherwise),
  *  registers the trick under a collision-safe `friend-…` action name, and wires
  *  the panel's travel pool. Pure — returns a NEW doc. Returns null only when
@@ -144,20 +145,20 @@ export function graftSubmission(doc: NotebookDoc, sub: FriendSubmission, authorN
   let pages = [...doc.pages]
   let guestCount = pages.filter((p) => p.guest).length
 
-  // Walk open sides in reading order until the panel actually FITS — a side can
-  // refuse a large panel through fragmentation well before the 55% line, and
-  // "can't fit you" must mean "next side", never "rejected".
+  // Walk open sides in reading order until the panel actually FITS — a side
+  // under the four-panel count can still refuse a large panel through
+  // fragmentation, and "can't fit you" must mean "next side", never "rejected".
   let pageIdx = -1
   let side: 'front' | 'back' = 'front'
   let spot: { x: number; y: number } | null = null
   for (let i = 0; i < pages.length && !spot; i++) {
     const pg = pages[i]
     if (!pg.guest) continue
-    if (occupancy(pg.panels) < FRIEND_FULL_AT) {
+    if (sideOpen(pg.panels)) {
       spot = findSpot(pg.panels, sub.panel.w, sub.panel.h, sub.placement)
       if (spot) { pageIdx = i; side = 'front' }
     }
-    if (!spot && occupancy(pg.back?.panels ?? []) < FRIEND_FULL_AT) {
+    if (!spot && sideOpen(pg.back?.panels ?? [])) {
       spot = findSpot(pg.back?.panels ?? [], sub.panel.w, sub.panel.h, sub.placement)
       if (spot && i === pages.length - 1 && pages.length >= MAX_PAGES) spot = null // no room for the display sheet
       if (spot) {

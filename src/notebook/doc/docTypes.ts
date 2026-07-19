@@ -190,8 +190,8 @@ export interface PageDoc {
    * 0..920 page space; spread.ts places them into stage coordinates. */
   back?: { panels: PanelDoc[] }
   /** A GUESTBOOK page: friend submissions target these growing pages at the end
-   * of the notebook (see doc/friendPages.ts — sides fill to 55%, then the book
-   * grows another sheet). Only `true` is meaningful. */
+   * of the notebook (see doc/friendPages.ts — sides hold four panels, then the
+   * book grows another sheet). Only `true` is meaningful. */
   guest?: true
 }
 

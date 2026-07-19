@@ -2,7 +2,7 @@
 // /make-a-panel/<token> — the friend-facing guestbook builder.
 //
 // A friend with a live invite: draws a panel (text + pen), places it on the
-// current guestbook side (the same 55%-growth logic approval uses), picks which
+// current guestbook side (the same four-panel growth logic approval uses), picks which
 // travel verbs Dash may use to reach it, optionally teaches Dash ONE custom
 // stunt in a scoped-down Dash Dojo (the owner's ActionEditor, reused), watches
 // the whole thing live in an embedded real <Notebook> (the submission grafted
