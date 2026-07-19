@@ -596,7 +596,7 @@
                 "y": 170,
                 "w": 120,
                 "h": 40,
-                "text": "ship it",
+                "text": "adventure",
                 "fam": "marker",
                 "size": 15,
                 "note": true
@@ -1080,6 +1080,7 @@
           },
           "arrival": {
             "pose": "spray",
+            "sfx": "spray",
             "once": true,
             "revertMs": 2100,
             "setFlag": "skillsRevealed"

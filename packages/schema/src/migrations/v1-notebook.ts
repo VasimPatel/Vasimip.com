@@ -232,6 +232,11 @@ export function migrateNotebookV1(
         const onceFlag = a.once ? (isStr(a.setFlag) ? a.setFlag : `${id}:done`) : null
         if (onceFlag) steps.push({ verb: 'setFlag', flag: onceFlag } as Intent)
         const face = a.face === 1 || a.face === -1 ? (a.face as 1 | -1) : undefined
+        // The sfx fires BEFORE the pose: steps run sequentially, so trailing it
+        // (the old order) delayed the sound past the pose's whole holdMs — the
+        // SKILLS spray hiss played after the painting finished. Legacy fired
+        // arrival sfx at the moment of the pose strike; match that.
+        if (isStr(a.sfx)) steps.push({ verb: 'sfx', kind: a.sfx } as Intent)
         if (isStr(a.pose)) {
           notePose(a.pose, `${where}.arrival`)
           // v1 semantics restored (parity Stage 2c/4): no/zero revertMs leaves the
@@ -251,7 +256,6 @@ export function migrateNotebookV1(
           steps.push({ verb: 'strikePose', ref: 'stand', holdMs: 1, face } as Intent)
         }
         if (isStr(a.say)) steps.push({ verb: 'say', text: a.say } as Intent)
-        if (isStr(a.sfx)) steps.push({ verb: 'sfx', kind: a.sfx } as Intent)
         if (isStr(a.setFlag) && !a.once) steps.push({ verb: 'setFlag', flag: a.setFlag } as Intent)
         const doc: BehaviorDoc = { schemaVersion: 2, id, steps } as BehaviorDoc
         if (onceFlag) (doc as { when?: unknown }).when = { not: { flag: onceFlag } }

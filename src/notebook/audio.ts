@@ -14,6 +14,7 @@ export type SfxKind =
   | 'crack'
   | 'knock'
   | 'scrib'
+  | 'spray'
 
 export class AudioEngine {
   private _ac: AudioContext | null = null
@@ -90,10 +91,29 @@ export class AudioEngine {
         g.gain.setValueAtTime(.35, t); g.gain.exponentialRampToValueAtTime(.001, t + .1)
         o.connect(g); g.connect(ac.destination); o.start(); o.stop(t + .12)
       } else if (kind === 'scrib') {
-        const s = this.noiseSrc(.5), f = ac.createBiquadFilter(), g = ac.createGain()
-        f.type = 'highpass'; f.frequency.value = 1900
-        g.gain.setValueAtTime(.05, t); g.gain.setValueAtTime(.05, t + .4); g.gain.exponentialRampToValueAtTime(.001, t + .5)
+        // A brief pencil scratch (owner: the old half-second 1.9kHz hiss played
+        // on every walk/entrance and read as a SPRAY CAN — the spray hiss now
+        // lives exclusively in 'spray' below).
+        const s = this.noiseSrc(.16), f = ac.createBiquadFilter(), g = ac.createGain()
+        f.type = 'highpass'; f.frequency.value = 2400
+        g.gain.setValueAtTime(.045, t); g.gain.setValueAtTime(.02, t + .06); g.gain.setValueAtTime(.04, t + .09)
+        g.gain.exponentialRampToValueAtTime(.001, t + .16)
         s.connect(f); f.connect(g); g.connect(ac.destination); s.start()
+      } else if (kind === 'spray') {
+        // THE spray can, only for actual spray-painting: a tick-tick shake
+        // rattle, then a pulsed pressurized hiss.
+        for (const dt of [0, .07]) {
+          const r = this.noiseSrc(.03), rf = ac.createBiquadFilter(), rg = ac.createGain()
+          rf.type = 'bandpass'; rf.frequency.value = 3200; rf.Q.value = 4
+          rg.gain.setValueAtTime(.12, t + dt); rg.gain.exponentialRampToValueAtTime(.001, t + dt + .03)
+          r.connect(rf); rf.connect(rg); rg.connect(ac.destination); r.start(t + dt)
+        }
+        const s = this.noiseSrc(.6), f = ac.createBiquadFilter(), g = ac.createGain()
+        f.type = 'highpass'; f.frequency.value = 1700
+        g.gain.setValueAtTime(.001, t + .16); g.gain.exponentialRampToValueAtTime(.11, t + .2)
+        g.gain.setValueAtTime(.11, t + .42); g.gain.setValueAtTime(.06, t + .48); g.gain.setValueAtTime(.1, t + .52)
+        g.gain.exponentialRampToValueAtTime(.001, t + .74)
+        s.connect(f); f.connect(g); g.connect(ac.destination); s.start(t + .16)
       }
     } catch (e) { /* audio nodes can throw on some browsers */ }
   }
