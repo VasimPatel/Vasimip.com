@@ -3,7 +3,7 @@
 //
 // Model: pages flagged `guest: true` hold friend panels. Sides fill in reading
 // order (sheet 1 front, sheet 1 back, sheet 2 front, …); a side is CLOSED once
-// panels cover more than FRIEND_FULL_AT (65%) of its area, and the book grows a
+// panels cover FRIEND_FULL_AT (55%) or more of its area, and the book grows a
 // new sheet when it runs out of open sides. A sheet's back only displays when
 // the NEXT sheet exists (it's that spread's left page), so targeting a back
 // materializes the following sheet too.
@@ -19,7 +19,7 @@ import { PAGE_W, PAGE_H } from './spread'
 import { TRICK_NAME_RE } from './submission'
 import { MAX_PAGES } from './validate'
 
-export const FRIEND_FULL_AT = 0.65
+export const FRIEND_FULL_AT = 0.55
 export const PAGE_AREA = PAGE_W * PAGE_H
 
 /** Fraction of a side's area covered by panels (overlaps double-count — fine:
@@ -134,7 +134,7 @@ export interface GraftResult {
   nudged: boolean
 }
 
-/** Materialize a submission into a doc: grows guest sheets per the 65% rule,
+/** Materialize a submission into a doc: grows guest sheets per the 55% rule,
  *  places the panel (requested spot if it fits, nearest free spot otherwise),
  *  registers the trick under a collision-safe `friend-…` action name, and wires
  *  the panel's travel pool. Pure — returns a NEW doc. Returns null only when
@@ -145,7 +145,7 @@ export function graftSubmission(doc: NotebookDoc, sub: FriendSubmission, authorN
   let guestCount = pages.filter((p) => p.guest).length
 
   // Walk open sides in reading order until the panel actually FITS — a side can
-  // refuse a large panel through fragmentation well before the 65% line, and
+  // refuse a large panel through fragmentation well before the 55% line, and
   // "can't fit you" must mean "next side", never "rejected".
   let pageIdx = -1
   let side: 'front' | 'back' = 'front'
