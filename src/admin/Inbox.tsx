@@ -24,7 +24,7 @@ import {
 interface Props {
   /** Insert a submitted panel into the current page draft (owner arranges/saves). */
   onAddToPage: (panel: PanelDoc) => void
-  /** Graft the FULL submission into the guestbook (55% growth, placement,
+  /** Graft the FULL submission into the guestbook (four-panel growth, placement,
    *  travel pool, trick action) — returns false if the graft failed. */
   onAddToGuestbook: (sub: FriendSubmission, author: string | null) => boolean
   /** Current page name for the button label; null when the cover is selected. */

@@ -8,7 +8,7 @@ import { renderBox } from '../notebook/PageRenderer'
 import { SKETCH_RADII, type BoxDoc, type DrawBox, type PanelDoc } from '../notebook/doc/docTypes'
 import { PAGE_W, PAGE_H } from '../notebook/doc/spread'
 import { MIN_DIM, MAX_DIM, type SubmissionPanel } from '../notebook/doc/submission'
-import { FRIEND_FULL_AT, occupancy, rectsOverlap } from '../notebook/doc/friendPages'
+import { FRIEND_MAX_PANELS, rectsOverlap } from '../notebook/doc/friendPages'
 import { finishStroke, fitsBudget, strokeAt, type Pt } from '../notebook/doc/strokes'
 
 export type CanvasMode = 'move' | 'draw' | 'erase'
@@ -257,8 +257,7 @@ export function PlacePicker({ existing, panel, place, onPlace, sideLabel }: {
   }, [])
 
   const overlapping = existing.some((p) => rectsOverlap({ ...place, w: panel.w, h: panel.h }, p))
-  const occNow = occupancy(existing)
-  const occAfter = occupancy([...existing, { ...place, w: panel.w, h: panel.h } as PanelDoc])
+  const countAfter = existing.length + 1
 
   const beginDrag = useCallback((e: ReactPointerEvent) => {
     e.preventDefault()
@@ -286,8 +285,8 @@ export function PlacePicker({ existing, panel, place, onPlace, sideLabel }: {
       <div className="fr-place-meta">
         <span>{sideLabel}</span>
         <span className="grow" />
-        <span className={occAfter > FRIEND_FULL_AT ? 'warn' : ''}>
-          page fill: {Math.round(occNow * 100)}% → {Math.round(occAfter * 100)}% (the book grows a page at {Math.round(FRIEND_FULL_AT * 100)}%)
+        <span className={countAfter >= FRIEND_MAX_PANELS ? 'warn' : ''}>
+          panel {countAfter} of {FRIEND_MAX_PANELS} on this side (the book grows a page after {FRIEND_MAX_PANELS})
         </span>
       </div>
       <div className="fr-page-sizer" style={{ width: PAGE_W * scale, height: PAGE_H * scale }}>
