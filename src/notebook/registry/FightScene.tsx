@@ -1,120 +1,219 @@
-// The ABOUT-page battle: doodle attackers duel Dash for the fact sheet. One
-// shared 3.2s master timeline (matching clanga/clangb's 24%/70% pops) so the
-// engine-side battle beats (EngineLayer.scheduleBattle — Dash's lunges) land
-// on the same clang moments from a wall-clock phase computation. Dash himself
-// is NOT drawn here — he is the live actor standing at the panel anchor
-// (x≈135) in the fight skin; this scene arranges the fight AROUND him.
-/** A doodle swordsman. Head+brows+body+legs, sword arm with a crossguard. */
-function Attacker({ scale = 1, swordUp = true, hideSword = false }: { scale?: number; swordUp?: boolean; hideSword?: boolean }) {
-  return (
-    <g transform={`scale(${scale})`}>
-      <circle cx="0" cy="-24" r="11" fill="#fffdf6" stroke="#1a1a1a" strokeWidth="3.2" />
-      {/* angry brows + eyes */}
-      <path d="M-7,-30 l7,3 M4,-27 l7,-3" fill="none" stroke="#1a1a1a" strokeWidth="2.2" strokeLinecap="round" />
-      <circle cx="-2" cy="-24" r="1.7" fill="#1a1a1a" />
-      <circle cx="7" cy="-24" r="1.7" fill="#1a1a1a" />
-      {/* body */}
-      <path d="M0,-13 L0,12" fill="none" stroke="#1a1a1a" strokeWidth="3.6" strokeLinecap="round" />
-      {/* sword arm (toward +x) with blade + crossguard */}
-      {!hideSword && (swordUp ? (
-        <g>
-          <path d="M0,-6 L11,-18" fill="none" stroke="#1a1a1a" strokeWidth="3.2" strokeLinecap="round" />
-          <path d="M11,-18 L20,-40" fill="none" stroke="#1a1a1a" strokeWidth="3" strokeLinecap="round" />
-          <path d="M7,-24 L18,-21" fill="none" stroke="#1a1a1a" strokeWidth="2.6" strokeLinecap="round" />
-        </g>
-      ) : (
-        <g>
-          <path d="M0,-6 L12,-4" fill="none" stroke="#1a1a1a" strokeWidth="3.2" strokeLinecap="round" />
-          <path d="M12,-4 L30,-8" fill="none" stroke="#1a1a1a" strokeWidth="3" strokeLinecap="round" />
-          <path d="M14,-10 L15,1" fill="none" stroke="#1a1a1a" strokeWidth="2.6" strokeLinecap="round" />
-        </g>
-      ))}
-      {/* off arm */}
-      <path d="M0,-6 L-10,4" fill="none" stroke="#1a1a1a" strokeWidth="3.2" strokeLinecap="round" />
-      {/* legs */}
-      <path d="M0,12 L-9,28 l-8,2 M0,12 L10,28 l9,2" fill="none" stroke="#1a1a1a" strokeWidth="3.6" strokeLinecap="round" strokeLinejoin="round" />
-    </g>
-  )
+// The ABOUT-page battle: ONE doodle duelist actually fighting Dash for the
+// fact sheet. The ENGINE is the choreographer (EngineLayer's exchange director
+// cues this scene over battleBus) — every knockback, clash burst, and stagger
+// here is an ANSWER to something Dash just did, so the fight reads as call and
+// response instead of a looping tableau (owner: the old three-man cycle felt
+// "soft, like they're not actually fighting each other"). Dash himself is NOT
+// drawn here — he is the live actor at the panel anchor (x≈135, facing left);
+// the duelist fights from x≈86, blades meeting between them (~x 114).
+import { useEffect, useState } from 'react'
+import { battleBus, FOE_ATTACK_CONTACT_MS, type BattleCue } from '../battleBus'
+
+type FoeState = 'idle' | 'gone' | BattleCue
+
+/** After a cue's animation plays out, where the duelist settles. */
+const SETTLE: Partial<Record<FoeState, { after: number; to: FoeState }>> = {
+  attack: { after: 920, to: 'idle' },
+  parried: { after: 580, to: 'idle' },
+  staggered: { after: 1020, to: 'idle' },
+  kicked: { after: 760, to: 'gone' },
+  poofin: { after: 580, to: 'idle' },
+}
+
+/** Whole-body animation per state (feet-origin lunges/knockbacks; the kicked
+ * tumble spins about his middle instead). */
+const BODY_ANIM: Partial<Record<FoeState, string>> = {
+  idle: 'foeidle 1.5s ease-in-out infinite',
+  attack: 'foeattack .9s cubic-bezier(.4,.05,.35,1)',
+  parried: 'foeparried .56s cubic-bezier(.25,.1,.3,1)',
+  staggered: 'foestagger 1s cubic-bezier(.3,.1,.3,1)',
+  kicked: 'foekicked .75s cubic-bezier(.45,.15,.7,1) forwards',
+  poofin: 'foepoofin .56s cubic-bezier(.3,1.45,.45,1)',
+}
+
+/** Sword-arm animation per state — the blade menaces, thrusts, and BOUNCES off
+ * Dash's parries (origin '0% 100%' of the arm bbox == the shoulder). */
+const ARM_ANIM: Partial<Record<FoeState, string>> = {
+  idle: 'foearm 1.5s ease-in-out infinite',
+  attack: 'foeatkarm .9s cubic-bezier(.4,.05,.35,1)',
+  parried: 'foeparryarm .56s cubic-bezier(.25,.1,.3,1)',
+  staggered: 'foeparryarm .6s cubic-bezier(.25,.1,.3,1)',
+  poofin: 'foearm 1.5s ease-in-out infinite',
 }
 
 export default function FightScene() {
-  // Lock every 3.2s animation to the WALL CLOCK (negative delay): the engine's
-  // battle scheduler computes clang phases from performance.now()%3200, so the
-  // cycles must share that origin — a mount-time start would give an arbitrary
-  // offset (codex finding: beats only aligned by accident).
-  const lock = `${(-((performance.now() % 3200) / 1000)).toFixed(3)}s`
+  // Presence survives page flips (bus-owned): kicked off on the last visit →
+  // he's still gone now, and pops back only when the engine cues 'poofin'.
+  // No director (admin canvas, /legacy) → nothing could ever poof him back,
+  // so those mounts always show him up and fighting.
+  const [st, setSt] = useState<{ cue: FoeState; seq: number }>({
+    cue: battleBus.foePresent() || !battleBus.directed() ? 'idle' : 'gone',
+    seq: 0,
+  })
+  useEffect(() => battleBus.on((c: BattleCue) => setSt((s) => ({ cue: c, seq: s.seq + 1 }))), [])
+  useEffect(() => {
+    const settle = SETTLE[st.cue]
+    if (!settle) return
+    const t = window.setTimeout(() => setSt((s) => (s.seq === st.seq ? { ...s, cue: settle.to } : s)), settle.after)
+    return () => window.clearTimeout(t)
+  }, [st.cue, st.seq])
+
+  const s = st.cue
+  const shocked = s === 'staggered' || s === 'kicked'
+  const foeOn = s !== 'gone'
   return (
     <svg viewBox="0 0 500 340" width="500" height="340" style={{ position: 'absolute', left: 0, top: 0, overflow: 'visible', pointerEvents: 'none' }}>
       {/* ground scuff under the melee */}
       <path d="M12,330 q60,6 120,0 q56,-5 116,1 q40,3 80,-1" fill="none" stroke="#1a1a1a" strokeWidth="2.4" strokeLinecap="round" />
 
-      {/* THE DUELIST — trades blows with Dash at the 24% clang */}
-      <g transform="translate(88,300)">
-        <g style={{ transformBox: 'fill-box', transformOrigin: '50% 100%', animation: 'duelistlunge 3.2s ease-in-out infinite', animationDelay: lock }}>
-          <Attacker />
-        </g>
-      </g>
-
-      {/* THE QUEUE — charges at 62%, takes the CLANK, goes flying */}
-      <g transform="translate(34,304)">
-        <g style={{ transformBox: 'fill-box', transformOrigin: '50% 100%', animation: 'queuecharge 3.2s ease-in-out infinite', animationDelay: lock }}>
-          <Attacker scale={0.92} hideSword />
-          {/* held sword — vanishes at the 70% disarm (the loose one takes over) */}
-          <g style={{ animation: 'heldsword 3.2s linear infinite', animationDelay: lock }}>
-            <path d="M0,-6 L12,-4 M12,-4 L30,-8 M14,-10 L15,1" fill="none" stroke="#1a1a1a" strokeWidth="3" strokeLinecap="round" />
-          </g>
-        </g>
-        {/* his sword, knocked loose at 70%: spins up, sticks in the page */}
-        <g style={{ transformBox: 'fill-box', transformOrigin: '50% 50%', animation: 'loosesword 3.2s ease-in infinite', animationDelay: lock, opacity: 0 }}>
-          <path d="M52,-36 L64,-58" fill="none" stroke="#1a1a1a" strokeWidth="3" strokeLinecap="round" />
-          <path d="M51,-44 L61,-41" fill="none" stroke="#1a1a1a" strokeWidth="2.6" strokeLinecap="round" />
-        </g>
-      </g>
-
-      {/* THE KO'D — already dispatched behind Dash: flat, X-eyes, orbiting stars */}
-      <g transform="translate(206,318)">
-        <g transform="rotate(84)">
-          <g transform="translate(0,6)">
+      {/* THE DUELIST — root at (86,302), feet on the scuff line, facing Dash */}
+      {foeOn && (
+        <g transform="translate(86,302)">
+          <g
+            key={`body-${s}-${st.seq}`}
+            style={{
+              transformBox: 'fill-box',
+              transformOrigin: s === 'kicked' ? '50% 50%' : '50% 100%',
+              animation: BODY_ANIM[s],
+            }}
+          >
+            {/* head + the bandit headband (tails trailing off the back) */}
             <circle cx="0" cy="-24" r="11" fill="#fffdf6" stroke="#1a1a1a" strokeWidth="3.2" />
-            <path d="M-6,-27 l5,5 M-1,-27 l-5,5 M4,-27 l5,5 M9,-27 l-5,5" fill="none" stroke="#1a1a1a" strokeWidth="2" strokeLinecap="round" />
+            <path d="M-11,-28 q11,-4.5 22,-1.5" fill="none" stroke="#1a1a1a" strokeWidth="2.8" strokeLinecap="round" />
+            <path d="M-10,-28 l-9,1 M-10,-27 l-8,5" fill="none" stroke="#1a1a1a" strokeWidth="2.2" strokeLinecap="round" />
+            {shocked ? (
+              <g>
+                {/* wide eyes + a yelp */}
+                <circle cx="-2" cy="-24" r="2.6" fill="none" stroke="#1a1a1a" strokeWidth="1.6" />
+                <circle cx="7" cy="-24" r="2.6" fill="none" stroke="#1a1a1a" strokeWidth="1.6" />
+                <ellipse cx="3" cy="-16.5" rx="2.2" ry="2.8" fill="#1a1a1a" />
+              </g>
+            ) : (
+              <g>
+                {/* angry brows + a grit mouth */}
+                <path d="M-7,-30 l7,3 M4,-27 l7,-3" fill="none" stroke="#1a1a1a" strokeWidth="2.2" strokeLinecap="round" />
+                <circle cx="-2" cy="-24" r="1.7" fill="#1a1a1a" />
+                <circle cx="7" cy="-24" r="1.7" fill="#1a1a1a" />
+                <path d="M-1,-17 h7" fill="none" stroke="#1a1a1a" strokeWidth="2" strokeLinecap="round" />
+              </g>
+            )}
+            {/* body */}
             <path d="M0,-13 L0,12" fill="none" stroke="#1a1a1a" strokeWidth="3.6" strokeLinecap="round" />
-            <path d="M0,-6 L-11,2 M0,-6 L12,-2" fill="none" stroke="#1a1a1a" strokeWidth="3.2" strokeLinecap="round" />
-            <path d="M0,12 L-8,26 M0,12 L11,24" fill="none" stroke="#1a1a1a" strokeWidth="3.6" strokeLinecap="round" />
+            {/* off arm swept back for balance */}
+            <path d="M0,-6 L-10,3" fill="none" stroke="#1a1a1a" strokeWidth="3.2" strokeLinecap="round" />
+            {/* en-garde legs: front foot toward Dash, back foot planted */}
+            <path d="M0,12 L9,20 L10,30 l8,2 M0,12 L-9,22 L-12,30 l-7,2" fill="none" stroke="#1a1a1a" strokeWidth="3.6" strokeLinecap="round" strokeLinejoin="round" />
+            {/* sword arm — its own animation so the blade menaces and bounces */}
+            <g transform="translate(0,-6)">
+              <g
+                key={`arm-${s}-${st.seq}`}
+                style={{ transformBox: 'fill-box', transformOrigin: '0% 100%', animation: ARM_ANIM[s] }}
+              >
+                <path d="M0,0 L11,-10" fill="none" stroke="#1a1a1a" strokeWidth="3.2" strokeLinecap="round" />
+                <path d="M11,-10 L19,-33" fill="none" stroke="#1a1a1a" strokeWidth="3" strokeLinecap="round" />
+                <path d="M8,-17 L18,-13" fill="none" stroke="#1a1a1a" strokeWidth="2.6" strokeLinecap="round" />
+              </g>
+            </g>
           </g>
         </g>
-        <g transform="translate(0,-38)">
-          {[0, 1, 2].map((i) => (
-            <path
+      )}
+
+      {/* ── exchange effects (keyed by seq so each beat restarts its pop) ── */}
+      {s === 'attack' && (
+        <g key={`fx-${st.seq}`}>
+          {/* his charge speed-lines, then the blades meet on Dash's parry */}
+          <g style={{ animation: 'duellines .3s ease-out .1s both' }}>
+            <path d="M52,286 h16 M48,296 h20 M54,306 h14" fill="none" stroke="#1a1a1a" strokeWidth="2" strokeLinecap="round" />
+          </g>
+          <Clash x={114} y={287} text="CLANG!" color="#ffd23f" delayMs={FOE_ATTACK_CONTACT_MS} />
+        </g>
+      )}
+      {s === 'parried' && (
+        <g key={`fx-${st.seq}`}>
+          <Clash x={112} y={285} text={st.seq % 2 ? 'CLANG!' : 'CLANK!'} color={st.seq % 2 ? '#ffd23f' : '#ff5ca8'} />
+          <Swish />
+          <FootDust x={72} />
+        </g>
+      )}
+      {s === 'staggered' && (
+        <g key={`fx-${st.seq}`}>
+          <Clash x={112} y={283} text="WHAM!!" color="#ff5ca8" big />
+          <Swish />
+          <FootDust x={58} />
+        </g>
+      )}
+      {s === 'kicked' && (
+        <g key={`fx-${st.seq}`}>
+          <Clash x={96} y={278} text="POW!!" color="#ffd23f" big rise />
+          {/* launch trail arcing up after him */}
+          <g style={{ animation: 'duellines .5s ease-out .06s both' }}>
+            <path d="M84,270 q-14,-38 -36,-64 M96,262 q-4,-40 -20,-70" fill="none" stroke="#1a1a1a" strokeWidth="2" strokeLinecap="round" strokeDasharray="5 6" />
+          </g>
+          <FootDust x={78} />
+        </g>
+      )}
+      {s === 'poofin' && (
+        <g key={`fx-${st.seq}`}>
+          {[
+            { cx: 70, cy: 322, r: 13, d: 0 },
+            { cx: 92, cy: 316, r: 15, d: 0.05 },
+            { cx: 82, cy: 296, r: 12, d: 0.1 },
+            { cx: 100, cy: 330, r: 10, d: 0.08 },
+          ].map((c, i) => (
+            <circle
               key={i}
-              d="M0,0 l2,4 l4.4,0.6 l-3.2,3 l0.8,4.4 l-4,-2.2 l-4,2.2 l0.8,-4.4 l-3.2,-3 l4.4,-0.6 Z"
-              fill="#ffd23f"
+              cx={c.cx}
+              cy={c.cy}
+              r={c.r}
+              fill="#fffdf6"
               stroke="#1a1a1a"
-              strokeWidth="1.4"
-              strokeLinejoin="round"
-              style={{ transformBox: 'fill-box', transformOrigin: '50% 50%', animation: 'kostar 2.2s linear infinite', animationDelay: `${-i * 0.733}s` }}
+              strokeWidth="2.6"
+              style={{ transformBox: 'fill-box', transformOrigin: '50% 50%', animation: `duelsmoke .6s ease-out ${c.d}s both` }}
             />
           ))}
         </g>
-      </g>
-
-      {/* impact bursts at the sword-contact point (24% / 70% of the cycle) */}
-      <g style={{ transformBox: 'fill-box', transformOrigin: '50% 50%', animation: 'clanga 3.2s linear infinite', animationDelay: lock, opacity: 0 }}>
-        <path d="M112,290 l3,7 l8,-3 l-4,7 l7,5 l-9,1 l1,9 l-6,-6 l-7,6 l1,-9 l-8,-1 l7,-5 l-4,-7 l8,3 Z" fill="#ffd23f" stroke="#1a1a1a" strokeWidth="1.8" strokeLinejoin="round" />
-        <text x="80" y="258" fontFamily="Permanent Marker, cursive" fontSize="17" fill="#1a1a1a" transform="rotate(-6 80 258)">CLANG!</text>
-      </g>
-      <g style={{ transformBox: 'fill-box', transformOrigin: '50% 50%', animation: 'clangb 3.2s linear infinite', animationDelay: lock, opacity: 0 }}>
-        <path d="M104,296 l3,7 l8,-3 l-4,7 l7,5 l-9,1 l1,9 l-6,-6 l-7,6 l1,-9 l-8,-1 l7,-5 l-4,-7 l8,3 Z" fill="#ff5ca8" stroke="#1a1a1a" strokeWidth="1.8" strokeLinejoin="round" />
-        <text x="72" y="240" fontFamily="Permanent Marker, cursive" fontSize="17" fill="#1a1a1a" transform="rotate(5 72 240)">CLANK!</text>
-      </g>
-
-      {/* swish arcs off Dash's blade, flashing with each clang */}
-      <path d="M150,268 q-18,10 -22,30" fill="none" stroke="#1a1a1a" strokeWidth="2" strokeLinecap="round" strokeDasharray="3 5" style={{ transformBox: 'fill-box', transformOrigin: '50% 50%', animation: 'clanga 3.2s linear infinite', animationDelay: lock, opacity: 0 }} />
-      <path d="M146,278 q-16,8 -19,26" fill="none" stroke="#1a1a1a" strokeWidth="2" strokeLinecap="round" strokeDasharray="3 5" style={{ transformBox: 'fill-box', transformOrigin: '50% 50%', animation: 'clangb 3.2s linear infinite', animationDelay: lock, opacity: 0 }} />
-
-      {/* charge speed-lines behind the queue attacker */}
-      <g style={{ transformBox: 'fill-box', transformOrigin: '50% 50%', animation: 'chargelines 3.2s linear infinite', animationDelay: lock, opacity: 0 }}>
-        <path d="M4,286 h16 M0,296 h20 M6,306 h14" fill="none" stroke="#1a1a1a" strokeWidth="2" strokeLinecap="round" />
-      </g>
+      )}
     </svg>
+  )
+}
+
+/** Impact burst + marker word at the blade-contact point. `delayMs` holds it
+ * until the beat's contact moment ('both' fill keeps it hidden before). */
+function Clash({ x, y, text, color, delayMs = 0, big = false, rise = false }: { x: number; y: number; text: string; color: string; delayMs?: number; big?: boolean; rise?: boolean }) {
+  const k = big ? 1.45 : 1
+  return (
+    <g style={{ transformBox: 'fill-box', transformOrigin: '50% 50%', animation: `${rise ? 'duelpow' : 'duelclash'} .5s cubic-bezier(.2,.7,.3,1) ${delayMs / 1000}s both` }}>
+      <g transform={`translate(${x},${y}) scale(${k}) translate(${-x},${-y})`}>
+        <path
+          d={`M${x - 6},${y - 8} l3,7 l8,-3 l-4,7 l7,5 l-9,1 l1,9 l-6,-6 l-7,6 l1,-9 l-8,-1 l7,-5 l-4,-7 l8,3 Z`}
+          fill={color}
+          stroke="#1a1a1a"
+          strokeWidth="1.8"
+          strokeLinejoin="round"
+        />
+      </g>
+      <text x={x - 36} y={y - 32} fontFamily="Permanent Marker, cursive" fontSize={big ? 19 : 17} fill="#1a1a1a" transform={`rotate(-6 ${x - 36} ${y - 32})`}>
+        {text}
+      </text>
+    </g>
+  )
+}
+
+/** Swish arcs off Dash's blade as his lunge connects. */
+function Swish() {
+  return (
+    <g style={{ animation: 'duelswish .45s ease-out both' }}>
+      <path d="M150,268 q-18,10 -22,30" fill="none" stroke="#1a1a1a" strokeWidth="2" strokeLinecap="round" strokeDasharray="3 5" />
+      <path d="M146,278 q-16,8 -19,26" fill="none" stroke="#1a1a1a" strokeWidth="2" strokeLinecap="round" strokeDasharray="3 5" />
+    </g>
+  )
+}
+
+/** A scuff puff where his feet skid on a knockback. */
+function FootDust({ x }: { x: number }) {
+  return (
+    <g style={{ animation: 'duelswish .5s ease-out .05s both' }}>
+      <path d={`M${x},330 q6,-7 14,-6 M${x + 4},333 q8,-3 14,-1`} fill="none" stroke="#1a1a1a" strokeWidth="2" strokeLinecap="round" opacity="0.7" />
+    </g>
   )
 }

@@ -55,6 +55,8 @@ pasting a literal (see §2).
 | `RESEND_API_KEY` | optional | Resend API key for emailing magic-links. **Without it**, magic-link URLs are printed to the Railway logs instead — fine for the initial bootstrap login. |
 | `RESEND_FROM` | optional | The `From` for magic-link emails, e.g. `Notebook <login@vasimip.com>`. Defaults to `Notebook <onboarding@resend.dev>` if unset. Only used when `RESEND_API_KEY` is set. |
 | `PORT` | no | **Injected by Railway** — don't set it. The server reads it automatically (falls back to 8787 locally). |
+| `SUBMISSION_IP_SALT` | optional | Salt for hashing submitter IPs in rate-limit buckets. Falls back to `BETTER_AUTH_SECRET` if unset — set it separately so rotating the auth secret doesn't reset the buckets. Generate: `openssl rand -base64 32`. |
+| `PUBLIC_GET_RATE_MAX` / `PUBLIC_GET_RATE_WINDOW_MS` | optional | Per-IP rate limit on the public read routes (`GET /api/notebook`, `GET /api/invite/:token`). Defaults: 120 requests / 60000 ms. |
 
 `NODE_ENV=production` is baked into the `Dockerfile`, so the production hardening
 (env checks, secure cookies, auth rate-limit) is on automatically.
@@ -110,9 +112,9 @@ Do this **after** the Railway URL is verified working.
    redeploy. (Better Auth must sign against the origin you actually visit; changing
    it before DNS resolves will break login.)
 4. Re-run the §4 checklist against `https://vasimip.com`.
-5. Retire the old Vercel deploy: delete the Vercel project (it was only the static
-   front-end and has no backend). **Then** delete `vercel.json` from the repo — it's
-   kept in-tree until cutover so nothing depends on Vercel mid-migration.
+5. Retire the old Vercel deploy: delete the Vercel project if one still exists (it
+   was only the static front-end and has no backend). `vercel.json` has already
+   been removed from the repo — Railway is the only deploy target.
 
 ---
 
@@ -128,3 +130,26 @@ Do this **after** the Railway URL is verified working.
   to run more than one instance for this workload — keep the service at 1 replica.
 - **Bootstrap without email is fine.** Leaving `RESEND_API_KEY` unset just means
   login links land in the Railway logs. Add Resend later if you want emailed links.
+
+---
+
+## 7. Public-repo hygiene
+
+The repo is public; the working tree and history contain no secrets (audited
+2026-07-18). Keep it that way:
+
+- **Never expose `bun run dev` beyond localhost.** The dev-only Vite middleware
+  (`plugins/notebook-admin.ts`) writes `src/notebook/notebook.json` to disk with
+  NO auth. It never ships in builds (`apply: 'serve'`), so production is safe —
+  the risk is only a publicly reachable dev server.
+- **Session recordings stay local.** The `entire` recorder's checkpoint branches
+  are transcripts of AI coding sessions — never push them (`push_sessions` is
+  disabled in `.entire/settings.local.json`; the old `entire/checkpoints/v1`
+  branch was deleted from origin). `.claude/`, `.codex/`, and `.entire/` are
+  gitignored — machine-local tooling, not repo content.
+- **Note the in-memory public-read limiter is per-process** — a restart clears
+  it. That's intentional (read-only public data); the durable pg limiter guards
+  the write path.
+- Secrets live ONLY in Railway Variables / local `.env` (gitignored). If a
+  secret ever lands in a commit: rotate it first, then rewrite/remove — deleting
+  a branch or commit does NOT purge it from GitHub caches immediately.

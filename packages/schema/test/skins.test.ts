@@ -28,8 +28,8 @@ test('the shared keyframes table validates', () => {
   expect(Object.keys(table.keyframes).length).toBeGreaterThan(20)
 })
 
-test(`all ${files.length} shipped skins validate + resolve (24 legacy drawings)`, () => {
-  expect(files.length).toBe(24)
+test(`all ${files.length} shipped skins validate + resolve (24 legacy drawings + kick)`, () => {
+  expect(files.length).toBe(25)
   for (const f of files) {
     const doc = JSON.parse(readFileSync(DIR + f, 'utf8')) as PoseSkinDoc
     const v = tryValidatePoseSkin(doc)

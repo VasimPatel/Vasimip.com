@@ -32,6 +32,7 @@ import { createCharacterRenderer, type CharacterRenderer } from '../../../packag
 import { engineSkins, type EngineDoc } from './engineDoc'
 import { pick, chance, scalar, reviewHook, reviewLog, type MotionSample } from '../review'
 import { STAGE_W, STAGE_H } from '../doc/spread'
+import { battleBus, DASH_LUNGE_CONTACT_MS, FOE_ATTACK_CONTACT_MS, FOE_SIDE, KICK_CLEAR_MS, KICK_CONTACT_MS } from '../battleBus'
 
 export interface EngineLayerProps {
   /** The engine doc derived from the SAME v1 doc the site renders (hot-swappable). */
@@ -115,8 +116,9 @@ export class EngineLayer extends Component<EngineLayerProps> {
   private arcWrap: SVGGElement | null = null
   private arcTimer = 0
   private fidgetTimer = 0
-  /** Battle-beat timer (the ABOUT sword fight): fires on the FightScene's shared
-   * 3.2s cycle at the clang phases while Dash holds the fight stance. */
+  /** Battle exchange timer (the ABOUT sword fight): while Dash holds the fight
+   * stance, scheduleBattle directs one exchange per tick and cues the
+   * FightScene duelist over battleBus. */
   private battleTimer = 0
   /** Smoothed cursor-lean (rad) — the legacy .22s ease-out transition. */
   private lean = 0
@@ -187,6 +189,7 @@ export class EngineLayer extends Component<EngineLayerProps> {
   }
 
   componentDidMount(): void {
+    this.busDetach = battleBus.attachDirector()
     this.enterPage(this.props.page)
     this.last = performance.now()
     const frame = (now: number): void => {
@@ -307,6 +310,7 @@ export class EngineLayer extends Component<EngineLayerProps> {
         offset: { dx: offX, dy: offY },
         capeLag: this.capeLag,
       })
+      if (this.ropeFx) this.renderRope(skinRoot)
       if (reviewHook()?.motion) this.recordMotion(s, solved, skinRoot, src.id)
 
       if (this.actorHidden !== this.actorHiddenApplied && this.svgRef.current) {
@@ -396,8 +400,13 @@ export class EngineLayer extends Component<EngineLayerProps> {
     cancelAnimationFrame(this.raf)
     window.clearTimeout(this.fidgetTimer)
     window.clearTimeout(this.battleTimer)
+    this.busDetach?.()
+    this.busDetach = null
     this.teardown()
   }
+
+  /** battleBus director registration (undirected scenes ignore stale state). */
+  private busDetach: (() => void) | null = null
 
   private teardown(): void {
     if (this.onDragUp) window.removeEventListener('pointerup', this.onDragUp)
@@ -423,6 +432,7 @@ export class EngineLayer extends Component<EngineLayerProps> {
     this.capeLag = 0
     this.bubbleNote = null
     if (this.svgRef.current) this.svgRef.current.style.opacity = '1'
+    this.clearRope() // the svg is being rebuilt — no fade, just remove
     this.clearTravel()
     for (const off of this.scene?.offs ?? []) off()
     this.scene?.rt.dispose()
@@ -700,12 +710,23 @@ export class EngineLayer extends Component<EngineLayerProps> {
     this.chainArrival()
   }
 
-  /** The Notebook's nav: Dash travels to panel j on the current page. */
+  /** The Notebook's nav: Dash travels to panel j on the current page. Leaving
+   * the battle (either direction) kicks the duelist off the page first. */
   travelTo(panelIdx: number): void {
     const s = this.scene
     if (!s) return
-    const doc = this.pickTravel(s.pageIdx, panelIdx)
-    this.startTravel(doc, panelIdx)
+    const kickMs = this.maybeKickFoe()
+    if (kickMs > 0) {
+      this.backNavTimers.push(
+        window.setTimeout(() => {
+          const s2 = this.scene
+          if (!s2 || this.dragging) return
+          this.startTravel(this.pickTravel(s2.pageIdx, panelIdx), panelIdx)
+        }, kickMs),
+      )
+      return
+    }
+    this.startTravel(this.pickTravel(s.pageIdx, panelIdx), panelIdx)
   }
 
   /** Shared travel launch (nav + the admin/harness testBehavior): poof interception,
@@ -893,6 +914,9 @@ export class EngineLayer extends Component<EngineLayerProps> {
     'builtin:vault': 'vault',
     'builtin:vault-peek': 'vault',
     'builtin:rope': 'rope',
+    // the owner's tightrope action crosses on the SAME grappled line (its cut
+    // falls after the scrib, so Dash grapples from where he stands)
+    'act:tightrope': 'rope',
     'builtin:slide': 'slide',
     'builtin:smash': 'smash',
   }
@@ -1064,14 +1088,24 @@ export class EngineLayer extends Component<EngineLayerProps> {
     })
   }
 
-  /** Legacy ropeTo's crossing: a LINEAR tightrope glide in the rope art at
-   * 115px/s (min 0.9s) straight to the anchor — the balance walk is the point,
-   * so no arc and no easing. Camera holds the midpoint at 1.22, unhurried. */
+  /** The rope crossing, grappled (owner: "shoot a grappling line over to the
+   * panel he's going to and walk on that rope" — the bare glide read as walking
+   * on air). Beats: throw pose + the hook flies the line across (360ms), the
+   * line TWANGS taut (260ms, damped wobble), then the legacy tightrope walk at
+   * 115px/s along the DRAWN line — Dash's path dips (arcH −12) and the line's
+   * V-vertex rides his live feet, so the rope visibly sags under him — and on
+   * landing the near end releases and the line falls away. act:tightrope
+   * stages through here too (STAGED_CROSSINGS), keeping its quip. */
+  private static ROPE_SHOOT_MS = 360
+  private static ROPE_TAUT_MS = 260
+  private static ROPE_LINES = ["don't look down.", 'one foot. other foot.', 'balance is a skill. see: SKILLS.']
+
   private ropeStaging(destIdx: number): void {
     const s = this.scene
     if (!s) return
+    const B = this.docV2.pages[s.pageIdx]?.panels[destIdx]
     const spot = this.panelSpot(s.pageIdx, destIdx)
-    if (!spot) {
+    if (!B || !spot) {
       this.chainArrival()
       return
     }
@@ -1080,27 +1114,216 @@ export class EngineLayer extends Component<EngineLayerProps> {
     const rootDy = t.y - (Math.max(cap.y0, cap.y1) + cap.r)
     const fromX = t.x
     const fromY = t.y
-    const dur = Math.max(900, (Math.hypot(spot.x - fromX, spot.y + rootDy - fromY) / 115) * 1000)
-    this.stagingUntil = performance.now() + dur + 700
+    const footY = fromY - rootDy
+    const dir: 1 | -1 = spot.x >= fromX ? 1 : -1
+    // Top-edge anchors get a TWO-LEG crossing: the hook bites the panel's near
+    // top CORNER (a taut line to mid-panel would slash across the title art),
+    // Dash walks the line to the corner, then balances along the rim to the
+    // anchor. Interior anchors keep the direct line — there is no rim route.
+    const cornerX = dir === 1 ? B.x + 10 : B.x + B.w - 10
+    // |dy| — a NEGATIVE dy floats the anchor above the panel (schema-legal);
+    // only anchors actually ON the rim get the rim walk (codex finding).
+    const twoLeg = Math.abs(B.anchor.dy) <= 6 && Math.abs(spot.x - cornerX) >= 30
+    const legAX = twoLeg ? cornerX : spot.x
+    const legAY = twoLeg ? B.y : spot.y
+    const durA = Math.max(twoLeg ? 700 : 900, (Math.hypot(legAX - fromX, legAY + rootDy - fromY) / 115) * 1000)
+    const durB = twoLeg ? Math.max(320, (Math.hypot(spot.x - legAX, spot.y - legAY) / 115) * 1000) : 0
+    // The walk takes over exactly when the throw one-shot drains (holdMs W —
+    // waiting the full grapple window left a 40ms stand-skin flash between the
+    // throw and rope skins; codex finding). The twang's tail is sub-pixel by
+    // then, so cutting it 40ms early is invisible.
+    const G = EngineLayer.ROPE_SHOOT_MS + EngineLayer.ROPE_TAUT_MS
+    const W = G - 40
+    this.stagingUntil = performance.now() + W + durA + durB + 700
     const at = (ms: number, fn: () => void): void => {
       this.backNavTimers.push(window.setTimeout(fn, ms))
     }
-    t.facing = spot.x >= fromX ? 1 : -1
+    t.facing = dir
     this.lastCam = { x: (fromX + spot.x) / 2, y: spot.y - 93 }
     this.props.onDashCam?.({ x: (fromX + spot.x) / 2, y: spot.y - 93, mult: 1.22, fast: false })
-    s.rt.act('rope', { holdMs: 'persist' })
-    this.scriptMove = { fromX, fromY, toX: spot.x, toY: spot.y + rootDy, t0: performance.now(), dur, arcH: 0 }
-    at(dur + 60, () => {
+    // the grapple: throw stance while the hook flies out and bites
+    s.rt.runOneShot('__rope:throw', [{ verb: 'strikePose', ref: 'throw', holdMs: W }])
+    this.props.sfx('whoosh')
+    this.armRope({ sx: fromX + dir * 16, sy: footY - 58, tx: legAX + dir * 12, ty: legAY - 2, footX: fromX, footY })
+    at(EngineLayer.ROPE_SHOOT_MS, () => this.props.sfx('knock'))
+    at(W, () => {
+      this.props.sfx('scrape')
+      s.rt.act('rope', { holdMs: 'persist' })
+      this.ropePhase('walk')
+      this.scriptMove = { fromX, fromY, toX: legAX, toY: legAY + rootDy, t0: performance.now(), dur: durA, arcH: -12 }
+    })
+    at(W + durA * 0.45, () => {
+      // the tightrope action keeps its AUTHORED line (its say sits in the cut
+      // portion of the migrated doc — codex: staging dice dropped it 65% of
+      // the time); the builtin crossing rolls the staging quips.
+      if (this.travelKind === 'act:tightrope') {
+        this.bubbleNote = { text: "don't look down.", until: performance.now() + 1400 }
+      } else if (chance('rope.line', 0.35)) {
+        this.bubbleNote = { text: pick('rope.line.pick', EngineLayer.ROPE_LINES), until: performance.now() + 1200 }
+      }
+    })
+    if (twoLeg) {
+      // stepping off at the corner: the line has done its job and falls away
+      // while he balance-walks the panel rim to the anchor, still in rope art
+      at(W + durA, () => {
+        this.releaseRope()
+        this.scriptMove = { fromX: legAX, fromY: legAY + rootDy, toX: spot.x, toY: spot.y + rootDy, t0: performance.now(), dur: durB, arcH: 0 }
+      })
+    }
+    at(W + durA + durB + 60, () => {
       s.rt.clearAct()
       s.rt.runOneShot('__rope:land', [{ verb: 'strikePose', ref: 'squash-land', holdMs: 280 }])
       this.props.sfx('hop')
       this.props.sfx('fx:shake')
+      this.releaseRope()
     })
-    at(dur + 660, () => {
+    at(W + durA + durB + 660, () => {
       this.lastCam = null
       this.props.onDashCam?.(null)
       this.chainArrival()
     })
+  }
+
+  // ── the grapple line (render-layer fx: a rope path + hook under the actor) ──
+  private ropeFx: {
+    phase: 'shoot' | 'taut' | 'walk' | 'drop'
+    t0: number
+    /** near end while airborne (the throwing hand) */
+    sx: number
+    sy: number
+    /** near end once he steps on (the start foothold) */
+    footX: number
+    footY: number
+    /** the hook's bite point */
+    tx: number
+    ty: number
+    /** last-RENDERED geometry — the drop must fall from wherever the line
+     * actually was when interrupted (mid-shoot/taut), not snap to the
+     * completed span first (codex finding). */
+    lastNX?: number
+    lastNY?: number
+    lastHX?: number
+    lastHY?: number
+  } | null = null
+  private ropeG: SVGGElement | null = null
+  private ropeLine: SVGPathElement | null = null
+  private ropeHook: SVGGElement | null = null
+
+  private armRope(cfg: { sx: number; sy: number; tx: number; ty: number; footX: number; footY: number }): void {
+    this.clearRope()
+    const svg = this.svgRef.current
+    if (!svg) return
+    const NS = 'http://www.w3.org/2000/svg'
+    const g = document.createElementNS(NS, 'g') as SVGGElement
+    const line = document.createElementNS(NS, 'path') as SVGPathElement
+    line.setAttribute('fill', 'none')
+    line.setAttribute('stroke', '#1a1a1a')
+    line.setAttribute('stroke-width', '2.5')
+    line.setAttribute('stroke-linecap', 'round')
+    g.appendChild(line)
+    const hook = document.createElementNS(NS, 'g') as SVGGElement
+    const claws = document.createElementNS(NS, 'path') as SVGPathElement
+    claws.setAttribute('d', 'M0,0 l6,-7 M0,0 l8,1 M0,0 l5,7 M0,0 l-9,-1')
+    claws.setAttribute('fill', 'none')
+    claws.setAttribute('stroke', '#1a1a1a')
+    claws.setAttribute('stroke-width', '2.6')
+    claws.setAttribute('stroke-linecap', 'round')
+    hook.appendChild(claws)
+    g.appendChild(hook)
+    // under Dash: the actor walks ON the line, never behind it
+    svg.insertBefore(g, this.arcWrap)
+    this.ropeG = g
+    this.ropeLine = line
+    this.ropeHook = hook
+    this.ropeFx = { phase: 'shoot', t0: performance.now(), ...cfg }
+  }
+
+  private ropePhase(phase: 'walk' | 'drop'): void {
+    if (!this.ropeFx) return
+    this.ropeFx.phase = phase
+    this.ropeFx.t0 = performance.now()
+  }
+
+  /** Fade-and-fall if a line is up (drag/teardown mid-crossing); no-op otherwise. */
+  private releaseRope(): void {
+    if (this.ropeFx && this.ropeFx.phase !== 'drop') this.ropePhase('drop')
+  }
+
+  private clearRope(): void {
+    this.ropeG?.remove()
+    this.ropeG = null
+    this.ropeLine = null
+    this.ropeHook = null
+    this.ropeFx = null
+  }
+
+  /** Per-rAF rope drawing. `feet` = the interpolated skin ground-centre, so the
+   * walk phase's V-vertex tracks exactly where Dash's feet render this frame. */
+  private renderRope(feet: { x: number; y: number }): void {
+    const fx = this.ropeFx
+    if (!fx || !this.ropeLine || !this.ropeHook) return
+    const now = performance.now()
+    let el = now - fx.t0
+    const dir = fx.tx >= fx.sx ? 1 : -1
+    // shoot rolls into the taut twang on its own clock
+    if (fx.phase === 'shoot' && el >= EngineLayer.ROPE_SHOOT_MS) {
+      fx.phase = 'taut'
+      fx.t0 += EngineLayer.ROPE_SHOOT_MS
+      el = now - fx.t0
+    }
+    let d = ''
+    let hookX = fx.tx
+    let hookY = fx.ty
+    let opacity = 0.92
+    if (fx.phase === 'shoot') {
+      const k = 1 - (1 - Math.min(1, el / EngineLayer.ROPE_SHOOT_MS)) ** 3
+      hookX = fx.sx + (fx.tx - fx.sx) * k
+      hookY = fx.sy + (fx.ty - fx.sy) * k - 30 * k * (1 - k) // slight up-arc
+      // the line trails the hook, bowing down behind it
+      d = `M${fx.sx},${fx.sy} Q${(fx.sx + hookX) / 2},${(fx.sy + hookY) / 2 + 16 * (1 - k)} ${hookX},${hookY}`
+      fx.lastNX = fx.sx
+      fx.lastNY = fx.sy
+    } else if (fx.phase === 'taut') {
+      const k = Math.min(1, el / EngineLayer.ROPE_TAUT_MS)
+      // the near end comes down from the hand to the foothold as he readies
+      const nx = fx.sx + (fx.footX - fx.sx) * k
+      const ny = fx.sy + (fx.footY - fx.sy) * k
+      const wob = 15 * Math.exp(-el / 110) * Math.cos(el / 26) // the TWANG
+      d = `M${nx},${ny} Q${(nx + fx.tx) / 2},${(ny + fx.ty) / 2 + wob} ${fx.tx},${fx.ty}`
+      fx.lastNX = nx
+      fx.lastNY = ny
+    } else if (fx.phase === 'walk') {
+      // taut V through his feet: the line loads where he stands
+      const vx = feet.x
+      const vy = feet.y + 2
+      d =
+        `M${fx.footX},${fx.footY} Q${(fx.footX + vx) / 2},${(fx.footY + vy) / 2 + 5} ${vx},${vy}` +
+        ` Q${(vx + fx.tx) / 2},${(vy + fx.ty) / 2 + 5} ${fx.tx},${fx.ty}`
+      fx.lastNX = fx.footX
+      fx.lastNY = fx.footY
+    } else {
+      // drop: the near end lets go — the line sags away and fades, from
+      // wherever it actually was (an interrupted shoot drops the mid-air line)
+      const k = Math.min(1, el / 450)
+      if (k >= 1) {
+        this.clearRope()
+        return
+      }
+      const nx = fx.lastNX ?? fx.footX
+      const ny = fx.lastNY ?? fx.footY
+      hookX = fx.lastHX ?? fx.tx
+      hookY = fx.lastHY ?? fx.ty
+      opacity = 0.92 * (1 - k)
+      const fall = 34 * k * k
+      d = `M${nx},${ny + fall} Q${(nx + hookX) / 2},${(ny + hookY) / 2 + fall + 20 * k} ${hookX},${hookY}`
+    }
+    if (fx.phase !== 'drop') {
+      fx.lastHX = hookX
+      fx.lastHY = hookY
+    }
+    this.ropeLine.setAttribute('d', d)
+    this.ropeG?.setAttribute('opacity', String(opacity))
+    this.ropeHook.setAttribute('transform', `translate(${hookX},${hookY}) scale(${dir},1)`)
   }
 
   /** Legacy slideTo's back half: from the own-panel edge, slide DOWN the outer
@@ -1268,8 +1491,11 @@ export class EngineLayer extends Component<EngineLayerProps> {
    * owns the character beats and drives the Notebook's shared overlays through
    * onFx; `done()` fires at the legacy page-turn moment (bomb 2430ms / poof
    * 650ms) and the landing plays via pendingEntrance in the next enterPage.
-   * `landingPanel` is the last panel of the TARGET page (legacy lands there). */
-  backNav(kind: 'bomb' | 'poof', landingPanel: number, done: () => void): void {
+   * `landingPanel` is the last panel of the TARGET page (legacy lands there).
+   * `onCancel` fires if the staging is torn down before the page-turn moment
+   * (doc hot-swap/unmount) so the caller can release its pending gate without
+   * navigating (codex: a swallowed done() wedged _backNavPending forever). */
+  backNav(kind: 'bomb' | 'poof', landingPanel: number, done: () => void, onCancel?: () => void): void {
     const s = this.scene
     if (!s) {
       done()
@@ -1299,42 +1525,52 @@ export class EngineLayer extends Component<EngineLayerProps> {
       this.props.onFx?.({ kind: 'hole', on: false })
       this.props.onFx?.({ kind: 'smoke', on: false })
       this.backNavCancel = null
+      onCancel?.()
     }
 
     const t = s.rt.transform
     const cap = s.rt.capsule()
     const gx = t.x
     const gy = Math.max(cap.y0, cap.y1) + cap.r
-    this.stagingUntil = performance.now() + (kind === 'bomb' ? 2430 : 650)
+    // Leaving the battle backwards kicks the duelist off the page first; the
+    // whole legacy timeline then plays shifted by the boot (Dash's transform
+    // doesn't move during it, so gx/gy stay valid). at0 = kick-shifted clock.
+    const kickMs = this.maybeKickFoe()
+    const at0 = (ms: number, fn: () => void): void => at(ms + kickMs, fn)
+    this.stagingUntil = performance.now() + kickMs + (kind === 'bomb' ? 2430 : 650)
 
     if (kind === 'bomb') {
       // Legacy bombBack: throw 300 → bomb arc 580 → boom+hole 950 → hop 1300 →
       // dive 1850 → page turn 2430 (pop-in + land play on the landing page).
       const dirT = gx > STAGE_W / 2 ? -1 : 1
       const txp = Math.max(90, Math.min(STAGE_W - 90, gx + dirT * 175))
-      t.facing = dirT
-      s.rt.runOneShot('__backnav:throw', [{ verb: 'strikePose', ref: 'throw', holdMs: 320 }])
-      this.props.sfx('scrib')
-      at(300, () => this.props.onFx?.({ kind: 'bomb', on: true, x: gx + dirT * 14, y: gy - 75 }))
-      at(360, () => this.props.onFx?.({ kind: 'bomb', on: true, x: txp, y: gy - 12 }))
-      at(950, () => {
+      const start = (): void => {
+        t.facing = dirT
+        s.rt.runOneShot('__backnav:throw', [{ verb: 'strikePose', ref: 'throw', holdMs: 320 }])
+        this.props.sfx('scrib')
+      }
+      if (kickMs > 0) at(kickMs, start)
+      else start()
+      at0(300, () => this.props.onFx?.({ kind: 'bomb', on: true, x: gx + dirT * 14, y: gy - 75 }))
+      at0(360, () => this.props.onFx?.({ kind: 'bomb', on: true, x: txp, y: gy - 12 }))
+      at0(950, () => {
         this.props.onFx?.({ kind: 'bomb', on: false })
         this.props.onFx?.({ kind: 'boom', on: true, x: txp, y: gy })
         this.props.onFx?.({ kind: 'hole', on: true, x: txp, y: gy })
         this.props.sfx('boom')
       })
-      at(1300, () => {
+      at0(1300, () => {
         this.props.sfx('hop')
         s.rt.runOneShot('__backnav:tuck', [{ verb: 'strikePose', ref: 'jump-tuck', holdMs: 620 }])
         this.scriptMove = { fromX: t.x, fromY: t.y, toX: txp, toY: t.y, t0: performance.now(), dur: 500, arcH: 46 }
       })
-      at(1850, () => {
+      at0(1850, () => {
         this.playArc('dive', false)
       })
-      at(2350, () => {
+      at0(2350, () => {
         this.actorHidden = true
       })
-      at(2430, () => {
+      at0(2430, () => {
         this.props.onFx?.({ kind: 'boom', on: false })
         this.props.onFx?.({ kind: 'hole', on: false })
         this.pendingEntrance = { kind: 'bombPop', panel: landingPanel }
@@ -1344,12 +1580,16 @@ export class EngineLayer extends Component<EngineLayerProps> {
     } else {
       // Legacy poofBack: smoke 0 → vanish 140 → page turn 650 (smoke + reappear
       // play on the landing page).
-      this.props.sfx('flip')
-      this.props.onFx?.({ kind: 'smoke', on: true, x: gx, y: gy - 53 })
-      at(140, () => {
+      const start = (): void => {
+        this.props.sfx('flip')
+        this.props.onFx?.({ kind: 'smoke', on: true, x: gx, y: gy - 53 })
+      }
+      if (kickMs > 0) at(kickMs, start)
+      else start()
+      at0(140, () => {
         this.actorHidden = true
       })
-      at(650, () => {
+      at0(650, () => {
         this.props.onFx?.({ kind: 'smoke', on: false })
         this.pendingEntrance = { kind: 'poofIn', panel: landingPanel }
         this.props.sfx('flip')
@@ -1484,6 +1724,7 @@ export class EngineLayer extends Component<EngineLayerProps> {
     this.spin = 0
     this.lastCam = null
     this.clearArc()
+    this.releaseRope() // an interrupted crossing lets the line fall, not freeze
     this.props.onDashCam?.(null)
   }
 
@@ -1678,58 +1919,121 @@ export class EngineLayer extends Component<EngineLayerProps> {
     }, scalar('fidget.delayMs', () => 2800 + Math.random() * 3200))
   }
 
-  /** The ABOUT-page sword fight (parity 3c): while Dash HOLDS the fight stance
-   * (the battle panel's persist arrival) and is otherwise idle, he trades blows
-   * with the FightScene attackers. The scene runs one 3.2s CSS master cycle
-   * from document time with clangs at 24% and 70%; both clocks are wall-clock,
-   * so scheduling each beat at the next clang phase keeps Dash's lunge landing
-   * on the burst, drift-free, without any DOM coupling. Alternates lunge (his
-   * hit) and a shoved recoil (theirs); occasional battle quip. */
-  private static BATTLE_CYCLE_MS = 3200
+  /** The ABOUT-page sword fight — the ENGINE is the choreographer. While Dash
+   * HOLDS the fight stance (the battle panel's persist arrival) and is idle,
+   * every 0.95–1.8s ONE exchange plays, and the FightScene duelist is CUED over
+   * battleBus so he answers it (the old design ran a fixed 3.2s CSS cycle the
+   * engine only decorated — owner: "not actually fighting each other"):
+   *   his attack  → windup/lunge cue now, Dash's shoved recoil + CLANG at the
+   *                 shared blade-contact moment (FOE_ATTACK_CONTACT_MS);
+   *   Dash's attack → lunge arc now, the duelist's knockback (or the big
+   *                 stagger) cued at the lunge's reach (DASH_LUNGE_CONTACT_MS).
+   * If the duelist was KICKED off (departure beat) and Dash is back in the
+   * stance, he POOFS back in first — the rematch. */
   private static BATTLE_LINES = ['HYAA!', 'en garde.', 'back!! back!!', 'not the fact sheet!!', 'you shall not doodle.', 'parried. obviously.']
+  private static REMATCH_LINES = ['you again.', 'round two!!', 'oh. you’re back.']
+  private static KICK_LINES = ['and STAY out!!', 'hold that thought—', 'be right back!!', 'gotta run.']
+
+  /** The battle-beat gates: stance held, idle, scene mounted and unstaged. */
+  private battleFighting(): boolean {
+    const s = this.scene
+    return (
+      !!s &&
+      battleBus.live() &&
+      !s.rt.running() &&
+      !this.dragging &&
+      !this.airborne &&
+      s.rt.activeSource().id === 'fight' &&
+      performance.now() >= this.stagingUntil
+    )
+  }
 
   private scheduleBattle(): void {
-    const cycle = EngineLayer.BATTLE_CYCLE_MS
-    const now = performance.now()
-    const phase = (now % cycle) / cycle
-    // next clang phase (0.24 = duelist's CLANG, 0.70 = the queue's CLANK), with
-    // ~120ms lead so the lunge's 26% contact frame lands on the burst.
-    const targets = [0.24, 0.7]
-    let waitMs = Number.POSITIVE_INFINITY
-    for (const t of targets) {
-      const dt = ((t - phase + 1) % 1) * cycle
-      waitMs = Math.min(waitMs, dt < 90 ? dt + cycle : dt)
-    }
+    // Fast re-poll while the duelist is off the page: Dash re-entering the
+    // stance should get the poof-in within a beat, not a full exchange wait.
+    const wait =
+      battleBus.live() && !battleBus.foePresent()
+        ? scalar('battle.reentryMs', () => 400)
+        : scalar('battle.delayMs', () => 950 + Math.random() * 850)
     this.battleTimer = window.setTimeout(() => {
       const s = this.scene
-      const fighting =
-        !!s &&
-        !s.rt.running() &&
-        !this.dragging &&
-        !this.airborne &&
-        s.rt.activeSource().id === 'fight' &&
-        performance.now() >= this.stagingUntil
-      if (fighting && s) {
-        if (chance('battle.shoved', 0.22)) {
-          // their hit lands — Dash recoils, then RE-STRIKES the stance (a bare
-          // act would release to plain stand when its hold expired, dropping
-          // the sword: the persist-held fight acting is what it replaced)
-          s.rt.runOneShot('__battle:shoved', [
-            { verb: 'strikePose', ref: 'shove', holdMs: 300 },
-            { verb: 'strikePose', ref: 'fight', hold: 'persist' },
-          ])
-          this.props.sfx('knock')
+      if (s && this.battleFighting()) {
+        if (!battleBus.foePresent()) {
+          battleBus.cue('poofin')
+          this.props.sfx('poof')
+          if (chance('battle.rematch', 0.5)) {
+            this.bubbleNote = { text: pick('battle.rematch.line', EngineLayer.REMATCH_LINES), until: performance.now() + 1100 }
+          }
+        } else if (chance('battle.foeattack', 0.38)) {
+          // HIS move: the scene winds up and lunges; Dash takes it on the
+          // parry at contact — recoil, then RE-STRIKE the stance (a bare act
+          // would release to plain stand when its hold expired, dropping the
+          // sword: the persist-held fight acting is what the shove replaced).
+          battleBus.cue('attack')
+          this.backNavTimers.push(
+            window.setTimeout(() => {
+              if (!this.battleFighting()) return // a drag/travel broke the exchange
+              s.rt.runOneShot('__battle:shoved', [
+                { verb: 'strikePose', ref: 'shove', holdMs: 300 },
+                { verb: 'strikePose', ref: 'fight', hold: 'persist' },
+              ])
+              this.props.sfx('knock')
+            }, FOE_ATTACK_CONTACT_MS),
+          )
         } else {
-          const facing = s.rt.transform.facing
-          this.playArc(facing === -1 ? 'lungeL' : 'lungeR', false)
-          this.props.sfx('knock')
+          // DASH's move: lunge arc now; the duelist takes it on the blade at
+          // the reach — knocked back a step, or flung into the big stagger.
+          const hard = chance('battle.stagger', 0.3)
+          this.playArc(s.rt.transform.facing === -1 ? 'lungeL' : 'lungeR', false)
+          this.props.sfx('whoosh')
+          this.backNavTimers.push(
+            window.setTimeout(() => {
+              // Same gate as the shove: a drag/travel/kick that started inside
+              // the reach window aborts the exchange — the foe must not play an
+              // obsolete knockback under the departure boot (codex finding).
+              if (!this.battleFighting()) return
+              battleBus.cue(hard ? 'staggered' : 'parried')
+              this.props.sfx('knock')
+            }, DASH_LUNGE_CONTACT_MS),
+          )
           if (chance('battle.line', 0.3)) {
             this.bubbleNote = { text: pick('battle.line.pick', EngineLayer.BATTLE_LINES), until: performance.now() + 1000 }
           }
         }
       }
       this.scheduleBattle()
-    }, Math.max(60, waitMs - 120))
+    }, wait)
+  }
+
+  /** The departure boot (owner: Dash never just WALKS out of a sword fight —
+   * "kick the guy off screen before leaving the panel"): if he holds the
+   * stance with the duelist up, kick him off the page first. Returns the ms
+   * the departure must wait (0 = no battle to close out). */
+  private maybeKickFoe(): number {
+    const s = this.scene
+    if (!s || !battleBus.live() || !battleBus.foePresent()) return 0
+    if (s.rt.activeSource().id !== 'fight' || s.rt.running()) return 0
+    this.stagingUntil = performance.now() + KICK_CLEAR_MS
+    s.rt.transform.facing = FOE_SIDE // the duelist fights from Dash's left
+    s.rt.runOneShot('__battle:kick', [{ verb: 'strikePose', ref: 'kick', holdMs: 540 }])
+    this.playArc(FOE_SIDE === -1 ? 'lungeL' : 'lungeR', false)
+    this.props.sfx('whoosh')
+    // Hold the shot on the boot — a panel travel has already focused the
+    // camera on the DESTINATION (Notebook.travel sets panel state up front).
+    const t = s.rt.transform
+    this.lastCam = { x: t.x + FOE_SIDE * 30, y: t.y - 30 }
+    this.props.onDashCam?.({ ...this.lastCam, mult: 1.12, fast: true })
+    this.backNavTimers.push(
+      window.setTimeout(() => {
+        battleBus.cue('kicked')
+        this.props.sfx('knock')
+        this.props.sfx('fx:shake')
+        if (chance('battle.kickline', 0.4)) {
+          this.bubbleNote = { text: pick('battle.kick.line', EngineLayer.KICK_LINES), until: performance.now() + 1000 }
+        }
+      }, KICK_CONTACT_MS),
+    )
+    return KICK_CLEAR_MS
   }
 
   // ── internals ────────────────────────────────────────────────────────────────

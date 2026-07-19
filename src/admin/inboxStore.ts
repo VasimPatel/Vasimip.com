@@ -5,7 +5,6 @@
 // returns `null` on any non-JSON / network failure; the Inbox reads that as
 // "no real server" and shows a graceful hint instead of the manager.
 // ─────────────────────────────────────────────────────────────────────────────
-import type { SubmissionPanel } from '../notebook/doc/submission'
 
 export type InviteStatus = 'active' | 'expired' | 'revoked' | 'exhausted'
 
@@ -29,7 +28,9 @@ export interface SubmissionRow {
   inviteId: number
   inviteLabel: string | null
   authorName: string | null
-  panel: SubmissionPanel
+  /** The stored submission payload — a legacy bare content panel OR the v2
+   *  guestbook envelope. Normalize with `normalizeSubmission` before use. */
+  panel: unknown
   status: 'pending' | 'approved' | 'rejected'
   createdAt: string
   reviewedAt: string | null

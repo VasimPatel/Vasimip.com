@@ -905,10 +905,18 @@ export default class Notebook extends React.Component<NotebookProps, State> {
       this.ensureAC()
       if (this.engineRef) {
         this._backNavPending = true
-        this.engineRef.backNav(kind, landing, () => {
-          this._backNavPending = false
-          if (this.state.page === s.page) this.flipTo(target, landing) // superseded nav wins
-        })
+        this.engineRef.backNav(
+          kind,
+          landing,
+          () => {
+            this._backNavPending = false
+            if (this.state.page === s.page) this.flipTo(target, landing) // superseded nav wins
+          },
+          // torn down mid-staging (doc hot-swap): release the gate, no nav
+          () => {
+            this._backNavPending = false
+          },
+        )
       } else this.flipTo(target)
     }
     else if (chance('backnav.bomb', .55)) this.bombBack()
