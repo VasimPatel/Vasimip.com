@@ -1,5 +1,15 @@
-/* /make-a-panel — the friend guestbook builder. Same paper-and-marker language
-   as the site; leans on admin.css for the dojo overlay + field styles. */
+/* /sketchbook-invite — the friend guestbook builder. Same paper-and-marker
+   language as the site; leans on admin.css for the dojo overlay + field styles. */
+
+/* The notebook locks the document (`body { overflow: hidden }` in styles.css —
+   right for the fixed-viewport comic, wrong here): the builder is a normal
+   scrolling page. This stylesheet only loads with the friend chunk (its route),
+   and the app never client-transitions between routes, so overriding body here
+   is scoped in practice. */
+body {
+  overflow-y: auto;
+}
+
 .fr-shell {
   min-height: 100vh;
   background: #b09877;
@@ -130,7 +140,7 @@
 .fr-preview-frame { position: absolute; top: 0; left: 0; transform-origin: top left; }
 
 .fr-sendrow .fr-name { width: 220px; }
-.fr-sendrow .fr-msg { flex: 1; min-width: 220px; }
+.fr-sendrow .fr-msg, .fr-toolrow .fr-msg { flex: 1; min-width: 280px; max-width: 520px; }
 .fr-sendrow input {
   border: 2px solid #26241f; border-radius: 8px; padding: 6px 10px;
   font-family: inherit; font-size: 16px; background: #fff;
