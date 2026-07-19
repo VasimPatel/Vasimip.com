@@ -263,17 +263,19 @@ export default function Inbox({ onAddToPage, onAddToGuestbook, pageName }: Props
                     <div className="inbox-lhead">invite links</div>
                     <div className="invite-create">
                       <input className="note-input" value={label} onChange={(e) => setLabel(e.target.value)} placeholder="label (e.g. pals)" />
-                      <input
-                        className="note-input"
-                        value={slug}
-                        onChange={(e) => setSlug(e.target.value)}
-                        placeholder="custom link (optional, e.g. sam)"
-                        title="/sketchbook-invite/<this> — leave blank for a random link"
-                      />
                       <label className="invite-num">expires <input type="number" min={0} value={expiryDays} onChange={(e) => setExpiryDays(Number(e.target.value))} />d</label>
                       <label className="invite-num">uses <input type="number" min={1} value={maxUses} onChange={(e) => setMaxUses(Number(e.target.value))} /></label>
                       <button className="ibtn" disabled={busy} onClick={submit}>+ create link</button>
                     </div>
+                    <label className="invite-slug" title="name the link yourself, or leave blank for a random one">
+                      <span className="invite-slug-prefix">{window.location.host}/sketchbook-invite/</span>
+                      <input
+                        value={slug}
+                        onChange={(e) => setSlug(e.target.value.toLowerCase().replace(/[^a-z0-9-]/g, '-'))}
+                        placeholder="random — or type your own (e.g. i-love-you)"
+                        spellCheck={false}
+                      />
+                    </label>
                     {inviteErr && <div className="inbox-err">{inviteErr}</div>}
                     {invites.map((row) => (
                       <div key={row.id} className="invite-row" data-testid={`invite-row-${row.id}`}>
