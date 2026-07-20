@@ -361,7 +361,7 @@ export default function Admin({ devBypass = false }: { devBypass?: boolean }) {
       setPanelSel(left > 0 ? 0 : null); setBoxSel(null)
       return
     }
-    if (page.panels.length <= 1) { window.alert('a page needs at least one panel'); return }
+    if (page.panels.length <= 1 && !page.guest) { window.alert('a page needs at least one panel'); return }
     updatePage(curPage, (pg) => ({ ...pg, panels: pg.panels.filter((_, idx) => idx !== panelSel) }))
     setPanelSel(0); setBoxSel(null)
   }

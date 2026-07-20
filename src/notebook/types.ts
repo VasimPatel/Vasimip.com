@@ -46,6 +46,8 @@ export interface PanelGeom {
 export interface PageGeom {
   name: string
   panels: PanelGeom[]
+  /** A guestbook page (the HUD collapses these into one tab). */
+  guest?: true
 }
 
 // ── Head-tracking props (only idle & spray consume these) ────────────────────

@@ -102,26 +102,87 @@ export function findSpot(existing: readonly PanelDoc[], w: number, h: number, wa
   return null
 }
 
-/** A fresh guestbook sheet (validator needs ≥1 panel — the corner sign doubles
- *  as the invitation). */
+/** A fresh guestbook sheet — BARE (guest pages may be empty; the validator
+ *  allows it). The GUESTBOOK sign + guest log live once on the LEFT page of
+ *  the first guestbook spread (the previous sheet's back — see
+ *  ensureGuestIntro), not on every sheet. */
 export function newGuestPage(n: number): PageDoc {
   return {
     name: n <= 1 ? 'FRIENDS' : `FRIENDS ${n}`,
     snark: 'they let ANYONE in here now.',
     guest: true,
-    panels: [
-      {
-        x: 40, y: 40, w: 250, h: 130,
-        anchor: { dx: 125, dy: 0 },
-        rotate: -1,
-        sketch: 'c',
-        boxes: [
-          { kind: 'text', x: 16, y: 12, w: 218, h: 22, text: 'THE GUESTBOOK', fam: 'marker', size: 17, hl: 'yellow' },
-          { kind: 'text', x: 16, y: 44, w: 218, h: 70, text: 'friends draw themselves in.\npanels appear as they arrive.', fam: 'hand', size: 14 },
-        ],
-      },
-    ],
+    panels: [],
   }
+}
+
+/** pid marker for the guest-log panel (pid is authoring metadata — stable to
+ *  look up even after the owner rearranges things). */
+export const GUEST_LOG_PID = 'guest-log'
+
+function guestIntroPanels(): PanelDoc[] {
+  return [
+    {
+      x: 40, y: 40, w: 250, h: 130,
+      anchor: { dx: 125, dy: 0 },
+      rotate: -1,
+      sketch: 'c',
+      boxes: [
+        { kind: 'text', x: 16, y: 12, w: 218, h: 22, text: 'THE GUESTBOOK', fam: 'marker', size: 17, hl: 'yellow' },
+        { kind: 'text', x: 16, y: 44, w: 218, h: 70, text: 'friends draw themselves in.\npanels appear as they arrive.', fam: 'hand', size: 14 },
+      ],
+    },
+    {
+      x: 40, y: 210, w: 250, h: 340,
+      anchor: { dx: 125, dy: 0 },
+      rotate: 0.6,
+      sketch: 'b',
+      pid: GUEST_LOG_PID,
+      boxes: [
+        { kind: 'text', x: 16, y: 12, w: 218, h: 22, text: 'GUEST LOG', fam: 'marker', size: 17, hl: 'pink' },
+        // boxes[1] is THE log — appendGuestLog writes signer names here
+        { kind: 'text', x: 16, y: 44, w: 218, h: 280, text: '', fam: 'hand', size: 14 },
+      ],
+    },
+  ]
+}
+
+/** Plant the sign + guest log on the previous sheet's BACK (the left page of
+ *  the first guestbook spread) if no guest log exists anywhere yet. */
+function ensureGuestIntro(pages: PageDoc[], firstGuestIdx: number): PageDoc[] {
+  const hasLog = pages.some((pg) =>
+    [...pg.panels, ...(pg.back?.panels ?? [])].some((pn) => pn.pid === GUEST_LOG_PID))
+  if (hasLog || firstGuestIdx <= 0) return pages
+  const prev = pages[firstGuestIdx - 1]
+  const back = { panels: [...(prev.back?.panels ?? []), ...guestIntroPanels()] }
+  return pages.map((pg, i) => (i === firstGuestIdx - 1 ? { ...pg, back } : pg))
+}
+
+const LOG_CHAR_CAP = 1800
+
+/** Append a signer to the guest log's text (boxes[1]); silently stops at the
+ *  cap with a single ellipsis line. Pure — returns new pages. */
+function appendGuestLog(pages: PageDoc[], name: string): PageDoc[] {
+  const clean = name.trim().slice(0, 40)
+  if (!clean) return pages
+  return pages.map((pg) => {
+    const patch = (panels: readonly PanelDoc[]): PanelDoc[] | null => {
+      const i = panels.findIndex((pn) => pn.pid === GUEST_LOG_PID)
+      if (i < 0) return null
+      const pn = panels[i]
+      const box = pn.boxes[1]
+      if (!box || box.kind !== 'text') return null
+      if (box.text.endsWith('…')) return [...panels]
+      const line = `✎ ${clean}`
+      const next = box.text ? `${box.text}\n${box.text.length + line.length > LOG_CHAR_CAP ? '…' : line}` : line
+      const boxes = pn.boxes.map((b, j) => (j === 1 && b.kind === 'text' ? { ...b, text: next } : b))
+      return panels.map((p, j) => (j === i ? { ...p, boxes } : p))
+    }
+    const front = patch(pg.panels)
+    if (front) return { ...pg, panels: front }
+    const back = pg.back ? patch(pg.back.panels) : null
+    if (back) return { ...pg, back: { panels: back } }
+    return pg
+  })
 }
 
 export interface GraftResult {
@@ -144,6 +205,7 @@ export interface GraftResult {
 export function graftSubmission(doc: NotebookDoc, sub: FriendSubmission, authorName?: string | null): GraftResult | null {
   let pages = [...doc.pages]
   let guestCount = pages.filter((p) => p.guest).length
+  const hadGuestSection = guestCount > 0
 
   // Walk open sides in reading order until the panel actually FITS — a side
   // under the four-panel count can still refuse a large panel through
@@ -180,6 +242,13 @@ export function graftSubmission(doc: NotebookDoc, sub: FriendSubmission, authorN
     spot = findSpot(pages[pageIdx].panels, sub.panel.w, sub.panel.h, sub.placement)
     if (!spot) return null // unreachable for validated panel sizes; typed honestly
   }
+  // First-ever guest sheet: the sign + guest log land ONCE on the previous
+  // sheet's back — the LEFT page of the first guestbook spread.
+  if (!hadGuestSection) {
+    const firstGuestIdx = pages.findIndex((p) => p.guest)
+    pages = ensureGuestIntro(pages, firstGuestIdx)
+  }
+
   const basePage = pages[pageIdx]
   const nudged = !!sub.placement && (spot.x !== Math.round(sub.placement.x) || spot.y !== Math.round(sub.placement.y))
 
@@ -231,6 +300,9 @@ export function graftSubmission(doc: NotebookDoc, sub: FriendSubmission, authorN
       ? { ...basePage, back: { panels: [...(basePage.back?.panels ?? []), panel] } }
       : { ...basePage, panels: [...basePage.panels, panel] }
   pages = pages.map((p, i) => (i === pageIdx ? nextPage : p))
+
+  // sign the guest log
+  if (authorName) pages = appendGuestLog(pages, authorName)
 
   return {
     doc: { ...doc, pages, ...(actions !== doc.actions ? { actions } : {}) },

@@ -85,8 +85,10 @@ function checkPage(x: unknown, path: string, issues: Issues, actionNames: Set<st
   if (typeof x.snark !== 'string') issues.push(`${path}.snark: required string`)
   checkTravelConfig(x.travel, `${path}.travel`, issues, actionNames)
   if (x.guest !== undefined && x.guest !== true) issues.push(`${path}.guest: only \`true\` is meaningful (omit otherwise)`)
-  if (!Array.isArray(x.panels) || x.panels.length === 0) {
-    issues.push(`${path}.panels: required non-empty array (>=1 panel)`)
+  // Guest pages may be EMPTY: the guestbook grows bare sheets (display carriers
+  // for the previous back) that fill as submissions arrive.
+  if (!Array.isArray(x.panels) || (x.panels.length === 0 && x.guest !== true)) {
+    issues.push(`${path}.panels: required non-empty array (>=1 panel; guest pages may be empty)`)
   } else {
     x.panels.forEach((pnl, i) => checkPanel(pnl, `${path}.panels[${i}]`, issues, actionNames))
   }
