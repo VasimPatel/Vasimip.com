@@ -172,7 +172,7 @@ export default class Notebook extends React.Component<NotebookProps, State> {
       this._geomDoc = doc
       this._geomCache = [
         { name: 'COVER', panels: [] },
-        ...spreadPages(doc).map(p => ({ name: p.name, panels: p.panels.map(({ x, y, w, h, anchor }) => ({ x, y, w, h, ax: x + anchor.dx, ay: y + anchor.dy })) })),
+        ...spreadPages(doc).map(p => ({ name: p.name, ...(p.guest ? { guest: true as const } : {}), panels: p.panels.map(({ x, y, w, h, anchor }) => ({ x, y, w, h, ax: x + anchor.dx, ay: y + anchor.dy })) })),
       ]
     }
     return this._geomCache
@@ -1178,11 +1178,19 @@ export default class Notebook extends React.Component<NotebookProps, State> {
       if (this.engineMode && this.engineRef?.busy()) return
       this.flipTo(p)
     }
-    const tabs: HudTab[] = this.geom().slice(1).map((p, i) => ({
-      name: p.name,
-      active: s.page === i + 1,
-      go: () => { this.ensureAC(); userFlip(i + 1) }
-    }))
+    // ONE tab for the whole guestbook (owner): guest pages are contiguous at
+    // the end and grow unbounded — the first gets the tab, the rest ride ◀ ▶.
+    // The tab lights up while the reader is anywhere in the guest section.
+    const spreads = this.geom().slice(1)
+    const firstGuest = spreads.findIndex((p) => p.guest === true)
+    const tabs: HudTab[] = spreads
+      .map((p, i) => ({ p, i }))
+      .filter(({ p, i }) => p.guest !== true || i === firstGuest)
+      .map(({ p, i }) => ({
+        name: p.name,
+        active: p.guest === true ? s.page >= firstGuest + 1 : s.page === i + 1,
+        go: () => { this.ensureAC(); userFlip(i + 1) }
+      }))
 
     return {
       cameraTf,
