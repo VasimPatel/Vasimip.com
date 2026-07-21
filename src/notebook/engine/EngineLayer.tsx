@@ -328,6 +328,7 @@ export class EngineLayer extends Component<EngineLayerProps> {
     this.raf = requestAnimationFrame(frame)
     this.scheduleFidget()
     this.scheduleBattle()
+    this.scheduleLoiter()
   }
 
   /** Q0 motion recorder: one presentation sample per rAF (review-mode only).
@@ -400,6 +401,7 @@ export class EngineLayer extends Component<EngineLayerProps> {
     cancelAnimationFrame(this.raf)
     window.clearTimeout(this.fidgetTimer)
     window.clearTimeout(this.battleTimer)
+    window.clearTimeout(this.loiterTimer)
     this.busDetach?.()
     this.busDetach = null
     this.teardown()
@@ -460,7 +462,21 @@ export class EngineLayer extends Component<EngineLayerProps> {
     const verlet = createVerletWorld()
     const dash = this.dash
     const rig = this.rigDoc
-    const mw = createMutableWorld(pw.world, { character: dash, events: ctx.events, stepMs: STEP_MS })
+    // Loiter perches (the recess system): two invisible point entities per
+    // panel on its stand line, so off-duty ambles can target `entity:` refs
+    // with REAL locomotion — the closed target grammar has no raw coordinates,
+    // and this stays entirely adapter-side. Spread on a shallow copy: pw is
+    // the memoized shared build (mutating it would stack duplicates).
+    const loiterSpots = (this.docV2.pages[pageIdx]?.panels ?? []).flatMap((pn, i) => {
+      const y = pn.y + pn.anchor.dy
+      const inset = Math.min(28, Math.max(14, pn.w * 0.08))
+      return [
+        { id: `__loiter:${i}:l`, components: { transform: { x: pn.x + inset, y } } },
+        { id: `__loiter:${i}:r`, components: { transform: { x: pn.x + pn.w - inset, y } } },
+      ]
+    })
+    const worldWithPerches = { ...pw.world, entities: [...pw.world.entities, ...loiterSpots] }
+    const mw = createMutableWorld(worldWithPerches as typeof pw.world, { character: dash, events: ctx.events, stepMs: STEP_MS })
     const rt = createCharacterRuntime({
       rig,
       character: dash,
@@ -577,10 +593,24 @@ export class EngineLayer extends Component<EngineLayerProps> {
       // that moment (review: a landing one-shot consumed the arrival early and
       // the timer's later chainArrival double-ran the flourish roll).
       ctx.events.on('behavior:ended', (p) => {
-        if (String((p as { reason?: string }).reason ?? '').startsWith('__')) return
+        const reason = String((p as { reason?: string }).reason ?? '')
+        if (reason.startsWith('__loiter')) {
+          // recess beat over: release the busy() exemption; a stroll may chain
+          // its follow-up (peek at the rim, a musing note)
+          this.loitering = false
+          const then = this.loiterThen
+          this.loiterThen = null
+          if (reason === '__loiter:stroll' && then) then()
+          return
+        }
+        if (reason.startsWith('__')) return
         this.recoverOrArrive()
       }),
-      ctx.events.on('behavior:halted', () => this.recoverOrArrive()),
+      ctx.events.on('behavior:halted', () => {
+        this.loitering = false
+        this.loiterThen = null
+        this.recoverOrArrive()
+      }),
     ]
 
     this.scene = { ctx, verlet, mw, rt, pageIdx, offs }
@@ -1623,12 +1653,22 @@ export class EngineLayer extends Component<EngineLayerProps> {
   }
 
   busy(): boolean {
-    return (this.scene?.rt.running() ?? false) || performance.now() < this.stagingUntil
+    // Loiter runs are ambience: nav/tests must not see them as busy — the
+    // interaction paths force-release them instead (clearTravel/poke).
+    const running = (this.scene?.rt.running() ?? false) && !this.loitering
+    return running || performance.now() < this.stagingUntil
   }
 
   poke(): void {
     const s = this.scene
     if (!s) return
+    // A poke interrupts recess (he was only loitering) so the reaction lands.
+    if (this.loitering) {
+      if (s.rt.running()) s.rt.forceRelease()
+      this.loitering = false
+      this.loiterThen = null
+      this.scriptMove = null
+    }
     s.ctx.events.emit('expression:poke', { characterId: this.dash.id })
     s.verlet.applyImpulse(`secondary:${this.dash.id}`, 70, -140)
     for (const a of s.rt.accessories) s.verlet.applyImpulse(a.bodyId, 120, -100)
@@ -1725,6 +1765,15 @@ export class EngineLayer extends Component<EngineLayerProps> {
     this.lastCam = null
     this.clearArc()
     this.releaseRope() // an interrupted crossing lets the line fall, not freeze
+    // Recess yields instantly to real interactions: release the runtime if a
+    // loiter one-shot holds it, and kill any in-flight loiter hop glide (a
+    // stale scriptMove would fight the incoming travel's root motion).
+    if (this.loitering) {
+      if (this.scene?.rt.running()) this.scene.rt.forceRelease()
+      this.loitering = false
+      this.loiterThen = null
+    }
+    this.scriptMove = null
     this.props.onDashCam?.(null)
   }
 
@@ -1917,6 +1966,144 @@ export class EngineLayer extends Component<EngineLayerProps> {
       }
       this.scheduleFidget()
     }, scalar('fidget.delayMs', () => 2800 + Math.random() * 3200))
+  }
+
+  // ── RECESS (owner: "have Dash hang out in the panels a little more") ────────
+  // After a couple of idle seconds Dash goes off-duty: ambles to a perch at the
+  // panel's edge (REAL locomotion to the __loiter entities seeded in enterPage),
+  // peeks over the rim, hop-hops around inside the panel (scripted tuck arcs),
+  // curls up for a micro-nap, shadow-boxes, or stops to think. Same gates as
+  // fidgets (plain idle only — persist stances like the fight keep their hold),
+  // and any real interaction snaps him out of it instantly: busy() ignores
+  // loiter runs, travel/drag/poke force-release (clearTravel + poke below).
+  private loiterTimer = 0
+  /** A loiter routine currently owns the runtime (busy() must not report it). */
+  private loitering = false
+
+  private static LOITER_NOTES = {
+    peek: ['long way down.', 'nice view.', "who's down there?", 'sturdy border. good craftsmanship.'],
+    nap: ['zzz…', 'five minutes.', 'resting my ink.'],
+    box: ['jab! jab!', 'still got it.', 'footwork!!'],
+    think: ['…what if MORE panels.', 'hm. hmm.', 'plotting (politely).'],
+    stroll: ['just stretching the legs.', 'patrolling.', 'all clear over here.'],
+  }
+
+  private loiterIdle(): boolean {
+    const s = this.scene
+    if (!s || s.rt.running() || this.dragging || this.airborne || this.scriptMove) return false
+    const src = s.rt.activeSource()
+    const plainIdle = src.kind === 'clip' || src.id === 'stand'
+    return plainIdle && performance.now() >= this.stagingUntil
+  }
+
+  private scheduleLoiter(): void {
+    this.loiterTimer = window.setTimeout(() => {
+      const s = this.scene
+      if (s && this.loiterIdle()) this.playLoiterAct(s)
+      this.scheduleLoiter()
+    }, scalar('loiter.delayMs', () => 2300 + Math.random() * 2200))
+  }
+
+  /** The stand-line span of the CURRENT panel (world coords), for in-panel hops. */
+  private loiterSpan(): { y: number; x0: number; x1: number } | null {
+    const s = this.scene
+    const pn = s ? this.docV2.pages[s.pageIdx]?.panels[this.currentPanel] : null
+    if (!s || !pn) return null
+    const inset = Math.min(28, Math.max(14, pn.w * 0.08))
+    return { y: pn.y + pn.anchor.dy, x0: pn.x + inset, x1: pn.x + pn.w - inset }
+  }
+
+  /** Walk (real gait) to one of the current panel's loiter perches; `then` runs
+   *  on completion while still idle. The one-shot label starts with '__' so its
+   *  ending never chains arrivals/recovery. */
+  private loiterStroll(s: Scene, side: 'l' | 'r', speed: number, then?: () => void): void {
+    this.loitering = true
+    this.loiterThen = then ?? null
+    s.rt.runOneShot('__loiter:stroll', [
+      { verb: 'moveTo', target: `entity:__loiter:${this.currentPanel}:${side}`, speed } as never,
+    ])
+  }
+
+  /** Completion hook for the current loiter stroll (consumed by behavior:ended). */
+  private loiterThen: (() => void) | null = null
+
+  private playLoiterAct(s: Scene): void {
+    const span = this.loiterSpan()
+    const t = s.rt.transform
+    const acts = ['stroll', 'stroll', 'peek', 'hops', 'hops', 'nap', 'box', 'think', 'twirl']
+    const act = pick('loiter.act', acts)
+    const note = (k: keyof typeof EngineLayer.LOITER_NOTES, p = 0.45): void => {
+      if (chance('loiter.note', p)) {
+        this.bubbleNote = { text: pick('loiter.note.pick', EngineLayer.LOITER_NOTES[k]), until: performance.now() + 1400 }
+      }
+    }
+    if (act === 'stroll' && span) {
+      // amble to the farther perch, casual pace; sometimes muse mid-walk
+      const side: 'l' | 'r' = Math.abs(t.x - span.x0) > Math.abs(t.x - span.x1) ? 'l' : 'r'
+      this.loiterStroll(s, side, 62 + Math.random() * 30, () => note('stroll', 0.3))
+    } else if (act === 'peek' && span) {
+      // walk to the rim, then peer over the edge
+      const side: 'l' | 'r' = t.x < (span.x0 + span.x1) / 2 ? 'l' : 'r'
+      this.loiterStroll(s, side, 88, () => {
+        if (!this.loiterIdle()) return
+        s.rt.transform.facing = side === 'l' ? -1 : 1
+        this.loitering = true
+        s.rt.runOneShot('__loiter:peek', [{ verb: 'strikePose', ref: 'peek', holdMs: 1100 } as never])
+        note('peek', 0.55)
+      })
+    } else if (act === 'hops' && span) {
+      // hop-hop-hop around inside the panel — little scripted tuck arcs
+      this.loiterHops(span, 1 + (chance('loiter.hops.more', 0.5) ? 1 : 0) + (chance('loiter.hops.more2', 0.3) ? 1 : 0))
+    } else if (act === 'nap') {
+      this.loitering = true
+      s.rt.runOneShot('__loiter:nap', [{ verb: 'strikePose', ref: 'jump-tuck', holdMs: 1700 } as never])
+      note('nap', 0.7)
+    } else if (act === 'box') {
+      this.loitering = true
+      s.rt.runOneShot('__loiter:box', [
+        { verb: 'strikePose', ref: 'punch', holdMs: 240 } as never,
+        { verb: 'strikePose', ref: 'stand', holdMs: 90 } as never,
+        { verb: 'strikePose', ref: 'punch', holdMs: 240 } as never,
+      ])
+      note('box', 0.5)
+    } else if (act === 'think') {
+      this.loitering = true
+      s.rt.runOneShot('__loiter:think', [{ verb: 'strikePose', ref: 'think', holdMs: 1400 } as never])
+      note('think', 0.45)
+    } else {
+      // twirl: the playful whole-figure arcs the poke system already owns
+      this.playArc(pick('loiter.twirl', ['spin', 'hop', 'wob'] as const), true)
+    }
+  }
+
+  /** n scripted tuck arcs to random spots on the panel's stand line. */
+  private loiterHops(span: { y: number; x0: number; x1: number }, n: number): void {
+    const s = this.scene
+    if (!s || !this.loiterIdle()) return
+    const t = s.rt.transform
+    const cap = s.rt.capsule()
+    const rootDy = t.y - (Math.max(cap.y0, cap.y1) + cap.r)
+    // a hop 60–150px away, clamped to the span, direction random-ish
+    const dir = chance('loiter.hop.dir', 0.5) ? 1 : -1
+    const dist = 60 + Math.random() * 90
+    const toX = Math.max(span.x0, Math.min(span.x1, t.x + dir * dist))
+    if (Math.abs(toX - t.x) < 24) {
+      if (n > 1) this.loiterHops(span, n - 1)
+      return
+    }
+    t.facing = toX >= t.x ? 1 : -1
+    this.props.sfx('hop')
+    s.rt.act('jump-tuck', { holdMs: 360 })
+    this.scriptMove = { fromX: t.x, fromY: t.y, toX, toY: span.y + rootDy, t0: performance.now(), dur: 340, arcH: 30 }
+    this.backNavTimers.push(
+      window.setTimeout(() => {
+        const s2 = this.scene
+        if (!s2 || this.dragging) return
+        s2.rt.clearAct()
+        if (n > 1 && this.loiterIdle()) this.loiterHops(span, n - 1)
+        else { this.loitering = true; s2.rt.runOneShot('__loiter:hopland', [{ verb: 'strikePose', ref: 'squash-land', holdMs: 200 } as never]) }
+      }, 380),
+    )
   }
 
   /** The ABOUT-page sword fight — the ENGINE is the choreographer. While Dash
