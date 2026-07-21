@@ -33,6 +33,7 @@ export default function Hud(p: HudProps) {
         <span className="hud-more" style={{ opacity: ".3" }}>|</span>
         <button type="button" onClick={p.onAuto} className="hud-tab hud-more" aria-pressed={p.autoLabel.endsWith('ON')} style={btnReset}><span>{p.autoLabel}</span></button>
         <button type="button" onClick={p.onSound} className="hud-tab hud-more" aria-pressed={p.soundLabel.endsWith('ON')} style={btnReset}><span>{p.soundLabel}</span></button>
+        <button type="button" onClick={p.onFocus} className="hud-tab hud-more" aria-pressed={p.focusLabel.endsWith('ON')} title="ON zooms panel to panel; off shows the whole open book" style={btnReset}><span>{p.focusLabel}</span></button>
         <span className="hud-more" style={{ opacity: ".55", fontSize: "14px" }}>{p.pageLabel}</span>
       </nav>
   )
