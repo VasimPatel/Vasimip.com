@@ -146,6 +146,23 @@ function guestIntroPanels(): PanelDoc[] {
   ]
 }
 
+/** A legacy per-sheet sign (the old rules seeded one on every guest front). */
+const isLegacySign = (pn: PanelDoc): boolean =>
+  pn.pid !== GUEST_LOG_PID && pn.boxes.some((b) => b.kind === 'text' && b.text === 'THE GUESTBOOK')
+
+/** Sweep the old-era per-sheet signs OFF the guest pages — books grown under
+ *  the old rules tidy themselves at graft time (owner: no hand deleting), and
+ *  the freed slots count toward the four-panel quota immediately. */
+function sweepLegacySigns(pages: PageDoc[]): PageDoc[] {
+  return pages.map((pg) => {
+    if (!pg.guest) return pg
+    const front = pg.panels.filter((pn) => !isLegacySign(pn))
+    const backPanels = (pg.back?.panels ?? []).filter((pn) => !isLegacySign(pn))
+    if (front.length === pg.panels.length && backPanels.length === (pg.back?.panels ?? []).length) return pg
+    return { ...pg, panels: front, ...(pg.back ? { back: { panels: backPanels } } : {}) }
+  })
+}
+
 /** Plant the sign + guest log on the previous sheet's BACK (the left page of
  *  the first guestbook spread) if no guest log exists anywhere yet. */
 function ensureGuestIntro(pages: PageDoc[], firstGuestIdx: number): PageDoc[] {
@@ -203,7 +220,8 @@ export interface GraftResult {
  *  the panel can't fit anywhere on the slot side (callers may retry after the
  *  doc changes). */
 export function graftSubmission(doc: NotebookDoc, sub: FriendSubmission, authorName?: string | null): GraftResult | null {
-  let pages = [...doc.pages]
+  // legacy signs vacate BEFORE the slot walk so their freed quota is usable now
+  let pages = sweepLegacySigns([...doc.pages])
   let guestCount = pages.filter((p) => p.guest).length
 
   // Walk open sides in reading order until the panel actually FITS — a side
