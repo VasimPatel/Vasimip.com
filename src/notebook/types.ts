@@ -81,8 +81,10 @@ export interface HudProps {
   onNext: () => void
   onAuto: () => void
   onSound: () => void
+  onFocus: () => void
   autoLabel: string
   soundLabel: string
+  focusLabel: string
   pageLabel: string
 }
 

@@ -78,6 +78,8 @@ export interface State {
   flipRange: [number, number] | null
   auto: boolean
   sound: boolean
+  /** ON = panel-to-panel camera; OFF = frame the whole open book. */
+  focus: boolean
   flags: Record<string, boolean>
   poking: boolean
   react: string | null
@@ -145,7 +147,7 @@ export default class Notebook extends React.Component<NotebookProps, State> {
     smokeOn: false, smokeX: 0, smokeY: 0, bombFlyOn: false, bombX: 0, bombY: 0,
     boomOn: false, holeOn: false, holeX: 0, holeY: 0,
     busy: false, busyFlip: false, surfFlip: false, flipDir: 1, flipRange: null,
-    auto: false, sound: true, flags: {},
+    auto: false, sound: true, focus: true, flags: {},
     poking: false, react: null, mx: 640, my: 400,
     camo: null, engineSay: null, shakeOn: false, crackOn: false, crackX: 0, crackY: 0,
     pageShove: 0, pageJit: false, vaulting: false, squish: false,
@@ -998,6 +1000,8 @@ export default class Notebook extends React.Component<NotebookProps, State> {
     }
   }
   toggleSound() { this.ensureAC(); this.setState(s => ({ sound: !s.sound })) }
+  /** focus OFF = frame the whole open book instead of zooming panel to panel. */
+  toggleFocus() { this.setState(s => ({ focus: !s.focus })) }
 
   poke() {
     const s = this.state
@@ -1095,12 +1099,12 @@ export default class Notebook extends React.Component<NotebookProps, State> {
     let cx = STAGE_W / 2 + 7, cy = 330, sc = fit
     if (s.page === 0) { cx = SPREAD_RIGHT_X + 460; sc = coverFit }
     const pn = this.geom()[s.page].panels[s.panel]
-    if (s.page > 0 && !s.busyFlip && pn) {
+    if (s.page > 0 && !s.busyFlip && pn && s.focus) {
       sc = Math.min(vw * 0.62 / (pn.w + 60), (vh - 150) * 0.82 / (pn.h + 100), 1.55)
       sc = Math.max(sc, fit * 0.9, 0.15)
       cx = pn.x + pn.w / 2; cy = pn.y + pn.h / 2 - 26
     }
-    if (s.camo && s.page > 0 && !s.busyFlip) {
+    if (s.camo && s.page > 0 && !s.busyFlip && s.focus) {
       sc = Math.max(.15, sc * (s.camo.mult || 1))
       if (s.camo.cx != null) { cx = s.camo.cx; cy = s.camo.cy }
     }
@@ -1224,8 +1228,10 @@ export default class Notebook extends React.Component<NotebookProps, State> {
       onOpen: () => { this.ensureAC(); if (this.state.page === 0) userFlip(1) },
       onAuto: () => this.toggleAuto(),
       onSound: () => this.toggleSound(),
+      onFocus: () => this.toggleFocus(),
       autoLabel: 'auto: ' + (s.auto ? 'ON' : 'off'),
       soundLabel: 'sound: ' + (s.sound ? 'ON' : 'off'),
+      focusLabel: 'focus: ' + (s.focus ? 'ON' : 'off'),
       pageLabel: s.page === 0 ? 'cover' : 'pg ' + s.page + '/' + (this.geom().length - 1)
     }
   }
@@ -1328,8 +1334,10 @@ export default class Notebook extends React.Component<NotebookProps, State> {
           onNext={v.onNext}
           onAuto={v.onAuto}
           onSound={v.onSound}
+          onFocus={v.onFocus}
           autoLabel={v.autoLabel}
           soundLabel={v.soundLabel}
+          focusLabel={v.focusLabel}
           pageLabel={v.pageLabel}
         />
       </div>
