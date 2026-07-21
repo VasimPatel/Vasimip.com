@@ -1533,6 +1533,7 @@ export class EngineLayer extends Component<EngineLayerProps> {
     }
     this.cancelBackNav() // supersession: a new back-nav cancels the previous
     this.clearArc()
+    this.releaseLoiter() // busy() lets back-nav through mid-recess — end the recess
     const at = (ms: number, fn: () => void): void => {
       this.backNavTimers.push(window.setTimeout(fn, ms))
     }
@@ -1663,12 +1664,7 @@ export class EngineLayer extends Component<EngineLayerProps> {
     const s = this.scene
     if (!s) return
     // A poke interrupts recess (he was only loitering) so the reaction lands.
-    if (this.loitering) {
-      if (s.rt.running()) s.rt.forceRelease()
-      this.loitering = false
-      this.loiterThen = null
-      this.scriptMove = null
-    }
+    this.releaseLoiter()
     s.ctx.events.emit('expression:poke', { characterId: this.dash.id })
     s.verlet.applyImpulse(`secondary:${this.dash.id}`, 70, -140)
     for (const a of s.rt.accessories) s.verlet.applyImpulse(a.bodyId, 120, -100)
@@ -1765,14 +1761,7 @@ export class EngineLayer extends Component<EngineLayerProps> {
     this.lastCam = null
     this.clearArc()
     this.releaseRope() // an interrupted crossing lets the line fall, not freeze
-    // Recess yields instantly to real interactions: release the runtime if a
-    // loiter one-shot holds it, and kill any in-flight loiter hop glide (a
-    // stale scriptMove would fight the incoming travel's root motion).
-    if (this.loitering) {
-      if (this.scene?.rt.running()) this.scene.rt.forceRelease()
-      this.loitering = false
-      this.loiterThen = null
-    }
+    this.releaseLoiter()
     this.scriptMove = null
     this.props.onDashCam?.(null)
   }
@@ -1977,8 +1966,24 @@ export class EngineLayer extends Component<EngineLayerProps> {
   // and any real interaction snaps him out of it instantly: busy() ignores
   // loiter runs, travel/drag/poke force-release (clearTravel + poke below).
   private loiterTimer = 0
+  /** The in-flight hop's completion timeout — tracked apart from backNavTimers
+   * so interruptions can kill it; left to fire, a stale hopland one-shot would
+   * cut into whatever superseded the hop (codex). */
+  private loiterHopTimer = 0
   /** A loiter routine currently owns the runtime (busy() must not report it). */
   private loitering = false
+
+  /** Recess yields instantly to real interactions: kill the pending hop, release
+   * the runtime if a loiter one-shot holds it, drop the hop glide. Every path
+   * that starts real motion (clearTravel, poke, backNav) goes through here. */
+  private releaseLoiter(): void {
+    window.clearTimeout(this.loiterHopTimer)
+    if (!this.loitering) return
+    if (this.scene?.rt.running()) this.scene.rt.forceRelease()
+    this.loitering = false
+    this.loiterThen = null
+    this.scriptMove = null
+  }
 
   private static LOITER_NOTES = {
     peek: ['long way down.', 'nice view.', "who's down there?", 'sturdy border. good craftsmanship.'],
@@ -2092,18 +2097,22 @@ export class EngineLayer extends Component<EngineLayerProps> {
       return
     }
     t.facing = toX >= t.x ? 1 : -1
+    // The whole hop is a recess move: flagged so poke/travel/back-nav release it
+    // (they clear the glide AND this timeout — a stale firing would clearAct and
+    // hopland right into the interrupting motion).
+    this.loitering = true
     this.props.sfx('hop')
     s.rt.act('jump-tuck', { holdMs: 360 })
     this.scriptMove = { fromX: t.x, fromY: t.y, toX, toY: span.y + rootDy, t0: performance.now(), dur: 340, arcH: 30 }
-    this.backNavTimers.push(
-      window.setTimeout(() => {
-        const s2 = this.scene
-        if (!s2 || this.dragging) return
-        s2.rt.clearAct()
-        if (n > 1 && this.loiterIdle()) this.loiterHops(span, n - 1)
-        else { this.loitering = true; s2.rt.runOneShot('__loiter:hopland', [{ verb: 'strikePose', ref: 'squash-land', holdMs: 200 } as never]) }
-      }, 380),
-    )
+    window.clearTimeout(this.loiterHopTimer)
+    this.loiterHopTimer = window.setTimeout(() => {
+      const s2 = this.scene
+      if (!s2 || this.dragging || !this.loitering) return
+      s2.rt.clearAct()
+      this.loitering = false // glide done; the next hop or the landing re-flags
+      if (n > 1 && this.loiterIdle()) this.loiterHops(span, n - 1)
+      else { this.loitering = true; s2.rt.runOneShot('__loiter:hopland', [{ verb: 'strikePose', ref: 'squash-land', holdMs: 200 } as never]) }
+    }, 380)
   }
 
   /** The ABOUT-page sword fight — the ENGINE is the choreographer. While Dash
