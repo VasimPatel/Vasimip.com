@@ -205,7 +205,6 @@ export interface GraftResult {
 export function graftSubmission(doc: NotebookDoc, sub: FriendSubmission, authorName?: string | null): GraftResult | null {
   let pages = [...doc.pages]
   let guestCount = pages.filter((p) => p.guest).length
-  const hadGuestSection = guestCount > 0
 
   // Walk open sides in reading order until the panel actually FITS — a side
   // under the four-panel count can still refuse a large panel through
@@ -242,12 +241,13 @@ export function graftSubmission(doc: NotebookDoc, sub: FriendSubmission, authorN
     spot = findSpot(pages[pageIdx].panels, sub.panel.w, sub.panel.h, sub.placement)
     if (!spot) return null // unreachable for validated panel sizes; typed honestly
   }
-  // First-ever guest sheet: the sign + guest log land ONCE on the previous
-  // sheet's back — the LEFT page of the first guestbook spread.
-  if (!hadGuestSection) {
-    const firstGuestIdx = pages.findIndex((p) => p.guest)
-    pages = ensureGuestIntro(pages, firstGuestIdx)
-  }
+  // The sign + guest log live ONCE on the previous sheet's back — the LEFT
+  // page of the first guestbook spread. ensureGuestIntro is idempotent (keyed
+  // on the guest-log pid), and it runs on EVERY graft rather than only when
+  // the first sheet is created: books whose guest section predates the log
+  // (the owner's production book) pick it up on their next approval.
+  const firstGuestIdx = pages.findIndex((p) => p.guest)
+  pages = ensureGuestIntro(pages, firstGuestIdx)
 
   const basePage = pages[pageIdx]
   const nudged = !!sub.placement && (spot.x !== Math.round(sub.placement.x) || spot.y !== Math.round(sub.placement.y))
