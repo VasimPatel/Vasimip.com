@@ -164,3 +164,33 @@ body {
 .fr-ink-bar span { display: block; height: 100%; background: #4a90d9; }
 .fr-ink.full .fr-ink-bar span { background: #b3462f; }
 .fr-ink-msg { color: #b3462f; font-size: 14px; font-weight: bold; }
+
+/* ── Pip the tour guide ────────────────────────────────────────────────────── */
+.fr-shell { position: relative; }
+.pip-guide {
+  position: absolute; z-index: 60; cursor: pointer; user-select: none;
+  display: flex; align-items: flex-end; gap: 8px;
+  transition: top 1.05s cubic-bezier(.45,.1,.35,1), left 1.05s cubic-bezier(.45,.1,.35,1);
+}
+.pip-guide .pip-wing { animation: flapr 3.2s ease-in-out infinite; }
+.pip-guide.flying .pip-wing { animation: flapr .35s ease-in-out infinite; }
+.pip-guide.flying svg { transform: rotate(-8deg); }
+.pip-guide:hover svg { transform: rotate(-4deg) translateY(-2px); }
+.pip-guide svg { transition: transform .25s ease; }
+.pip-bubble {
+  position: relative;
+  border: 2.5px solid #1a1a1a; border-radius: 14px 4px 14px 4px; background: #fffdf6;
+  padding: 6px 14px 8px; font-family: 'Caveat', cursive; font-weight: 600; font-size: 18px;
+  transform: rotate(-1.5deg); max-width: 300px; line-height: 1.25;
+  box-shadow: 3px 4px 0 rgba(0,0,0,.18);
+  animation: fadeonce .25s ease-out;
+}
+.pip-hint { display: block; font-size: 13px; color: #8a8578; margin-top: 4px; font-family: 'Patrick Hand', cursive; }
+.pip-skip {
+  position: absolute; top: -10px; right: -10px; width: 22px; height: 22px;
+  background: #26241f; color: #fdfbf3; border-radius: 50%; font-size: 12px;
+  display: flex; align-items: center; justify-content: center; font-family: 'Patrick Hand', cursive;
+}
+@media (max-width: 700px) {
+  .pip-bubble { max-width: 200px; font-size: 16px; }
+}

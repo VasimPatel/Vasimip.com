@@ -22,6 +22,7 @@ import type { NotebookDoc } from '../notebook/doc/validate'
 import { validateFriendSubmission, TRICK_NAME_RE, type FriendSubmission, type SubmissionPanel } from '../notebook/doc/submission'
 import { findSpot, graftSubmission, newGuestPage, nextFriendSlot, slotPanels } from '../notebook/doc/friendPages'
 import { ContentCanvas, PlacePicker, type CanvasMode } from './FriendCanvas'
+import PipGuide from './PipGuide'
 import { inkBudget } from '../notebook/doc/strokes'
 
 type Phase = 'checking' | 'invalid' | 'building' | 'sending' | 'sent'
@@ -260,6 +261,8 @@ export default function MakeAPanel({ token }: { token: string }) {
         {inviteLabel && <span className="fr-invitee">invite: {inviteLabel}</span>}
         {devMode && <span className="fr-invitee">dev preview — no invite server, submitting is off</span>}
       </header>
+
+      <PipGuide />
 
       <main className="fr-main">
         <section className="fr-sec">
