@@ -459,6 +459,20 @@ export default class Notebook extends React.Component<NotebookProps, State> {
     if ((SFX_KINDS as readonly string[]).includes(k)) this.sfx(k)
   }
 
+  /** Click-to-send (the focus-off panel dots): the engine plans the trip —
+   * maybe direct, maybe via a waypoint panel or two — and may land on the
+   * panel's top border instead of inside. Camera stays put (focus is off). */
+  sendDash(j: number) {
+    if (!this.engineMode) return
+    const s = this.state
+    if (s.page === 0 || s.busyFlip) return
+    this.ensureAC()
+    // state.panel follows the engine's onHeading per LEG (a waypoint journey
+    // must not park the shell on the destination while Dash is elsewhere —
+    // arrows and the dots key off state.panel).
+    this.engineRef?.journeyTo(j)
+  }
+
   travel(j: number) {
     const s = this.state
     const a = this.anch(s.page, j)
@@ -1263,6 +1277,17 @@ export default class Notebook extends React.Component<NotebookProps, State> {
             {v.smokeOn && <Smoke style={v.smokeStyle} />}
             {v.bombFlyOn && <Bomb style={v.bombFlyStyle} />}
 
+            {this.engineMode && this.state.page > 0 && !this.state.focus && !this.state.busyFlip &&
+              this.geom()[this.state.page].panels.map((pn, j) =>
+                j === this.state.panel ? null : (
+                  <div
+                    key={'go' + j}
+                    className="panel-go"
+                    title="dash: over there!"
+                    onClick={() => this.sendDash(j)}
+                    style={{ left: pn.x + pn.w - 30, top: pn.y + 12 }}
+                  />
+                ))}
             {this.engineMode ? (
               this.state.page > 0 && (
                 <div style={{ position: 'absolute', inset: 0, zIndex: 60, pointerEvents: 'none', visibility: this.state.busyFlip && !this.state.surfFlip ? 'hidden' : 'visible' }}>
@@ -1273,6 +1298,10 @@ export default class Notebook extends React.Component<NotebookProps, State> {
                     flags={this.state.flags}
                     onFlag={(flag, value) => this.setState((st) => ({ flags: { ...st.flags, [flag]: value } }))}
                     sfx={(kind) => this.engineSfx(kind)}
+                    onHeading={(j) => {
+                      const a = this.anch(this.state.page, j)
+                      this.setState({ panel: j, dx: a.x, dy: a.y })
+                    }}
                     onPoke={() => { this.ensureAC(); this.sfx('hop') }}
                     onDashCam={(p) => this.setState({ camo: p ? { cx: p.x, cy: p.y, mult: p.mult ?? 0.92, fast: p.fast ?? false } : null })}
                     onSpeech={(sp) => this.setState({ engineSay: sp })}

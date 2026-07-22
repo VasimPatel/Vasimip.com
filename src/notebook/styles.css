@@ -177,3 +177,8 @@ body {
 .pip-live .pip-flut{animation:pipflut .42s ease-out}
 .pip-say{position:absolute;right:30px;bottom:28px;width:max-content;max-width:210px;border:2.5px solid #1a1a1a;border-radius:14px 4px 14px 4px;background:#fffdf6;padding:5px 12px;font-family:'Caveat',cursive;font-weight:600;font-size:18px;transform:rotate(-1.5deg);white-space:normal}
 .pip-say.pip-say-right{right:auto;left:30px;border-radius:4px 14px 4px 14px;transform:rotate(1.5deg)}
+
+/* ── click-to-send panel dots (focus off): a subtle pencil ring per panel ── */
+.panel-go{position:absolute;width:14px;height:14px;z-index:58;cursor:pointer;opacity:.2;border:2.2px solid #1a1a1a;border-radius:48% 52% 46% 54%/54% 46% 52% 48%;background:rgba(255,253,246,.55);transform:rotate(-4deg);transition:opacity .18s ease,transform .18s ease;pointer-events:auto}
+.panel-go::after{content:'';position:absolute;left:50%;top:50%;width:4px;height:4px;margin:-2px 0 0 -2px;border-radius:50%;background:#1a1a1a}
+.panel-go:hover{opacity:.92;transform:rotate(-4deg) scale(1.35)}
