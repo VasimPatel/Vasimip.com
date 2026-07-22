@@ -15,6 +15,8 @@ export type SfxKind =
   | 'knock'
   | 'scrib'
   | 'spray'
+  | 'chirp'
+  | 'bonk'
 
 export class AudioEngine {
   private _ac: AudioContext | null = null
@@ -114,6 +116,26 @@ export class AudioEngine {
         g.gain.setValueAtTime(.11, t + .42); g.gain.setValueAtTime(.06, t + .48); g.gain.setValueAtTime(.1, t + .52)
         g.gain.exponentialRampToValueAtTime(.001, t + .74)
         s.connect(f); f.connect(g); g.connect(ac.destination); s.start(t + .16)
+      } else if (kind === 'chirp') {
+        // Pip: two quick rising tweets
+        for (const dt of [0, .09]) {
+          const o = ac.createOscillator(), g = ac.createGain()
+          o.type = 'sine'
+          o.frequency.setValueAtTime(2100, t + dt); o.frequency.exponentialRampToValueAtTime(2900, t + dt + .05)
+          g.gain.setValueAtTime(.06, t + dt); g.gain.exponentialRampToValueAtTime(.001, t + dt + .06)
+          o.connect(g); g.connect(ac.destination); o.start(t + dt); o.stop(t + dt + .07)
+        }
+      } else if (kind === 'bonk') {
+        // Dash clips Pip: a soft thud + a puff of feathers
+        const o = ac.createOscillator(), g = ac.createGain()
+        o.type = 'triangle'
+        o.frequency.setValueAtTime(240, t); o.frequency.exponentialRampToValueAtTime(70, t + .13)
+        g.gain.setValueAtTime(.3, t); g.gain.exponentialRampToValueAtTime(.001, t + .15)
+        o.connect(g); g.connect(ac.destination); o.start(); o.stop(t + .17)
+        const s2 = this.noiseSrc(.18), f = ac.createBiquadFilter(), g2 = ac.createGain()
+        f.type = 'bandpass'; f.frequency.value = 1100; f.Q.value = .9
+        g2.gain.setValueAtTime(.14, t); g2.gain.exponentialRampToValueAtTime(.001, t + .18)
+        s2.connect(f); f.connect(g2); g2.connect(ac.destination); s2.start()
       }
     } catch (e) { /* audio nodes can throw on some browsers */ }
   }

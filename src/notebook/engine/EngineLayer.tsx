@@ -32,6 +32,7 @@ import { createCharacterRenderer, type CharacterRenderer } from '../../../packag
 import { engineSkins, type EngineDoc } from './engineDoc'
 import { pick, chance, scalar, reviewHook, reviewLog, type MotionSample } from '../review'
 import { STAGE_W, STAGE_H } from '../doc/spread'
+import { PipActor } from './PipActor'
 import { battleBus, DASH_LUNGE_CONTACT_MS, FOE_ATTACK_CONTACT_MS, FOE_SIDE, KICK_CLEAR_MS, KICK_CONTACT_MS } from '../battleBus'
 
 export interface EngineLayerProps {
@@ -65,6 +66,10 @@ export interface EngineLayerProps {
   pokeLines?: string[]
   /** Idle chatter quips (the legacy CHATTER list, for the fidget scheduler). */
   chatterLines?: string[]
+  /** The current page's snark line — live Pip announces it on page entry. */
+  snark?: string
+  /** Mount the live Pip actor (mirrors the shell's pipSnark toggle). */
+  pip?: boolean
 }
 
 interface Scene {
@@ -87,6 +92,16 @@ export class EngineLayer extends Component<EngineLayerProps> {
   private pendingArrival: string | null = null
   private currentPanel = 0
   private pokeBox: HTMLDivElement | null = null
+  /** Live Pip (the judging bird): DOM-driven actor in the layer's stage space.
+   * Persists across page changes; only unmount disposes him. */
+  private pip: PipActor | null = null
+  private pipBox: HTMLDivElement | null = null
+  /** Dash root samples (~130ms) for Pip's collision speed — velocity reads
+   * across a ≥30ms span so per-rAF sampling can't alias the fixed-step sim
+   * (codex: a 240Hz display reads a walk as alternating 0 / double speed),
+   * recomputed EVERY frame so a whip registers before Dash has passed through.
+   * Includes scriptMove/drag motion, which the sim snapshots don't carry. */
+  private pipSamples: Array<{ x: number; y: number; t: number }> = []
 
   private get docV2() {
     return this.props.doc.docV2
@@ -188,8 +203,37 @@ export class EngineLayer extends Component<EngineLayerProps> {
     this.backNavCancel?.()
   }
 
+  private createPip(): void {
+    if (!this.pipBox || this.pip) return
+    this.pip = new PipActor(this.pipBox, (k) => this.props.sfx(k), () => {
+      // Dash clipped the bird: a passing smirk, sometimes.
+      if (chance('pip.dashsmirk', 0.3)) {
+        this.bubbleNote = { text: pick('pip.dashsmirk.line', ['my bad.', 'heh.', 'on purpose.']), until: performance.now() + 1300 }
+      }
+    })
+  }
+
+  /** Feed Pip the current page's geometry: perch spots on panel top corners
+   * (plus the classic over-the-page spot) and landable lines — panel stand
+   * lines + the page floor — for his knockdown physics. */
+  private syncPipPage(pageIdx: number): void {
+    if (!this.pip) return
+    const pagePanels = this.docV2.pages[pageIdx]?.panels ?? []
+    const perches = [
+      { x: 610, y: -36 },
+      ...pagePanels.flatMap((pn) => [
+        { x: pn.x + 16, y: pn.y - 8 },
+        { x: pn.x + pn.w - 16, y: pn.y - 8 },
+      ]),
+    ]
+    const floors = pagePanels.map((pn) => ({ x0: pn.x + 6, x1: pn.x + pn.w - 6, y: pn.y + pn.anchor.dy }))
+    this.pip.setPage(perches, floors, this.props.snark)
+    this.pipSamples = [] // page teleport must not read as huge Dash velocity
+  }
+
   componentDidMount(): void {
     this.busDetach = battleBus.attachDirector()
+    if (this.pipBox && (this.props.pip ?? true)) this.createPip()
     this.enterPage(this.props.page)
     this.last = performance.now()
     const frame = (now: number): void => {
@@ -324,6 +368,45 @@ export class EngineLayer extends Component<EngineLayerProps> {
         const t = s.rt.transform
         this.pokeBox.style.transform = `translate(${t.x - 46}px, ${t.y - 78}px)`
       }
+      if (this.pip) {
+        const t = s.rt.transform
+        const buf = this.pipSamples
+        const fp = buf.length > 0 ? buf[buf.length - 1] : { x: t.x, y: t.y, t: now - 16 }
+        const fdx = t.x - fp.x
+        const fdy = t.y - fp.y
+        const fd = Math.hypot(fdx, fdy)
+        if (fd >= 200) buf.length = 0 // teleport (poof/page placement): reset
+        buf.push({ x: t.x, y: t.y, t: now })
+        while (buf.length > 0 && now - buf[0].t > 130) buf.shift()
+        // newest sample ≥30ms old — spans ≥3 sim ticks, so no cadence aliasing
+        let ref: { x: number; y: number; t: number } | null = null
+        for (const sm of buf) if (now - sm.t >= 30) ref = sm
+        let dvx = 0
+        let dvy = 0
+        if (ref && now > ref.t) {
+          dvx = (t.x - ref.x) / ((now - ref.t) / 1000)
+          dvy = (t.y - ref.y) / ((now - ref.t) / 1000)
+        }
+        // burst override: >20px in ONE frame is real motion at any refresh rate
+        // (sim tick displacement tops out ~3px) — the windowed read lags a whip
+        // by up to 30ms, long enough for Dash to already be through the bird.
+        if (fd > 20 && fd < 200) {
+          const fdt = Math.max(8, now - fp.t) / 1000
+          dvx = fdx / fdt
+          dvy = fdy / fdt
+        }
+        const agency = this.airborne || !!this.scriptMove || this.dragging || s.rt.running()
+        this.pip.tick(now, {
+          x: t.x,
+          y: t.y,
+          prevX: fp.x,
+          prevY: fp.y,
+          vx: dvx,
+          vy: dvy,
+          cap: this.actorHidden ? null : cap,
+          moving: agency && !this.actorHidden,
+        })
+      }
     }
     this.raf = requestAnimationFrame(frame)
     this.scheduleFidget()
@@ -392,6 +475,16 @@ export class EngineLayer extends Component<EngineLayerProps> {
   }
 
   componentDidUpdate(prev: EngineLayerProps): void {
+    // The pip toggle is live (codex: mount-only left either no bird at all or
+    // a live one the shell believed was off).
+    const wantPip = this.props.pip ?? true
+    if (wantPip && !this.pip) {
+      this.createPip()
+      this.syncPipPage(this.scene?.pageIdx ?? this.props.page)
+    } else if (!wantPip && this.pip) {
+      this.pip.dispose()
+      this.pip = null
+    }
     // Doc hot-swap (server fetch / admin preview) rebuilds the scene on the SAME
     // page; page changes rebuild for the new page.
     if (prev.doc !== this.props.doc || prev.page !== this.props.page) this.enterPage(this.props.page)
@@ -402,6 +495,8 @@ export class EngineLayer extends Component<EngineLayerProps> {
     window.clearTimeout(this.fidgetTimer)
     window.clearTimeout(this.battleTimer)
     window.clearTimeout(this.loiterTimer)
+    this.pip?.dispose()
+    this.pip = null
     this.busDetach?.()
     this.busDetach = null
     this.teardown()
@@ -476,6 +571,7 @@ export class EngineLayer extends Component<EngineLayerProps> {
       ]
     })
     const worldWithPerches = { ...pw.world, entities: [...pw.world.entities, ...loiterSpots] }
+    this.syncPipPage(pageIdx)
     const mw = createMutableWorld(worldWithPerches as typeof pw.world, { character: dash, events: ctx.events, stepMs: STEP_MS })
     const rt = createCharacterRuntime({
       rig,
@@ -765,6 +861,8 @@ export class EngineLayer extends Component<EngineLayerProps> {
     const s = this.scene
     if (!s) return
     const pageIdx = s.pageIdx
+    const destSpot = this.panelSpot(pageIdx, panelIdx)
+    if (destSpot) this.pip?.onDashTravel(destSpot)
     const fromId = `panel:${pageIdx}:${this.currentPanel}`
     const toId = `panel:${pageIdx}:${panelIdx}`
     // POOF is code choreography (legacy poofTo): vanish + teleport + reappear —
@@ -2033,6 +2131,7 @@ export class EngineLayer extends Component<EngineLayerProps> {
   private loiterThen: (() => void) | null = null
 
   private playLoiterAct(s: Scene): void {
+    this.pip?.onDashLoiter()
     const span = this.loiterSpan()
     const t = s.rt.transform
     const acts = ['stroll', 'stroll', 'peek', 'hops', 'hops', 'nap', 'box', 'think', 'twirl']
@@ -2446,6 +2545,7 @@ export class EngineLayer extends Component<EngineLayerProps> {
           height="100%"
           style={{ overflow: 'visible' }}
         />
+        <div ref={(r) => { this.pipBox = r }} style={{ position: 'absolute', left: 0, top: 0, width: 0, height: 0 }} />
         <div
           ref={(r) => { this.pokeBox = r }}
           data-dash-poke

@@ -34,7 +34,7 @@ export type FxKind = (typeof FX_KINDS)[number]
 export const EASE_NAMES = ['linear', 'launch', 'hopfall', 'glide', 'snap'] as const
 export type EaseName = (typeof EASE_NAMES)[number]
 
-export const SFX_KINDS = ['flip', 'hop', 'boom', 'whoosh', 'scrape', 'crack', 'knock', 'scrib', 'spray'] as const satisfies readonly SfxKind[]
+export const SFX_KINDS = ['flip', 'hop', 'boom', 'whoosh', 'scrape', 'crack', 'knock', 'scrib', 'spray', 'chirp', 'bonk'] as const satisfies readonly SfxKind[]
 // Exhaustiveness check: fails to typecheck if SFX_KINDS ever drifts from audio.ts's SfxKind union.
 type _SfxKindsExhaustive = SfxKind extends (typeof SFX_KINDS)[number] ? true : false
 const _sfxKindsExhaustive: _SfxKindsExhaustive = true
