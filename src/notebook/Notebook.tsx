@@ -459,6 +459,19 @@ export default class Notebook extends React.Component<NotebookProps, State> {
     if ((SFX_KINDS as readonly string[]).includes(k)) this.sfx(k)
   }
 
+  /** Click-to-send (the focus-off panel dots): the engine plans the trip —
+   * maybe direct, maybe via a waypoint panel or two — and may land on the
+   * panel's top border instead of inside. Camera stays put (focus is off). */
+  sendDash(j: number) {
+    if (!this.engineMode) return
+    const s = this.state
+    if (s.page === 0 || s.busyFlip) return
+    const a = this.anch(s.page, j)
+    this.ensureAC()
+    this.setState({ panel: j, dx: a.x, dy: a.y })
+    this.engineRef?.journeyTo(j)
+  }
+
   travel(j: number) {
     const s = this.state
     const a = this.anch(s.page, j)
@@ -1263,6 +1276,17 @@ export default class Notebook extends React.Component<NotebookProps, State> {
             {v.smokeOn && <Smoke style={v.smokeStyle} />}
             {v.bombFlyOn && <Bomb style={v.bombFlyStyle} />}
 
+            {this.engineMode && this.state.page > 0 && !this.state.focus && !this.state.busyFlip &&
+              this.geom()[this.state.page].panels.map((pn, j) =>
+                j === this.state.panel ? null : (
+                  <div
+                    key={'go' + j}
+                    className="panel-go"
+                    title="dash: over there!"
+                    onClick={() => this.sendDash(j)}
+                    style={{ left: pn.x + pn.w - 30, top: pn.y + 12 }}
+                  />
+                ))}
             {this.engineMode ? (
               this.state.page > 0 && (
                 <div style={{ position: 'absolute', inset: 0, zIndex: 60, pointerEvents: 'none', visibility: this.state.busyFlip && !this.state.surfFlip ? 'hidden' : 'visible' }}>

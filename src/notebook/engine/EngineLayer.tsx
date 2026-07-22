@@ -191,6 +191,12 @@ export class EngineLayer extends Component<EngineLayerProps> {
   /** The running travel's behavior id — recovery picks its shape by verb (a
    * failed hop/roll re-plays the legacy hop ARC; everything else poofs). */
   private travelKind: string | null = null
+  /** Click-to-send journey (focus-off panel dots): the remaining leg queue —
+   * up to two waypoint panels, then the clicked destination. `alt` = on final
+   * arrival, hop to the panel's OTHER stand spot (top border vs inside). */
+  private journey: { legs: number[]; alt: boolean } | null = null
+  /** Survives the clearTravel() inside a journey's OWN leg launches. */
+  private journeyKeep = false
   /** Approach-only copies of staged-crossing docs, keyed by the SOURCE doc id.
    * Cached so re-runs pass the registry's reference-stability contract; the
    * copy carries its own '#approach' id — the full doc is already registered. */
@@ -853,6 +859,108 @@ export class EngineLayer extends Component<EngineLayerProps> {
       return
     }
     this.startTravel(this.pickTravel(s.pageIdx, panelIdx), panelIdx)
+  }
+
+  /** Click-to-send (the focus-off panel dots): Dash decides HOW to get there.
+   * Near targets he mostly takes directly; far ones he often breaks into one
+   * or two waypoint hops via panels that lie roughly on the way — each leg
+   * re-rolls pickTravel, so short legs read as hops/walks and long legs earn
+   * the dramatic verbs. On the final arrival he may take the panel's OTHER
+   * stand spot (top border vs inside) instead of the authored anchor. */
+  journeyTo(destIdx: number): void {
+    const s = this.scene
+    if (!s || this.dragging) return
+    const pageIdx = s.pageIdx
+    if (destIdx === this.currentPanel && this.travelDest == null) return
+    const destSpot = this.panelSpot(pageIdx, destIdx)
+    if (!destSpot) return
+    const t = s.rt.transform
+    const D = Math.hypot(destSpot.x - t.x, destSpot.y - t.y)
+    // Waypoint count scales with distance — a neighbor is a single hop; a
+    // cross-spread trek usually wanders through the furniture first.
+    const pool = D < 330 ? [0, 0, 0, 1] : D < 640 ? [0, 0, 1, 1, 2] : [0, 1, 1, 2, 2]
+    const hops = Number(pick('journey.hops', pool))
+    const vias: number[] = []
+    let fromSpot = { x: t.x, y: t.y }
+    let fromIdx = this.currentPanel
+    for (let h = 0; h < hops; h++) {
+      const cands = (this.docV2.pages[pageIdx]?.panels ?? [])
+        .map((_, i) => i)
+        .filter((i) => i !== destIdx && i !== fromIdx && !vias.includes(i))
+        .map((i) => {
+          const sp = this.panelSpot(pageIdx, i) ?? fromSpot
+          const legA = Math.hypot(sp.x - fromSpot.x, sp.y - fromSpot.y)
+          const direct = Math.hypot(destSpot.x - fromSpot.x, destSpot.y - fromSpot.y)
+          const legB = Math.hypot(destSpot.x - sp.x, destSpot.y - sp.y)
+          return { i, sp, legA, detour: legA + legB - direct, progress: direct - legB }
+        })
+        // a waypoint must be a real hop (not a shuffle), make progress, and
+        // not double the trip — else the wander reads as lost, not playful
+        .filter((c) => c.legA > 110 && c.progress > 40 && c.detour < 280)
+        .sort((a, b) => a.detour - b.detour)
+        .slice(0, 3)
+      if (cands.length === 0) break
+      const viaPick = pick('journey.via', cands.map((c) => c.i))
+      const via = cands.find((c) => c.i === viaPick) ?? cands[0]
+      vias.push(via.i)
+      fromSpot = via.sp
+      fromIdx = via.i
+    }
+    this.journey = { legs: [...vias, destIdx], alt: chance('journey.altspot', 0.35) }
+    this.launchJourneyLeg()
+  }
+
+  private launchJourneyLeg(): void {
+    const s = this.scene
+    const j = this.journey
+    if (!s || !j || j.legs.length === 0) return
+    const leg = j.legs[0]
+    this.journeyKeep = true
+    try {
+      this.startTravel(this.pickTravel(s.pageIdx, leg), leg)
+    } finally {
+      this.journeyKeep = false
+    }
+    // Waypoint stops play no authored arrival performance — the pause and the
+    // look toward the next leg ARE the beat; the destination keeps its real one.
+    if (this.journey && this.journey.legs.length > 1) this.pendingArrival = null
+  }
+
+  /** The final flourish of an alt-spot journey: hop from the authored anchor
+   * to the panel's OTHER stand line — up onto the top border when the anchor
+   * is interior, down inside the box when the anchor is the top perch. Both
+   * lines are real panel-border surfaces; a later travel that can't route
+   * from there falls back to the existing poof recovery. */
+  private altSpotHop(): void {
+    const s = this.scene
+    if (!s) return
+    const pageIdx = s.pageIdx
+    const pn = this.docV2.pages[pageIdx]?.panels[this.currentPanel]
+    if (!pn) return
+    const t = s.rt.transform
+    const anchorInterior = pn.anchor.dy > 40
+    const targetY = anchorInterior ? pn.y : pn.y + pn.h - 8
+    const inset = Math.min(34, Math.max(16, pn.w * 0.1))
+    const side = chance('journey.altside', 0.5) ? pn.x + inset : pn.x + pn.w - inset
+    const cap = s.rt.capsule()
+    const footY = Math.max(cap.y0, cap.y1) + cap.r
+    const rootDy = t.y - footY
+    const dist = Math.hypot(side - t.x, targetY - footY)
+    if (dist < 36) return
+    t.facing = side >= t.x ? 1 : -1
+    const dur = Math.max(340, Math.min(700, dist / 0.62))
+    this.stagingUntil = performance.now() + dur + 380
+    this.props.sfx('hop')
+    s.rt.act('jump-tuck', { holdMs: dur + 40 })
+    this.scriptMove = { fromX: t.x, fromY: t.y, toX: side, toY: targetY + rootDy, t0: performance.now(), dur, arcH: anchorInterior ? 48 : 30 }
+    this.backNavTimers.push(
+      window.setTimeout(() => {
+        const s2 = this.scene
+        if (!s2 || this.dragging) return
+        s2.rt.clearAct()
+        s2.rt.runOneShot('__journey:land', [{ verb: 'strikePose', ref: 'squash-land', holdMs: 240 } as never])
+      }, dur + 30),
+    )
   }
 
   /** Shared travel launch (nav + the admin/harness testBehavior): poof interception,
@@ -1848,6 +1956,7 @@ export class EngineLayer extends Component<EngineLayerProps> {
    * any in-flight fidget/poke arc stopped (review: a wrapper animation kept
    * rotating about its OLD world origin while Dash flew elsewhere). */
   private clearTravel(): void {
+    if (!this.journeyKeep) this.journey = null // any outside travel/drag/nav cancels the journey
     this.travelDest = null
     this.pendingArrival = null
     this.pendingHang = false // a superseded hop must not attach hang staging later
@@ -2339,6 +2448,38 @@ export class EngineLayer extends Component<EngineLayerProps> {
   private chainArrival(): void {
     const s = this.scene
     if (!s) return
+    const j = this.journey
+    if (j && j.legs.length > 0 && j.legs[0] === this.currentPanel) {
+      j.legs.shift()
+      if (j.legs.length > 0) {
+        // waypoint beat: face where he's headed, take a breath, carry on
+        this.pendingArrival = null
+        const next = this.panelSpot(s.pageIdx, j.legs[0])
+        if (next) s.rt.transform.facing = next.x >= s.rt.transform.x ? 1 : -1
+        this.backNavTimers.push(
+          window.setTimeout(() => {
+            const j2 = this.journey
+            // anything that took over meanwhile (poke quip, drag, nav) ends the
+            // trip — Dash got distracted, the click is stale
+            if (!j2 || j2.legs.length === 0 || this.dragging || s.rt.running()) {
+              this.journey = null
+              return
+            }
+            this.launchJourneyLeg()
+          }, scalar('journey.pauseMs', () => 420 + Math.random() * 520)),
+        )
+        return
+      }
+      this.journey = null
+      // final stop: maybe take the panel's OTHER spot — unless the panel has
+      // an authored arrival pose, which owns the moment
+      const hasPose = this.docV2.pages[s.pageIdx]?.panels[this.currentPanel]?.arrival?.hasPose
+      if (j.alt && !hasPose) {
+        this.pendingArrival = null
+        this.altSpotHop()
+        return
+      }
+    }
     const arrivalId = this.pendingArrival
     this.pendingArrival = null
     const doc = arrivalId ? this.docV2.behaviors[arrivalId] : undefined
