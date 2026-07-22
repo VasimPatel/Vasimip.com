@@ -1301,6 +1301,8 @@ export default class Notebook extends React.Component<NotebookProps, State> {
                     dropLines={DROPS}
                     pokeLines={POKE}
                     chatterLines={CHATTER}
+                    snark={v.snark}
+                    pip={v.snarkOn}
                   />
                 </div>
               )
@@ -1324,7 +1326,7 @@ export default class Notebook extends React.Component<NotebookProps, State> {
                 text={this.state.engineSay.text}
               />
             )}
-            {v.snarkOn && <PipSnark text={v.snark} />}
+            {v.snarkOn && (!this.engineMode || this.state.page === 0) && <PipSnark text={v.snark} />}
           </div>
         </div>
 

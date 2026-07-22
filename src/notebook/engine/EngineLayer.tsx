@@ -32,6 +32,7 @@ import { createCharacterRenderer, type CharacterRenderer } from '../../../packag
 import { engineSkins, type EngineDoc } from './engineDoc'
 import { pick, chance, scalar, reviewHook, reviewLog, type MotionSample } from '../review'
 import { STAGE_W, STAGE_H } from '../doc/spread'
+import { PipActor } from './PipActor'
 import { battleBus, DASH_LUNGE_CONTACT_MS, FOE_ATTACK_CONTACT_MS, FOE_SIDE, KICK_CLEAR_MS, KICK_CONTACT_MS } from '../battleBus'
 
 export interface EngineLayerProps {
@@ -65,6 +66,10 @@ export interface EngineLayerProps {
   pokeLines?: string[]
   /** Idle chatter quips (the legacy CHATTER list, for the fidget scheduler). */
   chatterLines?: string[]
+  /** The current page's snark line — live Pip announces it on page entry. */
+  snark?: string
+  /** Mount the live Pip actor (mirrors the shell's pipSnark toggle). */
+  pip?: boolean
 }
 
 interface Scene {
@@ -87,6 +92,13 @@ export class EngineLayer extends Component<EngineLayerProps> {
   private pendingArrival: string | null = null
   private currentPanel = 0
   private pokeBox: HTMLDivElement | null = null
+  /** Live Pip (the judging bird): DOM-driven actor in the layer's stage space.
+   * Persists across page changes; only unmount disposes him. */
+  private pip: PipActor | null = null
+  private pipBox: HTMLDivElement | null = null
+  /** Dash's root last frame (wall-clock) — Pip's collision needs LIVE velocity
+   * including scriptMove/drag motion, which the sim snapshots don't carry. */
+  private pipPrev: { x: number; y: number; t: number } | null = null
 
   private get docV2() {
     return this.props.doc.docV2
@@ -190,6 +202,14 @@ export class EngineLayer extends Component<EngineLayerProps> {
 
   componentDidMount(): void {
     this.busDetach = battleBus.attachDirector()
+    if (this.pipBox && (this.props.pip ?? true)) {
+      this.pip = new PipActor(this.pipBox, (k) => this.props.sfx(k), () => {
+        // Dash clipped the bird: a passing smirk, sometimes.
+        if (chance('pip.dashsmirk', 0.3)) {
+          this.bubbleNote = { text: pick('pip.dashsmirk.line', ['my bad.', 'heh.', 'on purpose.']), until: performance.now() + 1300 }
+        }
+      })
+    }
     this.enterPage(this.props.page)
     this.last = performance.now()
     const frame = (now: number): void => {
@@ -324,6 +344,33 @@ export class EngineLayer extends Component<EngineLayerProps> {
         const t = s.rt.transform
         this.pokeBox.style.transform = `translate(${t.x - 46}px, ${t.y - 78}px)`
       }
+      if (this.pip) {
+        const t = s.rt.transform
+        const pv = this.pipPrev
+        let dvx = 0
+        let dvy = 0
+        let dtMs = 16
+        if (pv && now > pv.t) {
+          dtMs = now - pv.t
+          const ddx = t.x - pv.x
+          const ddy = t.y - pv.y
+          // teleport guard: poof/page placement jumps must not read as velocity
+          if (Math.abs(ddx) < 150 && Math.abs(ddy) < 150) {
+            dvx = ddx / (dtMs / 1000)
+            dvy = ddy / (dtMs / 1000)
+          }
+        }
+        this.pipPrev = { x: t.x, y: t.y, t: now }
+        const agency = this.airborne || !!this.scriptMove || this.dragging || s.rt.running()
+        this.pip.tick(now, dtMs, {
+          x: t.x,
+          y: t.y,
+          vx: dvx,
+          vy: dvy,
+          cap: this.actorHidden ? null : cap,
+          moving: agency && !this.actorHidden,
+        })
+      }
     }
     this.raf = requestAnimationFrame(frame)
     this.scheduleFidget()
@@ -402,6 +449,8 @@ export class EngineLayer extends Component<EngineLayerProps> {
     window.clearTimeout(this.fidgetTimer)
     window.clearTimeout(this.battleTimer)
     window.clearTimeout(this.loiterTimer)
+    this.pip?.dispose()
+    this.pip = null
     this.busDetach?.()
     this.busDetach = null
     this.teardown()
@@ -476,6 +525,22 @@ export class EngineLayer extends Component<EngineLayerProps> {
       ]
     })
     const worldWithPerches = { ...pw.world, entities: [...pw.world.entities, ...loiterSpots] }
+    // Live Pip gets the same panel geometry: perch spots on panel top corners
+    // (plus the classic over-the-page spot), and landable lines — panel stand
+    // lines + the page floor — for his knockdown physics.
+    if (this.pip) {
+      const pagePanels = this.docV2.pages[pageIdx]?.panels ?? []
+      const perches = [
+        { x: 610, y: -36 },
+        ...pagePanels.flatMap((pn) => [
+          { x: pn.x + 16, y: pn.y - 8 },
+          { x: pn.x + pn.w - 16, y: pn.y - 8 },
+        ]),
+      ]
+      const floors = pagePanels.map((pn) => ({ x0: pn.x + 6, x1: pn.x + pn.w - 6, y: pn.y + pn.anchor.dy }))
+      this.pip.setPage(perches, floors, this.props.snark)
+      this.pipPrev = null // page teleport must not read as huge Dash velocity
+    }
     const mw = createMutableWorld(worldWithPerches as typeof pw.world, { character: dash, events: ctx.events, stepMs: STEP_MS })
     const rt = createCharacterRuntime({
       rig,
@@ -765,6 +830,8 @@ export class EngineLayer extends Component<EngineLayerProps> {
     const s = this.scene
     if (!s) return
     const pageIdx = s.pageIdx
+    const destSpot = this.panelSpot(pageIdx, panelIdx)
+    if (destSpot) this.pip?.onDashTravel(destSpot)
     const fromId = `panel:${pageIdx}:${this.currentPanel}`
     const toId = `panel:${pageIdx}:${panelIdx}`
     // POOF is code choreography (legacy poofTo): vanish + teleport + reappear —
@@ -2033,6 +2100,7 @@ export class EngineLayer extends Component<EngineLayerProps> {
   private loiterThen: (() => void) | null = null
 
   private playLoiterAct(s: Scene): void {
+    this.pip?.onDashLoiter()
     const span = this.loiterSpan()
     const t = s.rt.transform
     const acts = ['stroll', 'stroll', 'peek', 'hops', 'hops', 'nap', 'box', 'think', 'twirl']
@@ -2446,6 +2514,7 @@ export class EngineLayer extends Component<EngineLayerProps> {
           height="100%"
           style={{ overflow: 'visible' }}
         />
+        <div ref={(r) => { this.pipBox = r }} style={{ position: 'absolute', left: 0, top: 0, width: 0, height: 0 }} />
         <div
           ref={(r) => { this.pokeBox = r }}
           data-dash-poke
