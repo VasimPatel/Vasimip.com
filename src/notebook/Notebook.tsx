@@ -466,9 +466,10 @@ export default class Notebook extends React.Component<NotebookProps, State> {
     if (!this.engineMode) return
     const s = this.state
     if (s.page === 0 || s.busyFlip) return
-    const a = this.anch(s.page, j)
     this.ensureAC()
-    this.setState({ panel: j, dx: a.x, dy: a.y })
+    // state.panel follows the engine's onHeading per LEG (a waypoint journey
+    // must not park the shell on the destination while Dash is elsewhere —
+    // arrows and the dots key off state.panel).
     this.engineRef?.journeyTo(j)
   }
 
@@ -1297,6 +1298,10 @@ export default class Notebook extends React.Component<NotebookProps, State> {
                     flags={this.state.flags}
                     onFlag={(flag, value) => this.setState((st) => ({ flags: { ...st.flags, [flag]: value } }))}
                     sfx={(kind) => this.engineSfx(kind)}
+                    onHeading={(j) => {
+                      const a = this.anch(this.state.page, j)
+                      this.setState({ panel: j, dx: a.x, dy: a.y })
+                    }}
                     onPoke={() => { this.ensureAC(); this.sfx('hop') }}
                     onDashCam={(p) => this.setState({ camo: p ? { cx: p.x, cy: p.y, mult: p.mult ?? 0.92, fast: p.fast ?? false } : null })}
                     onSpeech={(sp) => this.setState({ engineSay: sp })}
