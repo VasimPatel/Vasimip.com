@@ -11,16 +11,22 @@
 //
 // DOM-driven like the rope and poke hitbox: the layer owns a container in
 // stage coordinates; this class builds its elements once and writes transforms
-// per rAF — React never re-renders for him. Dice go through pick/chance so the
-// review harness can force acts ('pip.act', 'pip.follow', …).
+// per rAF — React never re-renders for him. Visible CHOICES (acts, perch
+// targets, quips, follow gates/delays) go through pick/chance/scalar so the
+// review harness can force them ('pip.*'); raw Math.random is reserved for
+// physics micro-jitter (knock spin) that no screenshot run needs to pin.
 // ─────────────────────────────────────────────────────────────────────────────
-import { pick, chance } from '../review'
+import { pick, chance, scalar } from '../review'
 import { PAGE_H, STAGE_W } from '../doc/spread'
 
 export interface PipDashInfo {
   x: number
   y: number
-  /** Root velocity, px/s (0 across teleports). */
+  /** Root last frame — the collision SWEEPS prev→cur so a fast drag can't
+   * step Dash across the bird between frames (codex). */
+  prevX: number
+  prevY: number
+  /** Windowed root velocity, px/s (0 across teleports). */
   vx: number
   vy: number
   /** Live collision capsule (null while Dash is hidden). */
@@ -92,6 +98,7 @@ export class PipActor {
   private cooldownUntil = 0
 
   // scheduling
+  private lastTickAt = 0
   private nextActAt = 0
   private sayUntil = 0
   private follow: { at: number; dest: Pt } | null = null
@@ -149,17 +156,18 @@ export class PipActor {
   setPage(perches: Pt[], floors: FloorLine[], announce?: string): void {
     this.perches = perches.length > 0 ? perches : [{ x: 610, y: -36 }]
     this.floors = floors
+    this.follow = null // a judged travel belongs to the OLD page (codex)
     if (this.mode === 'knocked' || this.mode === 'stunned' || this.mode === 'getup') return
     this.hideSay()
     this.pendingSay = announce ?? null
-    this.flyToPt(this.perches[Math.floor(Math.random() * this.perches.length)])
+    this.flyToPt(pick('pip.perch.enter', this.perches))
   }
 
   /** Dash set off toward a panel — maybe drift over to judge the arrival. */
   onDashTravel(dest: Pt): void {
     if (this.mode !== 'perch' && this.mode !== 'fly') return
     if (!chance('pip.follow', 0.5)) return
-    this.follow = { at: performance.now() + 1500 + Math.random() * 1200, dest }
+    this.follow = { at: performance.now() + scalar('pip.follow.delayMs', () => 1500 + Math.random() * 1200), dest }
   }
 
   /** Dash started a recess act — the bird has opinions about "exercise". */
@@ -176,9 +184,9 @@ export class PipActor {
     }
     this.sfx('chirp')
     this.say(pick('pip.poke.line', QUIPS.poke), 1600)
-    this.fig.classList.remove('pip-flut')
-    void this.fig.offsetWidth // restart the flutter animation
-    this.fig.classList.add('pip-flut')
+    this.tilt.classList.remove('pip-flut')
+    void this.tilt.offsetWidth // restart the flutter animation
+    this.tilt.classList.add('pip-flut')
   }
 
   private setMode(m: Mode): void {
@@ -239,21 +247,36 @@ export class PipActor {
     if (now < this.cooldownUntil || !dash.cap || !dash.moving) return
     const speed = Math.hypot(dash.vx, dash.vy)
     if (speed < 230) return
-    // body centre vs Dash's capsule segment
+    // Sweep the capsule from last frame's root to this one — a fast drag can
+    // carry Dash 100+px/frame, and testing only the endpoint tunnels (codex).
+    const mx = dash.x - dash.prevX
+    const my = dash.y - dash.prevY
+    const moveLen = Math.hypot(mx, my)
+    if (moveLen > 200) return // teleport, not motion
     const px = this.x
     const py = this.y - 20
     const { x0, y0, x1, y1, r } = dash.cap
-    const dx = x1 - x0
-    const dy = y1 - y0
-    const len2 = dx * dx + dy * dy
-    const t = len2 > 0 ? Math.max(0, Math.min(1, ((px - x0) * dx + (py - y0) * dy) / len2)) : 0
-    const cx = x0 + dx * t
-    const cy = y0 + dy * t
-    if (Math.hypot(px - cx, py - cy) < r + BODY_R + 6) this.knock(dash.vx, dash.vy, dash.x)
+    const steps = Math.min(8, Math.max(1, Math.ceil(moveLen / 18)))
+    for (let i = 1; i <= steps; i++) {
+      // capsule as it was at this sample, offset back along the frame's motion
+      const ox = mx * (i / steps - 1)
+      const oy = my * (i / steps - 1)
+      const dx = x1 - x0
+      const dy = y1 - y0
+      const len2 = dx * dx + dy * dy
+      const t = len2 > 0 ? Math.max(0, Math.min(1, ((px - x0 - ox) * dx + (py - y0 - oy) * dy) / len2)) : 0
+      const cx = x0 + ox + dx * t
+      const cy = y0 + oy + dy * t
+      if (Math.hypot(px - cx, py - cy) < r + BODY_R + 6) {
+        this.knock(dash.vx, dash.vy, dash.x)
+        return
+      }
+    }
   }
 
-  tick(now: number, dtMs: number, dash: PipDashInfo): void {
-    const dt = Math.min(0.05, dtMs / 1000)
+  tick(now: number, dash: PipDashInfo): void {
+    const dt = Math.min(0.05, Math.max(0, now - this.lastTickAt) / 1000)
+    this.lastTickAt = now
     this.maybeCollide(now, dash)
 
     if (this.sayUntil > 0 && now >= this.sayUntil) this.hideSay()
@@ -268,13 +291,13 @@ export class PipActor {
           this.flyToPt(near)
         }
       } else if (now >= this.nextActAt) {
-        this.nextActAt = now + 5200 + Math.random() * 4800
+        this.nextActAt = now + scalar('pip.actDelayMs', () => 5200 + Math.random() * 4800)
         const act = pick('pip.act', ['quip', 'quip', 'move'] as const)
         if (act === 'quip' && now >= this.sayUntil) {
           this.say(pick('pip.quip.line', QUIPS.ambient), 2200)
         } else if (act === 'move' && this.perches.length > 1) {
           const others = this.perches.filter((p) => Math.hypot(p.x - this.x, p.y - this.y) > 40)
-          if (others.length > 0) this.flyToPt(others[Math.floor(Math.random() * others.length)])
+          if (others.length > 0) this.flyToPt(pick('pip.perch.move', others))
         }
       }
     } else if (this.mode === 'fly') {
@@ -353,6 +376,7 @@ export class PipActor {
       }
     }
 
+    if (this.sayUntil > 0) this.bubble.classList.toggle('pip-say-right', this.x < 300)
     this.wrap.style.transform = `translate3d(${this.x.toFixed(1)}px, ${this.y.toFixed(1)}px, 0)`
     const tumbling = this.mode === 'knocked' || this.mode === 'stunned'
     this.fig.style.transform = this.facing === 1 ? '' : 'scaleX(-1)'
